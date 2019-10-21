@@ -9,15 +9,23 @@ extern crate libc;
 
 extern crate nix;
 
+mod unit_parser;
+
 type internalId = u64;
 
-struct ServiceConfig {
+pub struct ServiceConfig {
     keep_alive: bool,
     exec: String,
     stop: String,
 }
 
-struct Service {
+pub enum ServiceStatus {
+    NeverRan,
+    Running,
+    Stopped,
+}
+
+pub struct Service {
     id: internalId,
     pid: Option<u32>,
     filepath: PathBuf,
@@ -42,11 +50,6 @@ fn run_services(services: &mut HashMap<internalId, Service>, pids: &mut HashMap<
     }
 }
 
-enum ServiceStatus {
-    NeverRan,
-    Running,
-    Stopped,
-}
 
 fn start_service(srvc: &mut Service) {
     let split: Vec<&str> = srvc.config.exec.split(" ").collect();
@@ -68,33 +71,14 @@ fn start_service(srvc: &mut Service) {
 }
 
 fn main() {
-    let s1 = Service {
-        id: 0,
-        pid: None,
-        filepath: PathBuf::from("/usr/lib/systemd/system/dbus.service"),
-        status: ServiceStatus::NeverRan,
-
-        wants: Vec::new(),
-        wanted_by: Vec::new(),
-        requires: Vec::new(),
-        required_by: Vec::new(),
-        before: Vec::new(),
-        after: Vec::new(),
-
-        config: ServiceConfig {
-            keep_alive: true,
-            exec: "/usr/bin/ls /etc".to_owned(),
-            stop: "".to_owned(),
-        },
-    };
-
     let signals = Signals::new(&[
         signal_hook::SIGCHLD,
     ]).expect("Couldnt setup listening to the signals");
 
     let mut service_table = HashMap::new();
     let mut pid_table = HashMap::new();
-    service_table.insert(s1.id, s1);
+    let mut base_id = 0;
+    unit_parser::parse_all_services(&mut service_table, &PathBuf::from("./test_units"), &mut base_id);
 
     run_services(&mut service_table, &mut pid_table);
 
@@ -107,9 +91,9 @@ fn main() {
                         Ok(exit_status) => {
                             match exit_status {
                                 nix::sys::wait::WaitStatus::Exited(pid, code) => {
-                                    println!("Child pid: {} exited with code: {}", pid, code);
                                     let srvc_id = pid_table.get(&(pid as u32)).unwrap();
                                     let srvc = service_table.get_mut(&srvc_id).unwrap();
+                                    println!("Service with id: {} pid: {} exited with code: {}", srvc_id, pid, code);
 
                                     pid_table.remove(&(pid as u32));
                                     srvc.status = ServiceStatus::Stopped;
