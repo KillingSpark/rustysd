@@ -1,8 +1,8 @@
-use crate::{internalId, Service, ServiceConfig, ServiceStatus};
+use crate::{InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
-fn parse_service(path: &PathBuf, chosen_id: internalId) -> Service {
+fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
     let raw = read_to_string(&path).unwrap();
     let lines: Vec<&str> = raw.split("\n").collect();
 
@@ -50,7 +50,13 @@ fn parse_service(path: &PathBuf, chosen_id: internalId) -> Service {
         required_by: Vec::new(),
         before: Vec::new(),
         after: Vec::new(),
-        config: config.unwrap(),
+        service_config: config.unwrap(),
+        unit_config: UnitConfig {
+            wants: Vec::new(),
+            wanted_by: Vec::new(),
+            requires: Vec::new(),
+            required_by: Vec::new(),
+        },
     }
 }
 
@@ -90,9 +96,9 @@ fn parse_service_section(lines: &Vec<&str>) -> ServiceConfig {
 }
 
 pub fn parse_all_services(
-    services: &mut std::collections::HashMap<internalId, Service>,
+    services: &mut std::collections::HashMap<InternalId, Service>,
     path: &PathBuf,
-    last_id: &mut internalId,
+    last_id: &mut InternalId,
 ) {
     for entry in std::fs::read_dir(path).unwrap() {
         let entry = entry.unwrap();
