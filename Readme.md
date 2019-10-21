@@ -1,4 +1,4 @@
-# Systemd-rs
+# rustysd
 A minimal drop-in for the systemd init system in rust. For now that is just out of interest how far I could come with this 
 and what would be needed to get a somewhat working system
 

@@ -5,3 +5,7 @@ authors = ["Moritz Borcherding <moritz.borcherding@web.de>"]
 edition = "2018"
 
 [dependencies]
+signal-hook = "0.1.10"
+libc = "0.2.65"
+nix = "0.6.0"
+
