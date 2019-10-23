@@ -1,4 +1,4 @@
-use crate::{InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig};
+use crate::{InstallConfig, InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
@@ -6,7 +6,9 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
     let raw = read_to_string(&path).unwrap();
     let lines: Vec<&str> = raw.split("\n").collect();
 
-    let mut config = None;
+    let mut service_config = None;
+    let mut install_config = None;
+    let mut unit_config = None;
 
     let mut current_section = Vec::new();
     let mut current_section_name = "";
@@ -16,9 +18,15 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
             match current_section_name {
                 "" => { /*noting. first section to be found*/ }
                 "[Service]" => {
-                    println!("A");
-                    config = Some(parse_service_section(&current_section));
+                    service_config = Some(parse_service_section(&current_section));
                 }
+                "[Unit]" => {
+                    unit_config = Some(parse_unit_section(&current_section));
+                }
+                "[Install]" => {
+                    install_config = Some(parse_install_section(&current_section));
+                }
+
                 _ => panic!("Unknown section name: {}", current_section_name),
             }
             current_section_name = line;
@@ -32,9 +40,15 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
     match current_section_name {
         "" => { /*noting. first section to be found*/ }
         "[Service]" => {
-            println!("A");
-            config = Some(parse_service_section(&current_section));
+            service_config = Some(parse_service_section(&current_section));
         }
+        "[Unit]" => {
+            unit_config = Some(parse_unit_section(&current_section));
+        }
+        "[Install]" => {
+            install_config = Some(parse_install_section(&current_section));
+        }
+
         _ => panic!("Unknown section name: {}", current_section_name),
     }
 
@@ -50,13 +64,71 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
         required_by: Vec::new(),
         before: Vec::new(),
         after: Vec::new(),
-        service_config: config.unwrap(),
-        unit_config: UnitConfig {
-            wants: Vec::new(),
-            wanted_by: Vec::new(),
-            requires: Vec::new(),
-            required_by: Vec::new(),
-        },
+        service_config: service_config,
+        unit_config: unit_config,
+        install_config: install_config,
+    }
+}
+
+fn parse_unit_section(lines: &Vec<&str>) -> UnitConfig {
+    let mut wants = Vec::new();
+    let mut requires = Vec::new();
+
+    for line in lines {
+        println!("{}", line);
+        let pos = line.find(|c| c == '=').unwrap();
+        let (name, value) = line.split_at(pos);
+
+        let value = value.trim_start_matches("=");
+        let value = value.trim();
+        let name = name.trim().to_uppercase();
+        let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
+
+        match name.as_str() {
+            "WANTS" => {
+                wants.append(&mut values);
+            }
+            "REQUIRES" => {
+                requires.append(&mut values);
+            }
+            _ => panic!("Unknown parameter name"),
+        }
+    }
+
+    UnitConfig {
+        wants: wants,
+        requires: requires,
+    }
+}
+
+fn parse_install_section(lines: &Vec<&str>) -> InstallConfig {
+    let mut wantedby = Vec::new();
+    let mut requiredby = Vec::new();
+
+    for line in lines {
+        println!("{}", line);
+        let pos = line.find(|c| c == '=').unwrap();
+        let (name, value) = line.split_at(pos);
+
+        let value = value.trim_start_matches("=");
+        let value = value.trim();
+        let name = name.trim().to_uppercase();
+        let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
+
+        match name.as_str() {
+            "WANTED_BY" => {
+                wantedby.append(&mut values);
+            }
+            "REQUIRED_BY" => {
+                requiredby.append(&mut values);
+            }
+            _ => panic!("Unknown parameter name"),
+        }
+    }
+
+    InstallConfig {
+        wanted_by: wantedby,
+        required_by: requiredby,
     }
 }
 

@@ -15,8 +15,10 @@ type InternalId = u64;
 
 pub struct UnitConfig {
     wants: Vec<String>,
-    wanted_by: Vec<String>,
     requires: Vec<String>,
+}
+pub struct InstallConfig {
+    wanted_by: Vec<String>,
     required_by: Vec<String>,
 }
 
@@ -47,8 +49,9 @@ pub struct Service {
     before: Vec<InternalId>,
     after: Vec<InternalId>,
 
-    service_config: ServiceConfig,
-    unit_config: UnitConfig,
+    service_config: Option<ServiceConfig>,
+    unit_config: Option<UnitConfig>,
+    install_config: Option<InstallConfig>,
 }
 
 fn run_services(services: &mut HashMap<InternalId, Service>, pids: &mut HashMap<u32, InternalId>) {
@@ -59,7 +62,11 @@ fn run_services(services: &mut HashMap<InternalId, Service>, pids: &mut HashMap<
 }
 
 fn start_service(srvc: &mut Service) {
-    let split: Vec<&str> = srvc.service_config.exec.split(" ").collect();
+    let split: Vec<&str> = match &srvc.service_config {
+        Some(conf) => conf.exec.split(" ").collect(),
+        None => return,
+    };
+
     let mut cmd = Command::new(split[0]);
     for part in &split[1..] {
         cmd.arg(part);
@@ -81,7 +88,13 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) {
     let mut name_to_id = HashMap::new();
 
     for (id, srvc) in &*services {
-        let name = srvc.filepath.file_name().unwrap().to_str().unwrap().to_owned();
+        let name = srvc
+            .filepath
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
         name_to_id.insert(name, *id);
     }
 
@@ -89,22 +102,26 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) {
     let mut wanted_by = Vec::new();
 
     for (_, srvc) in &mut *services {
-        for name in &srvc.unit_config.wants {
-            let id = name_to_id.get(name.as_str()).unwrap();
-            srvc.wants.push(*id);
-        }
-        for name in &srvc.unit_config.requires {
-            let id = name_to_id.get(name.as_str()).unwrap();
-            srvc.requires.push(*id);
+        if let Some(conf) = &srvc.unit_config {
+            for name in &conf.wants {
+                let id = name_to_id.get(name.as_str()).unwrap();
+                srvc.wants.push(*id);
+            }
+            for name in &conf.requires {
+                let id = name_to_id.get(name.as_str()).unwrap();
+                srvc.requires.push(*id);
+            }
         }
 
-        for name in &srvc.unit_config.wanted_by {
-            let id = name_to_id.get(name.as_str()).unwrap();
-            wanted_by.push((srvc.id, id));
-        }
-        for name in &srvc.unit_config.required_by {
-            let id = name_to_id.get(name.as_str()).unwrap();
-            required_by.push((srvc.id, id));
+        if let Some(conf) = &srvc.install_config {
+            for name in &conf.wanted_by {
+                let id = name_to_id.get(name.as_str()).unwrap();
+                wanted_by.push((srvc.id, id));
+            }
+            for name in &conf.required_by {
+                let id = name_to_id.get(name.as_str()).unwrap();
+                required_by.push((srvc.id, id));
+            }
         }
     }
 
@@ -133,7 +150,6 @@ fn main() {
 
     fill_dependencies(&mut service_table);
 
-
     let mut pid_table = HashMap::new();
     run_services(&mut service_table, &mut pid_table);
 
@@ -155,9 +171,11 @@ fn main() {
                                 pid_table.remove(&(pid as u32));
                                 srvc.status = ServiceStatus::Stopped;
 
-                                if srvc.service_config.keep_alive {
-                                    start_service(srvc);
-                                    pid_table.insert(srvc.pid.unwrap(), srvc.id);
+                                if let Some(conf) = &srvc.service_config {
+                                    if conf.keep_alive {
+                                        start_service(srvc);
+                                        pid_table.insert(srvc.pid.unwrap(), srvc.id);
+                                    }
                                 }
                             }
                             _ => {
