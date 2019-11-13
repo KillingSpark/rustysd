@@ -93,7 +93,7 @@ fn servive_exit_handler(
         if conf.keep_alive {
             start_service(srvc);
             pid_table.insert(srvc.pid.unwrap(), srvc.id);
-        }else{
+        } else {
             //TODO killall services that require this service
         }
     }
@@ -242,6 +242,39 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) -> HashMap<Str
     name_to_id
 }
 
+struct ExitedChildsIterator {}
+impl Default for ExitedChildsIterator {
+    fn default() -> Self {
+        Self{}
+    }
+}
+impl Iterator for ExitedChildsIterator {
+    type Item = (i32, i8);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
+            Ok(exit_status) => match exit_status {
+                nix::sys::wait::WaitStatus::Exited(pid, code) => Some((pid, code)),
+                nix::sys::wait::WaitStatus::StillAlive => {
+                    println!("No more state changes to poll");
+                    None
+                }
+                _ => {
+                    println!("Child signaled with code: {:?}", exit_status);
+                    None
+                }
+            },
+            Err(e) => {
+                if let nix::Error::Sys(nix::errno::ECHILD) = e {
+                } else {
+                    println!("Error while waiting: {}", e.description().to_owned());
+                }
+                None
+            }
+        }
+    }
+}
+
 fn main() {
     let signals =
         Signals::new(&[signal_hook::SIGCHLD]).expect("Couldnt setup listening to the signals");
@@ -266,35 +299,8 @@ fn main() {
         for signal in signals.forever() {
             match signal as libc::c_int {
                 signal_hook::SIGCHLD => {
-                    let mut more_pids = true;
-                    while more_pids {
-                        match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
-                            Ok(exit_status) => match exit_status {
-                                nix::sys::wait::WaitStatus::Exited(pid, code) => {
-                                    servive_exit_handler(
-                                        pid,
-                                        code,
-                                        &mut service_table,
-                                        &mut pid_table,
-                                    )
-                                }
-                                nix::sys::wait::WaitStatus::StillAlive => {
-                                    println!("No more state changes to poll");
-                                    more_pids = false;
-                                }
-                                _ => {
-                                    println!("Child signaled with code: {:?}", exit_status);
-                                }
-                            },
-                            Err(e) => {
-                                if let nix::Error::Sys(nix::errno::ECHILD) = e {
-                                    more_pids = false;
-                                } else {
-                                    println!("Error while waiting: {}", e.description().to_owned());
-                                    more_pids = false;
-                                }
-                            }
-                        }
+                    for (pid, code) in ExitedChildsIterator::default() {
+                        servive_exit_handler(pid, code, &mut service_table, &mut pid_table)
                     }
                 }
                 _ => unreachable!(),
