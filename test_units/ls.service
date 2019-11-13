@@ -1,3 +1,7 @@
+[Unit]
+requires= ls2
+Before= ls2
+
 [Service]
 Exec= ls /etc
-keep_alive = true
+keep_alive = false

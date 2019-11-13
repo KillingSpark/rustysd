@@ -16,6 +16,8 @@ type InternalId = u64;
 pub struct UnitConfig {
     wants: Vec<String>,
     requires: Vec<String>,
+    before: Vec<String>,
+    after: Vec<String>,
 }
 pub struct InstallConfig {
     wanted_by: Vec<String>,
@@ -30,6 +32,7 @@ pub struct ServiceConfig {
 
 pub enum ServiceStatus {
     NeverRan,
+    Starting,
     Running,
     Stopped,
 }
@@ -54,14 +57,60 @@ pub struct Service {
     install_config: Option<InstallConfig>,
 }
 
-fn run_services(services: &mut HashMap<InternalId, Service>, pids: &mut HashMap<u32, InternalId>) {
-    for (_, srvc) in services {
-        start_service(srvc);
-        pids.insert(srvc.pid.unwrap(), srvc.id);
+impl Service {
+    fn name(&self) -> String {
+        let name = self
+            .filepath
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let name = name.trim_end_matches(".service").to_owned();
+
+        name
     }
 }
 
+fn run_services_recursive(
+    ids_to_start: Vec<InternalId>,
+    services: &mut HashMap<InternalId, Service>,
+    name_to_id: &HashMap<String, InternalId>,
+    pids: &mut HashMap<u32, InternalId>,
+) {
+    for id in ids_to_start {
+        let srvc = services.get_mut(&id).unwrap();
+        match srvc.status {
+            ServiceStatus::NeverRan => {
+                start_service(srvc);
+                pids.insert(srvc.pid.unwrap(), srvc.id);
+            }
+            _ => { /*ignore. Was run by another tree*/ }
+        }
+
+        run_services_recursive(srvc.before.clone(), services, name_to_id, pids);
+    }
+}
+
+fn run_services(
+    services: &mut HashMap<InternalId, Service>,
+    name_to_id: &HashMap<String, InternalId>,
+    pids: &mut HashMap<u32, InternalId>,
+) {
+    let mut root_services = Vec::new();
+
+    for (id, srvc) in &*services {
+        if srvc.after.len() == 0 {
+            root_services.push(*id);
+        }
+    }
+
+    run_services_recursive(root_services, services, name_to_id, pids);
+}
+
 fn start_service(srvc: &mut Service) {
+    srvc.status = ServiceStatus::Starting;
+
     let split: Vec<&str> = match &srvc.service_config {
         Some(conf) => conf.exec.split(" ").collect(),
         None => return,
@@ -78,28 +127,37 @@ fn start_service(srvc: &mut Service) {
             srvc.pid = Some(child.id());
             srvc.status = ServiceStatus::Running;
 
-            println!("started: {}", srvc.pid.unwrap());
+            println!(
+                "Service: {} started with pid: {}",
+                srvc.name(),
+                srvc.pid.unwrap()
+            );
         }
         Err(e) => panic!(e.description().to_owned()),
     }
 }
 
-fn fill_dependencies(services: &mut HashMap<InternalId, Service>) {
+fn print_all_services(services: &HashMap<InternalId, Service>) {
+    for (id, srvc) in services {
+        println!("{}:", id);
+        println!("  {}", srvc.name());
+        println!("  Before {:?}", srvc.before);
+        println!("  After {:?}", srvc.after);
+    }
+}
+
+fn fill_dependencies(services: &mut HashMap<InternalId, Service>) -> HashMap<String, u64> {
     let mut name_to_id = HashMap::new();
 
     for (id, srvc) in &*services {
-        let name = srvc
-            .filepath
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_owned();
+        let name = srvc.name();
         name_to_id.insert(name, *id);
     }
 
     let mut required_by = Vec::new();
     let mut wanted_by = Vec::new();
+    let mut before = Vec::new();
+    let mut after = Vec::new();
 
     for (_, srvc) in &mut *services {
         if let Some(conf) = &srvc.unit_config {
@@ -110,6 +168,16 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) {
             for name in &conf.requires {
                 let id = name_to_id.get(name.as_str()).unwrap();
                 srvc.requires.push(*id);
+            }
+            for name in &conf.before {
+                let id = name_to_id.get(name.as_str()).unwrap();
+                srvc.before.push(*id);
+                after.push((srvc.id, *id))
+            }
+            for name in &conf.after {
+                let id = name_to_id.get(name.as_str()).unwrap();
+                srvc.after.push(*id);
+                before.push((srvc.id, *id))
             }
         }
 
@@ -134,6 +202,17 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) {
         let srvc = services.get_mut(&requiring).unwrap();
         srvc.requires.push(required);
     }
+
+    for (before, after) in before {
+        let srvc = services.get_mut(&after).unwrap();
+        srvc.before.push(before);
+    }
+    for (after, before) in after {
+        let srvc = services.get_mut(&before).unwrap();
+        srvc.after.push(after);
+    }
+
+    name_to_id
 }
 
 fn main() {
@@ -148,42 +227,56 @@ fn main() {
         &mut base_id,
     );
 
-    fill_dependencies(&mut service_table);
+    let name_to_id = fill_dependencies(&mut service_table);
+
+    print_all_services(&service_table);
 
     let mut pid_table = HashMap::new();
-    run_services(&mut service_table, &mut pid_table);
+    run_services(&mut service_table, &name_to_id, &mut pid_table);
 
     loop {
         // Pick up new signals
         for signal in signals.forever() {
             match signal as libc::c_int {
                 signal_hook::SIGCHLD => {
-                    match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
-                        Ok(exit_status) => match exit_status {
-                            nix::sys::wait::WaitStatus::Exited(pid, code) => {
-                                let srvc_id = pid_table.get(&(pid as u32)).unwrap();
-                                let srvc = service_table.get_mut(&srvc_id).unwrap();
-                                println!(
-                                    "Service with id: {} pid: {} exited with code: {}",
-                                    srvc_id, pid, code
-                                );
+                    let mut more_pids = true;
+                    while more_pids {
+                        match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
+                            Ok(exit_status) => match exit_status {
+                                nix::sys::wait::WaitStatus::Exited(pid, code) => {
+                                    let srvc_id = pid_table.get(&(pid as u32)).unwrap();
+                                    let srvc = service_table.get_mut(&srvc_id).unwrap();
+                                    println!(
+                                        "Service with id: {} pid: {} exited with code: {}",
+                                        srvc_id, pid, code
+                                    );
 
-                                pid_table.remove(&(pid as u32));
-                                srvc.status = ServiceStatus::Stopped;
+                                    pid_table.remove(&(pid as u32));
+                                    srvc.status = ServiceStatus::Stopped;
 
-                                if let Some(conf) = &srvc.service_config {
-                                    if conf.keep_alive {
-                                        start_service(srvc);
-                                        pid_table.insert(srvc.pid.unwrap(), srvc.id);
+                                    if let Some(conf) = &srvc.service_config {
+                                        if conf.keep_alive {
+                                            start_service(srvc);
+                                            pid_table.insert(srvc.pid.unwrap(), srvc.id);
+                                        }
                                     }
                                 }
+                                nix::sys::wait::WaitStatus::StillAlive => {
+                                    println!("No more state changes to poll");
+                                    more_pids = false;
+                                }
+                                _ => {
+                                    println!("Child signaled with code: {:?}", exit_status);
+                                }
+                            },
+                            Err(e) => {
+                                if let nix::Error::Sys(nix::errno::ECHILD) = e {
+                                    more_pids = false;
+                                } else {
+                                    println!("Error while waiting: {}", e.description().to_owned());
+                                    more_pids = false;
+                                }
                             }
-                            _ => {
-                                println!("Child exited with code: {:?}", exit_status);
-                            }
-                        },
-                        Err(e) => {
-                            println!("Error while waiting: {}", e.description().to_owned());
                         }
                     }
                 }

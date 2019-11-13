@@ -73,10 +73,15 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
 fn parse_unit_section(lines: &Vec<&str>) -> UnitConfig {
     let mut wants = Vec::new();
     let mut requires = Vec::new();
+    let mut after = Vec::new();
+    let mut before = Vec::new();
 
     for line in lines {
-        println!("{}", line);
-        let pos = line.find(|c| c == '=').unwrap();
+        let pos = if let Some(pos) = line.find(|c| c == '=') {
+            pos
+        } else {
+            continue;
+        };
         let (name, value) = line.split_at(pos);
 
         let value = value.trim_start_matches("=");
@@ -85,6 +90,12 @@ fn parse_unit_section(lines: &Vec<&str>) -> UnitConfig {
         let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
 
         match name.as_str() {
+            "AFTER" => {
+                after.append(&mut values);
+            }
+            "BEFORE" => {
+                before.append(&mut values);
+            }
             "WANTS" => {
                 wants.append(&mut values);
             }
@@ -98,6 +109,8 @@ fn parse_unit_section(lines: &Vec<&str>) -> UnitConfig {
     UnitConfig {
         wants: wants,
         requires: requires,
+        after: after,
+        before: before,
     }
 }
 
@@ -106,8 +119,11 @@ fn parse_install_section(lines: &Vec<&str>) -> InstallConfig {
     let mut requiredby = Vec::new();
 
     for line in lines {
-        println!("{}", line);
-        let pos = line.find(|c| c == '=').unwrap();
+        let pos = if let Some(pos) = line.find(|c| c == '=') {
+            pos
+        } else {
+            continue;
+        };
         let (name, value) = line.split_at(pos);
 
         let value = value.trim_start_matches("=");
@@ -116,10 +132,10 @@ fn parse_install_section(lines: &Vec<&str>) -> InstallConfig {
         let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
 
         match name.as_str() {
-            "WANTED_BY" => {
+            "WANTEDBY" => {
                 wantedby.append(&mut values);
             }
-            "REQUIRED_BY" => {
+            "REQUIREDBY" => {
                 requiredby.append(&mut values);
             }
             _ => panic!("Unknown parameter name"),
@@ -138,8 +154,11 @@ fn parse_service_section(lines: &Vec<&str>) -> ServiceConfig {
     let mut keep_alive = None;
 
     for line in lines {
-        println!("{}", line);
-        let pos = line.find(|c| c == '=').unwrap();
+        let pos = if let Some(pos) = line.find(|c| c == '=') {
+            pos
+        } else {
+            continue;
+        };
         let (name, value) = line.split_at(pos);
 
         let value = value.trim_start_matches("=");
@@ -172,9 +191,9 @@ pub fn parse_all_services(
     path: &PathBuf,
     last_id: &mut InternalId,
 ) {
-    for entry in std::fs::read_dir(path).unwrap() {
-        let entry = entry.unwrap();
-
+    let mut files: Vec<_> = std::fs::read_dir(path).unwrap().map(|e| e.unwrap()).collect();
+    files.sort_by(|l,r| l.path().cmp(&r.path()));
+    for entry in files {
         if entry.path().is_dir() {
             parse_all_services(services, path, last_id);
         } else {
