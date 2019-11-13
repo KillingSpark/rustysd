@@ -72,6 +72,33 @@ impl Service {
     }
 }
 
+fn servive_exit_handler(
+    pid: i32,
+    code: i8,
+    service_table: &mut HashMap<InternalId, Service>,
+    pid_table: &mut HashMap<u32, InternalId>,
+) {
+    let srvc_id = pid_table.get(&(pid as u32)).unwrap();
+    let srvc = service_table.get_mut(&srvc_id).unwrap();
+
+    println!(
+        "Service with id: {} pid: {} exited with code: {}",
+        srvc_id, pid, code
+    );
+
+    pid_table.remove(&(pid as u32));
+    srvc.status = ServiceStatus::Stopped;
+
+    if let Some(conf) = &srvc.service_config {
+        if conf.keep_alive {
+            start_service(srvc);
+            pid_table.insert(srvc.pid.unwrap(), srvc.id);
+        }else{
+            //TODO killall services that require this service
+        }
+    }
+}
+
 fn run_services_recursive(
     ids_to_start: Vec<InternalId>,
     services: &mut HashMap<InternalId, Service>,
@@ -244,22 +271,12 @@ fn main() {
                         match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
                             Ok(exit_status) => match exit_status {
                                 nix::sys::wait::WaitStatus::Exited(pid, code) => {
-                                    let srvc_id = pid_table.get(&(pid as u32)).unwrap();
-                                    let srvc = service_table.get_mut(&srvc_id).unwrap();
-                                    println!(
-                                        "Service with id: {} pid: {} exited with code: {}",
-                                        srvc_id, pid, code
-                                    );
-
-                                    pid_table.remove(&(pid as u32));
-                                    srvc.status = ServiceStatus::Stopped;
-
-                                    if let Some(conf) = &srvc.service_config {
-                                        if conf.keep_alive {
-                                            start_service(srvc);
-                                            pid_table.insert(srvc.pid.unwrap(), srvc.id);
-                                        }
-                                    }
+                                    servive_exit_handler(
+                                        pid,
+                                        code,
+                                        &mut service_table,
+                                        &mut pid_table,
+                                    )
                                 }
                                 nix::sys::wait::WaitStatus::StillAlive => {
                                     println!("No more state changes to poll");
