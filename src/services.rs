@@ -3,10 +3,6 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-extern crate libc;
-
-extern crate nix;
-
 pub type InternalId = u64;
 
 pub struct UnitConfig {
@@ -77,7 +73,10 @@ impl Service {
     }
 }
 
-pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Service>) {
+pub fn kill_services(
+    ids_to_kill: Vec<InternalId>,
+    service_table: &mut HashMap<InternalId, Service>,
+) {
     //TODO killall services that require this service
     for id in ids_to_kill {
         let srvc = service_table.get(&id).unwrap();
@@ -123,7 +122,7 @@ pub fn service_exit_handler(
             // Probably a kill command
             //TODO track kill command pid's
             return;
-        } 
+        }
     });
     let srvc = service_table.get_mut(&srvc_id).unwrap();
 

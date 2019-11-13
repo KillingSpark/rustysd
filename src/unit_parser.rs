@@ -1,4 +1,6 @@
-use crate::services::{InstallConfig, InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig};
+use crate::services::{
+    InstallConfig, InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig,
+};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
@@ -191,8 +193,11 @@ pub fn parse_all_services(
     path: &PathBuf,
     last_id: &mut InternalId,
 ) {
-    let mut files: Vec<_> = std::fs::read_dir(path).unwrap().map(|e| e.unwrap()).collect();
-    files.sort_by(|l,r| l.path().cmp(&r.path()));
+    let mut files: Vec<_> = std::fs::read_dir(path)
+        .unwrap()
+        .map(|e| e.unwrap())
+        .collect();
+    files.sort_by(|l, r| l.path().cmp(&r.path()));
     for entry in files {
         if entry.path().is_dir() {
             parse_all_services(services, path, last_id);

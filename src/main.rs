@@ -1,12 +1,12 @@
-mod unit_parser;
 mod services;
+mod unit_parser;
 
 extern crate signal_hook;
 use signal_hook::iterator::Signals;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::error::Error;
+use std::path::PathBuf;
 
 fn main() {
     let signals =
@@ -36,7 +36,12 @@ fn main() {
             match signal as libc::c_int {
                 signal_hook::SIGCHLD => {
                     for (pid, code) in std::iter::from_fn(get_next_exited_child) {
-                        services::service_exit_handler(pid, code, &mut service_table, &mut pid_table)
+                        services::service_exit_handler(
+                            pid,
+                            code,
+                            &mut service_table,
+                            &mut pid_table,
+                        )
                     }
                 }
                 _ => unreachable!(),
@@ -50,8 +55,7 @@ fn get_next_exited_child() -> Option<(i32, i8)> {
         Ok(exit_status) => match exit_status {
             nix::sys::wait::WaitStatus::Exited(pid, code) => Some((pid, code)),
             nix::sys::wait::WaitStatus::Signaled(pid, signal, dumped_core) => {
-
-                // signals get handed to the parent if the child got killed by it but didnt handle the 
+                // signals get handed to the parent if the child got killed by it but didnt handle the
                 // signal itself
                 if signal == libc::SIGTERM {
                     if dumped_core {
