@@ -3,5 +3,6 @@ requires= ls4
 Before= ls4
 
 [Service]
-Exec= sleep 2
-keep_alive = true
+Exec= sleep 100
+Stop= killall sleep
+keep_alive = false

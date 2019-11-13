@@ -70,15 +70,65 @@ impl Service {
 
         name
     }
+
+    fn dedup_dependencies(&mut self) {
+        self.wants.dedup();
+        self.requires.dedup();
+        self.wanted_by.dedup();
+        self.required_by.dedup();
+        self.before.dedup();
+        self.after.dedup();
+    }
 }
 
-fn servive_exit_handler(
+fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Service>) {
+    //TODO killall services that require this service
+    for id in ids_to_kill {
+        let srvc = service_table.get(&id).unwrap();
+
+        let split: Vec<&str> = match &srvc.service_config {
+            Some(conf) => {
+                if conf.stop.len() == 0 {
+                    continue;
+                }
+                conf.stop.split(" ").collect()
+            }
+            None => continue,
+        };
+
+        let mut cmd = Command::new(split[0]);
+        for part in &split[1..] {
+            cmd.arg(part);
+        }
+        cmd.stdout(Stdio::null());
+
+        match cmd.spawn() {
+            Ok(_) => {
+                println!(
+                    "Stopping Service: {} with pid: {}",
+                    srvc.name(),
+                    srvc.pid.unwrap()
+                );
+            }
+            Err(e) => panic!(e.description().to_owned()),
+        }
+    }
+}
+
+fn service_exit_handler(
     pid: i32,
     code: i8,
     service_table: &mut HashMap<InternalId, Service>,
     pid_table: &mut HashMap<u32, InternalId>,
 ) {
-    let srvc_id = pid_table.get(&(pid as u32)).unwrap();
+    let srvc_id = *(match pid_table.get(&(pid as u32)) {
+        Some(id) => id,
+        None => {
+            // Probably a kill command
+            //TODO track kill command pid's
+            return;
+        } 
+    });
     let srvc = service_table.get_mut(&srvc_id).unwrap();
 
     println!(
@@ -94,7 +144,11 @@ fn servive_exit_handler(
             start_service(srvc);
             pid_table.insert(srvc.pid.unwrap(), srvc.id);
         } else {
-            //TODO killall services that require this service
+            println!(
+                "Killing all services requiring service with id {}: {:?}",
+                srvc_id, srvc.required_by
+            );
+            kill_services(srvc.required_by.clone(), service_table);
         }
     }
 }
@@ -112,7 +166,7 @@ fn run_services_recursive(
                 start_service(srvc);
                 pids.insert(srvc.pid.unwrap(), srvc.id);
             }
-            _ => { /*ignore. Was run by another tree*/ }
+            _ => unreachable!(),
         }
 
         run_services_recursive(srvc.before.clone(), services, name_to_id, pids);
@@ -182,7 +236,7 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) -> HashMap<Str
     }
 
     let mut required_by = Vec::new();
-    let mut wanted_by = Vec::new();
+    let mut wanted_by: Vec<(InternalId, InternalId)> = Vec::new();
     let mut before = Vec::new();
     let mut after = Vec::new();
 
@@ -191,10 +245,12 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) -> HashMap<Str
             for name in &conf.wants {
                 let id = name_to_id.get(name.as_str()).unwrap();
                 srvc.wants.push(*id);
+                wanted_by.push((*id, srvc.id));
             }
             for name in &conf.requires {
                 let id = name_to_id.get(name.as_str()).unwrap();
                 srvc.requires.push(*id);
+                required_by.push((*id, srvc.id));
             }
             for name in &conf.before {
                 let id = name_to_id.get(name.as_str()).unwrap();
@@ -211,11 +267,11 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) -> HashMap<Str
         if let Some(conf) = &srvc.install_config {
             for name in &conf.wanted_by {
                 let id = name_to_id.get(name.as_str()).unwrap();
-                wanted_by.push((srvc.id, id));
+                wanted_by.push((srvc.id, *id));
             }
             for name in &conf.required_by {
                 let id = name_to_id.get(name.as_str()).unwrap();
-                required_by.push((srvc.id, id));
+                required_by.push((srvc.id, *id));
             }
         }
     }
@@ -223,11 +279,15 @@ fn fill_dependencies(services: &mut HashMap<InternalId, Service>) -> HashMap<Str
     for (wanted, wanting) in wanted_by {
         let srvc = services.get_mut(&wanting).unwrap();
         srvc.wants.push(wanted);
+        let srvc = services.get_mut(&wanted).unwrap();
+        srvc.wanted_by.push(wanting);
     }
 
     for (required, requiring) in required_by {
         let srvc = services.get_mut(&requiring).unwrap();
         srvc.requires.push(required);
+        let srvc = services.get_mut(&required).unwrap();
+        srvc.required_by.push(requiring);
     }
 
     for (before, after) in before {
@@ -246,6 +306,20 @@ fn get_next_exited_child() -> Option<(i32, i8)> {
     match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
         Ok(exit_status) => match exit_status {
             nix::sys::wait::WaitStatus::Exited(pid, code) => Some((pid, code)),
+            nix::sys::wait::WaitStatus::Signaled(pid, signal, dumped_core) => {
+
+                // signals get handed to the parent if the child got killed by it but didnt handle the 
+                // signal itself
+                if signal == libc::SIGTERM {
+                    if dumped_core {
+                        Some((pid, signal as i8))
+                    } else {
+                        Some((pid, signal as i8))
+                    }
+                } else {
+                    None
+                }
+            }
             nix::sys::wait::WaitStatus::StillAlive => {
                 println!("No more state changes to poll");
                 None
@@ -278,6 +352,9 @@ fn main() {
     );
 
     let name_to_id = fill_dependencies(&mut service_table);
+    for (_, srvc) in &mut service_table {
+        srvc.dedup_dependencies();
+    }
 
     print_all_services(&service_table);
 
@@ -290,7 +367,7 @@ fn main() {
             match signal as libc::c_int {
                 signal_hook::SIGCHLD => {
                     for (pid, code) in std::iter::from_fn(get_next_exited_child) {
-                        servive_exit_handler(pid, code, &mut service_table, &mut pid_table)
+                        service_exit_handler(pid, code, &mut service_table, &mut pid_table)
                     }
                 }
                 _ => unreachable!(),
