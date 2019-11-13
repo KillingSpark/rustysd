@@ -1,4 +1,4 @@
-use crate::{InstallConfig, InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig};
+use crate::services::{InstallConfig, InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
