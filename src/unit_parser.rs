@@ -203,7 +203,7 @@ pub fn parse_all_services(
             parse_all_services(services, path, last_id);
         } else {
             if entry.path().to_str().unwrap().ends_with(".service") {
-                println!("{:?}", entry.path());
+                trace!("{:?}", entry.path());
                 *last_id += 1;
                 services.insert(*last_id, parse_service(&entry.path(), *last_id));
             }

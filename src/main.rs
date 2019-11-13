@@ -4,11 +4,31 @@ mod unit_parser;
 extern crate signal_hook;
 use signal_hook::iterator::Signals;
 
+#[macro_use]
+extern crate log;
+extern crate fern;
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 
 fn main() {
+
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{}[{}][{}] {}",
+                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+                record.target(),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Trace)
+        .chain(std::io::stdout())
+        //.chain(fern::log_file("output.log").unwrap())
+        .apply().unwrap();
+
     let signals =
         Signals::new(&[signal_hook::SIGCHLD]).expect("Couldnt setup listening to the signals");
 
@@ -68,18 +88,18 @@ fn get_next_exited_child() -> Option<(i32, i8)> {
                 }
             }
             nix::sys::wait::WaitStatus::StillAlive => {
-                println!("No more state changes to poll");
+                trace!("No more state changes to poll");
                 None
             }
             _ => {
-                println!("Child signaled with code: {:?}", exit_status);
+                trace!("Child signaled with code: {:?}", exit_status);
                 None
             }
         },
         Err(e) => {
             if let nix::Error::Sys(nix::errno::ECHILD) = e {
             } else {
-                println!("Error while waiting: {}", e.description().to_owned());
+                trace!("Error while waiting: {}", e.description().to_owned());
             }
             None
         }

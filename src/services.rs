@@ -99,7 +99,7 @@ pub fn kill_services(
 
         match cmd.spawn() {
             Ok(_) => {
-                println!(
+                trace!(
                     "Stopping Service: {} with pid: {}",
                     srvc.name(),
                     srvc.pid.unwrap()
@@ -126,7 +126,7 @@ pub fn service_exit_handler(
     });
     let srvc = service_table.get_mut(&srvc_id).unwrap();
 
-    println!(
+    trace!(
         "Service with id: {} pid: {} exited with code: {}",
         srvc_id, pid, code
     );
@@ -139,7 +139,7 @@ pub fn service_exit_handler(
             start_service(srvc);
             pid_table.insert(srvc.pid.unwrap(), srvc.id);
         } else {
-            println!(
+            trace!(
                 "Killing all services requiring service with id {}: {:?}",
                 srvc_id, srvc.required_by
             );
@@ -203,7 +203,7 @@ pub fn start_service(srvc: &mut Service) {
             srvc.pid = Some(child.id());
             srvc.status = ServiceStatus::Running;
 
-            println!(
+            trace!(
                 "Service: {} started with pid: {}",
                 srvc.name(),
                 srvc.pid.unwrap()
@@ -215,10 +215,10 @@ pub fn start_service(srvc: &mut Service) {
 
 pub fn print_all_services(services: &HashMap<InternalId, Service>) {
     for (id, srvc) in services {
-        println!("{}:", id);
-        println!("  {}", srvc.name());
-        println!("  Before {:?}", srvc.before);
-        println!("  After {:?}", srvc.after);
+        trace!("{}:", id);
+        trace!("  {}", srvc.name());
+        trace!("  Before {:?}", srvc.before);
+        trace!("  After {:?}", srvc.after);
     }
 }
 
