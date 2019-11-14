@@ -12,3 +12,5 @@ log = "0.4.8"
 fern = "0.5.9"
 chrono = "0.4.9"
 
+lumberjack-rs = { git = "https://github.com/KillingSpark/lumberjack-rs" }
+

@@ -7,13 +7,22 @@ use signal_hook::iterator::Signals;
 #[macro_use]
 extern crate log;
 extern crate fern;
+extern crate lumberjack_rs;
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
-
+    let lmbrjck_conf = lumberjack_rs::Conf {
+        max_age: None,
+        max_files: Some(10),
+        max_size: 10*1024*1024,
+        log_dir: "./logs".into(),
+        name_template: "rustysdlog.log".to_owned(),
+    };
+    let rotating = std::sync::Mutex::new(lumberjack_rs::new(lmbrjck_conf).unwrap());
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -26,8 +35,17 @@ fn main() {
         })
         .level(log::LevelFilter::Trace)
         .chain(std::io::stdout())
+        .chain(fern::Output::call(move |record| {
+            let msg = format!("{}\n", record.args());
+            let rotating = rotating.lock();
+            let mut rotating = rotating.unwrap();
+            let result = rotating.write_all(msg.as_str().as_bytes());
+            //TODO do something with the result
+            let _ = result;
+        }))
         //.chain(fern::log_file("output.log").unwrap())
-        .apply().unwrap();
+        .apply()
+        .unwrap();
 
     let signals =
         Signals::new(&[signal_hook::SIGCHLD]).expect("Couldnt setup listening to the signals");
