@@ -18,7 +18,7 @@ fn main() {
     let lmbrjck_conf = lumberjack_rs::Conf {
         max_age: None,
         max_files: Some(10),
-        max_size: 10*1024*1024,
+        max_size: 10 * 1024 * 1024,
         log_dir: "./logs".into(),
         name_template: "rustysdlog.log".to_owned(),
     };
@@ -73,33 +73,37 @@ fn main() {
         for signal in signals.forever() {
             match signal as libc::c_int {
                 signal_hook::SIGCHLD => {
-                    for (pid, code) in std::iter::from_fn(get_next_exited_child) {
-                        services::service_exit_handler(
+                    std::iter::from_fn(get_next_exited_child).take_while(Result::is_ok).for_each(|val| match val {
+                        Ok((pid, code)) => services::service_exit_handler(
                             pid,
                             code,
                             &mut service_table,
                             &mut pid_table,
-                        )
-                    }
+                        ),
+                        Err(e) => {
+                            error!("{}", e);
+                        }
+                    });
                 }
+
                 _ => unreachable!(),
             }
         }
     }
 }
 
-fn get_next_exited_child() -> Option<(i32, i8)> {
+fn get_next_exited_child() -> Option<Result<(i32, i8), nix::Error>> {
     match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
         Ok(exit_status) => match exit_status {
-            nix::sys::wait::WaitStatus::Exited(pid, code) => Some((pid, code)),
+            nix::sys::wait::WaitStatus::Exited(pid, code) => Some(Ok((pid, code))),
             nix::sys::wait::WaitStatus::Signaled(pid, signal, dumped_core) => {
                 // signals get handed to the parent if the child got killed by it but didnt handle the
                 // signal itself
                 if signal == libc::SIGTERM {
                     if dumped_core {
-                        Some((pid, signal as i8))
+                        Some(Ok((pid, signal as i8)))
                     } else {
-                        Some((pid, signal as i8))
+                        Some(Ok((pid, signal as i8)))
                     }
                 } else {
                     None
@@ -119,7 +123,7 @@ fn get_next_exited_child() -> Option<(i32, i8)> {
             } else {
                 trace!("Error while waiting: {}", e.description().to_owned());
             }
-            None
+            Some(Err(e))
         }
     }
 }
