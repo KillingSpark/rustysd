@@ -251,10 +251,20 @@ pub fn start_service(srvc: &mut Service) {
         None => return,
     };
 
+    //TODO implement 
+    // if socket activated:
+    // 1. fork
+    // 2. in fork use dup2 to map all relevant file desrciptors to 3..x
+    // 3. in fork mark all other file descriptors with FD_CLOEXEC
+    // 4. set relevant env varibales $LISTENING_FDS $LISTENING_PID (double check that)
+    // 4. execve the cmd with the args
+
+
     let mut cmd = Command::new(split[0]);
     for part in &split[1..] {
         cmd.arg(part);
     }
+
     cmd.stdout(Stdio::null());
 
     match cmd.spawn() {
