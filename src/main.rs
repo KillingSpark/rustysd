@@ -8,6 +8,8 @@ use signal_hook::iterator::Signals;
 extern crate log;
 extern crate fern;
 extern crate lumberjack_rs;
+extern crate threadpool;
+extern crate crossbeam;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -58,15 +60,15 @@ fn main() {
         &mut base_id,
     );
 
-    let name_to_id = services::fill_dependencies(&mut service_table);
+    let _name_to_id = services::fill_dependencies(&mut service_table);
     for (_, srvc) in &mut service_table {
         srvc.dedup_dependencies();
     }
 
     services::print_all_services(&service_table);
 
-    let mut pid_table = HashMap::new();
-    services::run_services(&mut service_table, &name_to_id, &mut pid_table);
+    let pid_table = HashMap::new();
+    let (mut service_table, mut pid_table) =  services::run_services(service_table, pid_table);
 
     loop {
         // Pick up new signals

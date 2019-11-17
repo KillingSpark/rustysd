@@ -2,26 +2,31 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use threadpool::ThreadPool;
 
 pub type InternalId = u64;
 
+#[derive(Clone)]
 pub struct UnitConfig {
     pub wants: Vec<String>,
     pub requires: Vec<String>,
     pub before: Vec<String>,
     pub after: Vec<String>,
 }
+#[derive(Clone)]
 pub struct InstallConfig {
     pub wanted_by: Vec<String>,
     pub required_by: Vec<String>,
 }
 
+#[derive(Clone)]
 pub struct ServiceConfig {
     pub keep_alive: bool,
     pub exec: String,
     pub stop: String,
 }
 
+#[derive(Clone)]
 pub enum ServiceStatus {
     NeverRan,
     Starting,
@@ -29,6 +34,7 @@ pub enum ServiceStatus {
     Stopped,
 }
 
+#[derive(Clone)]
 pub struct Service {
     pub id: InternalId,
     pub pid: Option<u32>,
@@ -100,9 +106,9 @@ pub fn kill_services(
         match cmd.spawn() {
             Ok(_) => {
                 trace!(
-                    "Stopping Service: {} with pid: {}",
+                    "Stopped Service: {} with pid: {:?}",
                     srvc.name(),
-                    srvc.pid.unwrap()
+                    srvc.pid
                 );
             }
             Err(e) => panic!(e.description().to_owned()),
@@ -119,6 +125,7 @@ pub fn service_exit_handler(
     let srvc_id = *(match pid_table.get(&(pid as u32)) {
         Some(id) => id,
         None => {
+            trace!("Ignore event for pid: {}", pid);
             // Probably a kill command
             //TODO track kill command pid's
             return;
@@ -128,7 +135,9 @@ pub fn service_exit_handler(
 
     trace!(
         "Service with id: {} pid: {} exited with code: {}",
-        srvc_id, pid, code
+        srvc_id,
+        pid,
+        code
     );
 
     pid_table.remove(&(pid as u32));
@@ -141,47 +150,97 @@ pub fn service_exit_handler(
         } else {
             trace!(
                 "Killing all services requiring service with id {}: {:?}",
-                srvc_id, srvc.required_by
+                srvc_id,
+                srvc.required_by
             );
             kill_services(srvc.required_by.clone(), service_table);
         }
     }
 }
 
+use std::sync::Arc;
+use std::sync::Mutex;
 fn run_services_recursive(
     ids_to_start: Vec<InternalId>,
-    services: &mut HashMap<InternalId, Service>,
-    name_to_id: &HashMap<String, InternalId>,
-    pids: &mut HashMap<u32, InternalId>,
+    services: Arc<Mutex<HashMap<InternalId, Service>>>,
+    pids: Arc<Mutex<HashMap<u32, InternalId>>>,
+    tpool: Arc<Mutex<ThreadPool>>,
+    waitgroup: crossbeam::sync::WaitGroup,
 ) {
     for id in ids_to_start {
-        let srvc = services.get_mut(&id).unwrap();
-        match srvc.status {
-            ServiceStatus::NeverRan => {
-                start_service(srvc);
-                pids.insert(srvc.pid.unwrap(), srvc.id);
-            }
-            _ => unreachable!(),
-        }
+        let waitgroup_copy = waitgroup.clone();
+        let tpool_copy = Arc::clone(&tpool);
+        let services_copy = Arc::clone(&services);
+        let pids_copy = Arc::clone(&pids);
 
-        run_services_recursive(srvc.before.clone(), services, name_to_id, pids);
+        let job = move || {
+            let mut srvc = {
+                let mut services_locked = services_copy.lock().unwrap();
+                services_locked.get_mut(&id).unwrap().clone()
+            };
+            match srvc.status {
+                ServiceStatus::NeverRan => {
+                    start_service(&mut srvc);
+                    {
+                        let mut services_locked = services_copy.lock().unwrap();
+                        services_locked.insert(id, srvc.clone()).unwrap().clone()
+                    };
+                    {
+                        let mut pids = pids_copy.lock().unwrap();
+                        pids.insert(srvc.pid.unwrap(), srvc.id);
+                    }
+                }
+                _ => unreachable!(),
+            }
+            
+            run_services_recursive(
+                srvc.before.clone(),
+                Arc::clone(&services_copy),
+                Arc::clone(&pids_copy),
+                Arc::clone(&tpool_copy),
+                waitgroup_copy
+            );
+        };
+
+        {
+            let tpool_locked = tpool.lock().unwrap();
+            tpool_locked.execute(job);
+        }
     }
+    drop(waitgroup);
 }
 
 pub fn run_services(
-    services: &mut HashMap<InternalId, Service>,
-    name_to_id: &HashMap<String, InternalId>,
-    pids: &mut HashMap<u32, InternalId>,
-) {
+    services: HashMap<InternalId, Service>,
+    pids: HashMap<u32, InternalId>,
+) -> (HashMap<InternalId, Service>, HashMap<u32, InternalId>) {
     let mut root_services = Vec::new();
 
-    for (id, srvc) in &*services {
+    for (id, srvc) in &services {
         if srvc.after.len() == 0 {
             root_services.push(*id);
         }
     }
 
-    run_services_recursive(root_services, services, name_to_id, pids);
+    let pool_arc = Arc::new(Mutex::new(ThreadPool::new(6)));
+    let services_arc = Arc::new(Mutex::new(services));
+    let pids_arc = Arc::new(Mutex::new(pids));
+    let waitgroup = crossbeam::sync::WaitGroup::new();
+    run_services_recursive(
+        root_services,
+        Arc::clone(&services_arc),
+        Arc::clone(&pids_arc),
+        pool_arc,
+        waitgroup.clone(),
+    );
+
+    waitgroup.wait();
+
+    
+    let services = services_arc.as_ref().lock().unwrap().clone();
+    let pids = pids_arc.as_ref().lock().unwrap().clone();
+
+    return (services, pids);
 }
 
 pub fn start_service(srvc: &mut Service) {

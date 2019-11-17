@@ -11,6 +11,8 @@ nix = "0.6.0"
 log = "0.4.8"
 fern = "0.5.9"
 chrono = "0.4.9"
+threadpool = "1.7.1"
+crossbeam = "0.7.3"
 
 lumberjack-rs = { git = "https://github.com/KillingSpark/lumberjack-rs" }
 
