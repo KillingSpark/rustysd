@@ -1,0 +1,9 @@
+[Unit]
+Description=test Socket
+PartOf=test.service
+
+[Socket]
+File= ./logs/servicelog
+
+[Install]
+WantedBy=sockets.target

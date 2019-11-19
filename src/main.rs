@@ -6,10 +6,10 @@ use signal_hook::iterator::Signals;
 
 #[macro_use]
 extern crate log;
+extern crate crossbeam;
 extern crate fern;
 extern crate lumberjack_rs;
 extern crate threadpool;
-extern crate crossbeam;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -24,7 +24,9 @@ fn main() {
         log_dir: "./logs".into(),
         name_template: "rustysdlog.log".to_owned(),
     };
+    
     let rotating = std::sync::Mutex::new(lumberjack_rs::new(lmbrjck_conf).unwrap());
+
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -45,7 +47,6 @@ fn main() {
             //TODO do something with the result
             let _ = result;
         }))
-        //.chain(fern::log_file("output.log").unwrap())
         .apply()
         .unwrap();
 
@@ -67,25 +68,31 @@ fn main() {
 
     services::print_all_services(&service_table);
 
+    let socket_table = HashMap::new();
+
     let pid_table = HashMap::new();
-    let (mut service_table, mut pid_table) =  services::run_services(service_table, pid_table);
+    let (mut service_table, mut pid_table) =
+        services::run_services(service_table, pid_table, socket_table.clone());
 
     loop {
         // Pick up new signals
         for signal in signals.forever() {
             match signal as libc::c_int {
                 signal_hook::SIGCHLD => {
-                    std::iter::from_fn(get_next_exited_child).take_while(Result::is_ok).for_each(|val| match val {
-                        Ok((pid, code)) => services::service_exit_handler(
-                            pid,
-                            code,
-                            &mut service_table,
-                            &mut pid_table,
-                        ),
-                        Err(e) => {
-                            error!("{}", e);
-                        }
-                    });
+                    std::iter::from_fn(get_next_exited_child)
+                        .take_while(Result::is_ok)
+                        .for_each(|val| match val {
+                            Ok((pid, code)) => services::service_exit_handler(
+                                pid,
+                                code,
+                                &mut service_table,
+                                &mut pid_table,
+                                &socket_table,
+                            ),
+                            Err(e) => {
+                                error!("{}", e);
+                            }
+                        });
                 }
 
                 _ => unreachable!(),

@@ -69,6 +69,8 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
         service_config: service_config,
         unit_config: unit_config,
         install_config: install_config,
+
+        file_descriptors: Vec::new(),
     }
 }
 
