@@ -278,30 +278,41 @@ fn start_service_with_filedescriptors(
                 }
             }
 
-            //does deadlock after fork and before exec...
-            //std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
-            //std::env::set_var("LISTEN_PID", format!("{}", pid));
+            // The following two lines do deadlock after fork and before exec... I would have loved to just use these
+            // This has probably something to do with the global env_lock() that is being used in the std 
+            // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
+            // std::env::set_var("LISTEN_PID", format!("{}", pid));
 
-            // so lets use some unsafe instead....
-            let fds_str = format!("{}\0", srvc.file_descriptors.len());
-            let fds_str_i8: Vec<i8> = fds_str.as_str().bytes().map(|x| x as i8).collect();
-            let fds_str_ptr: *const libc::c_char = fds_str_i8.as_ptr();
+            // so lets use some unsafe instead, and use the same libc::setenv that the std uses but we dont care about the lock
+            // This is the only thread in this process that is still running so we dont need any lock 
+            
+            // Maybe it would be better to have a simple wrapper that we can exec with a few sensible args
+            // 1. list filedescriptors to keep open (maybe not event that. FD handling can be done here probably?)
+            // 2. at least the number of fds
+            // 3. the actual executable that should be run + their args
+            //
+            // This wrapper then does:
+            // 1. Maybe close and dup2 fds
+            // 2. Set appropriate env variables
+            // 3. exec the actual executable we are trying to start here
 
-            let name = format!("LISTEN_FDS\0");
-            let name: Vec<i8> = name.as_str().bytes().map(|x| x as i8).collect();
-            let name_ptr: *const libc::c_char = name.as_ptr();
+            // This is all just that complicated because systemd promises to pass the correct PID in the env-var LISTEN_PID...
 
-            unsafe { libc::setenv(name_ptr, fds_str_ptr, 1) };
+            let pid_str = &format!("{}", pid);
+            let fds_str = &format!("{}", srvc.file_descriptors.len());
 
-            let pid_str = format!("{}\0", pid);
-            let pid_str_i8: Vec<i8> = pid_str.as_str().bytes().map(|x| x as i8).collect();
-            let pid_str_ptr: *const libc::c_char = pid_str_i8.as_ptr();
-
-            let name = format!("LISTEN_PID\0");
-            let name: Vec<i8> = name.as_str().bytes().map(|x| x as i8).collect();
-            let name_ptr: *const libc::c_char = name.as_ptr();
-
-            unsafe { libc::setenv(name_ptr, pid_str_ptr, 1) };
+            unsafe fn setenv(key: &str, value: &str) {
+                let k = std::ffi::CString::new(key.as_bytes()).unwrap();
+                let v = std::ffi::CString::new(value.as_bytes()).unwrap();
+            
+                libc::setenv(k.as_ptr(), v.as_ptr(), 1);
+            }
+            unsafe {
+                setenv("LISTEN_FDS", fds_str);
+            }
+            unsafe {
+                setenv("LISTEN_PID", pid_str);
+            }
 
             trace!(
                 "pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}",
