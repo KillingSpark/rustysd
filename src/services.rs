@@ -13,6 +13,7 @@ pub struct UnitConfig {
     pub before: Vec<String>,
     pub after: Vec<String>,
 }
+
 #[derive(Clone)]
 pub struct InstallConfig {
     pub wanted_by: Vec<String>,

@@ -1,4 +1,5 @@
 mod services;
+mod sockets;
 mod unit_parser;
 
 extern crate signal_hook;
@@ -24,7 +25,7 @@ fn main() {
         log_dir: "./logs".into(),
         name_template: "rustysdlog.log".to_owned(),
     };
-    
+
     let rotating = std::sync::Mutex::new(lumberjack_rs::new(lmbrjck_conf).unwrap());
 
     fern::Dispatch::new()
@@ -57,6 +58,13 @@ fn main() {
     let mut base_id = 0;
     unit_parser::parse_all_services(
         &mut service_table,
+        &PathBuf::from("./test_units"),
+        &mut base_id,
+    );
+
+    let mut socket_table = HashMap::new();
+    unit_parser::parse_all_sockets(
+        &mut socket_table,
         &PathBuf::from("./test_units"),
         &mut base_id,
     );
