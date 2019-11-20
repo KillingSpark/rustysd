@@ -75,14 +75,7 @@ fn main() {
         srvc.dedup_dependencies();
     }
 
-    for (_,x) in &mut socket_table {
-        trace!("socket name: {}", x.name());
-        if x.name() == "test".to_owned() {
-            let (_, fd) = &x.sockets[0];
-            service_table.get_mut(&5).unwrap().file_descriptors.push(fd.unwrap());
-            trace!("pushed fd");
-        }
-    }
+    let service_table = apply_sockets_to_services(service_table, &socket_table);
 
     services::print_all_services(&service_table);
 
@@ -117,6 +110,29 @@ fn main() {
             }
         }
     }
+}
+
+use services::InternalId;
+use services::Service;
+use sockets::Socket;
+fn apply_sockets_to_services(
+    mut service_table: HashMap<InternalId, Service>,
+    socket_table: &HashMap<InternalId, Socket>,
+) -> HashMap<InternalId, Service> {
+    for (_, x) in socket_table {
+        if x.name() == "test".to_owned() {
+            for (_, srvc) in &mut service_table {
+                if srvc.name() == x.name() {
+                    trace!("add socket: {} to service: {}", x.name(), srvc.name());
+                    for (_, fd) in &x.sockets{
+                        srvc.file_descriptors.push(fd.unwrap());
+                    }
+                }
+            }
+        }
+    }
+
+    service_table
 }
 
 fn get_next_exited_child() -> Option<Result<(i32, i8), nix::Error>> {
