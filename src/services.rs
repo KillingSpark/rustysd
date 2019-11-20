@@ -372,15 +372,6 @@ pub fn start_service(
     };
 
     if srvc.file_descriptors.len() > 0 || srvc.name() == "test" {
-        if srvc.name() == "test" {
-            let fd = nix::fcntl::open(
-                "./servicelog",
-                nix::fcntl::O_APPEND | nix::fcntl::O_CREAT | nix::fcntl::O_RDWR,
-                nix::sys::stat::S_IRWXU,
-            )
-            .unwrap();
-            srvc.file_descriptors.push(fd);
-        }
         start_service_with_filedescriptors(srvc, global_filedescriptors);
     } else {
         let mut cmd = Command::new(split[0]);

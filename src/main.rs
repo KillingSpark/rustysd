@@ -68,10 +68,20 @@ fn main() {
         &PathBuf::from("./test_units"),
         &mut base_id,
     );
+    sockets::open_all_sockets(&mut socket_table).unwrap();
 
     let _name_to_id = services::fill_dependencies(&mut service_table);
     for (_, srvc) in &mut service_table {
         srvc.dedup_dependencies();
+    }
+
+    for (_,x) in &mut socket_table {
+        trace!("socket name: {}", x.name());
+        if x.name() == "test".to_owned() {
+            let (_, fd) = &x.sockets[0];
+            service_table.get_mut(&5).unwrap().file_descriptors.push(fd.unwrap());
+            trace!("pushed fd");
+        }
     }
 
     services::print_all_services(&service_table);
