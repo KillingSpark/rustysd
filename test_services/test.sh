@@ -2,4 +2,6 @@
 
 echo "FROM SERVICE: FDS:" $LISTEN_FDS "PID: " $LISTEN_PID
 
-echo "This is my services log entry" >&3
+cat <&3
+
+echo "WROTE TO FD 3"

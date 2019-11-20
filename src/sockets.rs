@@ -19,9 +19,12 @@ pub enum SpecializedSocketConfig {
     UnixSocket(UnixSocketConfig),
 }
 
+use std::os::unix::net::{UnixListener};
+use std::rc::Rc;
 #[derive(Clone)]
 pub struct UnixSocketConfig {
     pub path: std::path::PathBuf,
+    pub listener: Option<Rc<UnixListener>>,
 }
 
 pub struct Socket {
@@ -46,7 +49,6 @@ impl Socket {
     }
 }
 
-use std::os::unix::net::{UnixListener};
 use std::os::unix::io::{AsRawFd};
 pub fn open_all_sockets(
     sockets: &mut std::collections::HashMap<crate::services::InternalId, Socket>,
@@ -54,7 +56,7 @@ pub fn open_all_sockets(
     for (_, socket) in sockets {
         for idx in 0..socket.sockets.len() {
             let (conf, fd) = &mut socket.sockets[idx];
-            match &conf.specialized {
+            match &mut conf.specialized {
                 SpecializedSocketConfig::UnixSocket(unix_conf) => {
                     let spath = std::path::Path::new(&unix_conf.path);
                     // Delete old socket if necessary
@@ -69,6 +71,8 @@ pub fn open_all_sockets(
                         Ok(stream) => stream,
                     };
                     *fd = Some(stream.as_raw_fd());
+                    //need to stop the listener to drop which would close the filedescriptor
+                    unix_conf.listener = Some(Rc::new(stream));
                 }
             }
         }

@@ -280,13 +280,13 @@ fn start_service_with_filedescriptors(
             }
 
             // The following two lines do deadlock after fork and before exec... I would have loved to just use these
-            // This has probably something to do with the global env_lock() that is being used in the std 
+            // This has probably something to do with the global env_lock() that is being used in the std
             // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
             // std::env::set_var("LISTEN_PID", format!("{}", pid));
 
             // so lets use some unsafe instead, and use the same libc::setenv that the std uses but we dont care about the lock
-            // This is the only thread in this process that is still running so we dont need any lock 
-            
+            // This is the only thread in this process that is still running so we dont need any lock
+
             // Maybe it would be better to have a simple wrapper that we can exec with a few sensible args
             // 1. list filedescriptors to keep open (maybe not event that. FD handling can be done here probably?)
             // 2. at least the number of fds
@@ -305,7 +305,7 @@ fn start_service_with_filedescriptors(
             unsafe fn setenv(key: &str, value: &str) {
                 let k = std::ffi::CString::new(key.as_bytes()).unwrap();
                 let v = std::ffi::CString::new(value.as_bytes()).unwrap();
-            
+
                 libc::setenv(k.as_ptr(), v.as_ptr(), 1);
             }
             unsafe {
@@ -332,8 +332,11 @@ fn start_service_with_filedescriptors(
             for idx in 0..srvc.file_descriptors.len() {
                 let new_fd = file_desc_offset + idx;
                 let old_fd = srvc.file_descriptors[idx];
-                nix::unistd::close(new_fd as i32).unwrap();
-                nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                if new_fd as i32 != old_fd {
+                    //ignore output. newfd might already be closed
+                    let _ = nix::unistd::close(new_fd as i32);
+                    nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                }
             }
 
             let split: Vec<&str> = match &srvc.service_config {
