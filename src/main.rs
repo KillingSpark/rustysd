@@ -114,18 +114,20 @@ fn main() {
 
 use services::InternalId;
 use services::Service;
-use sockets::Socket;
+use unit_parser::Unit;
 fn apply_sockets_to_services(
     mut service_table: HashMap<InternalId, Service>,
-    socket_table: &HashMap<InternalId, Socket>,
+    socket_table: &HashMap<InternalId, Unit>,
 ) -> HashMap<InternalId, Service> {
     for (_, x) in socket_table {
-        if x.name() == "test".to_owned() {
-            for (_, srvc) in &mut service_table {
-                if srvc.name() == x.name() {
-                    trace!("add socket: {} to service: {}", x.name(), srvc.name());
-                    for (_, fd) in &x.sockets{
-                        srvc.file_descriptors.push(fd.unwrap());
+        if let crate::unit_parser::UnitSpecialized::Socket(x) = &x.specialized {
+            if x.name() == "test".to_owned() {
+                for (_, srvc) in &mut service_table {
+                    if srvc.name() == x.name() {
+                        trace!("add socket: {} to service: {}", x.name(), srvc.name());
+                        for (_, fd) in &x.sockets {
+                            srvc.file_descriptors.push(fd.unwrap());
+                        }
                     }
                 }
             }

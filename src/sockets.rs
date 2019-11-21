@@ -19,7 +19,7 @@ pub enum SpecializedSocketConfig {
     UnixSocket(UnixSocketConfig),
 }
 
-use std::os::unix::net::{UnixListener};
+use std::os::unix::net::UnixListener;
 use std::rc::Rc;
 #[derive(Clone)]
 pub struct UnixSocketConfig {
@@ -28,9 +28,7 @@ pub struct UnixSocketConfig {
 }
 
 pub struct Socket {
-    pub id: crate::services::InternalId,
     pub filepath: std::path::PathBuf,
-    pub unit_conf: Option<crate::services::UnitConfig>,
     pub sockets: Vec<(SocketConfig, Option<RawFd>)>,
 }
 
@@ -49,30 +47,32 @@ impl Socket {
     }
 }
 
-use std::os::unix::io::{AsRawFd};
+use std::os::unix::io::AsRawFd;
 pub fn open_all_sockets(
-    sockets: &mut std::collections::HashMap<crate::services::InternalId, Socket>,
+    sockets: &mut std::collections::HashMap<crate::services::InternalId, crate::unit_parser::Unit>,
 ) -> std::io::Result<()> {
     for (_, socket) in sockets {
-        for idx in 0..socket.sockets.len() {
-            let (conf, fd) = &mut socket.sockets[idx];
-            match &mut conf.specialized {
-                SpecializedSocketConfig::UnixSocket(unix_conf) => {
-                    let spath = std::path::Path::new(&unix_conf.path);
-                    // Delete old socket if necessary
-                    if spath.exists() {
-                        std::fs::remove_file(&spath).unwrap();
-                    }
+        if let crate::unit_parser::UnitSpecialized::Socket(socket) = &mut socket.specialized {
+            for idx in 0..socket.sockets.len() {
+                let (conf, fd) = &mut socket.sockets[idx];
+                match &mut conf.specialized {
+                    SpecializedSocketConfig::UnixSocket(unix_conf) => {
+                        let spath = std::path::Path::new(&unix_conf.path);
+                        // Delete old socket if necessary
+                        if spath.exists() {
+                            std::fs::remove_file(&spath).unwrap();
+                        }
 
-                    trace!("opening unix socket: {:?}", &unix_conf.path);
-                    // Bind to socket
-                    let stream = match UnixListener::bind(&spath) {
-                        Err(_) => panic!("failed to bind socket"),
-                        Ok(stream) => stream,
-                    };
-                    *fd = Some(stream.as_raw_fd());
-                    //need to stop the listener to drop which would close the filedescriptor
-                    unix_conf.listener = Some(Rc::new(stream));
+                        trace!("opening unix socket: {:?}", &unix_conf.path);
+                        // Bind to socket
+                        let stream = match UnixListener::bind(&spath) {
+                            Err(_) => panic!("failed to bind socket"),
+                            Ok(stream) => stream,
+                        };
+                        *fd = Some(stream.as_raw_fd());
+                        //need to stop the listener to drop which would close the filedescriptor
+                        unix_conf.listener = Some(Rc::new(stream));
+                    }
                 }
             }
         }

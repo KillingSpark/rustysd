@@ -4,101 +4,150 @@ use crate::services::{
 
 use crate::sockets::{Socket, SocketConfig, SocketKind, SpecializedSocketConfig, UnixSocketConfig};
 
+use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
-fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Socket, String> {
-    let raw = read_to_string(&path).unwrap();
-    let lines: Vec<&str> = raw.split("\n").collect();
+pub enum UnitSpecialized {
+    Socket(Socket),
+    Service(Service),
+}
 
-    let mut socket_configs = Vec::new();
-    let mut unit_config = None;
+pub struct Unit {
+    pub conf: UnitConfig,
+    pub id: InternalId,
+    pub specialized: UnitSpecialized,
+}
 
-    let mut current_section = Vec::new();
-    let mut current_section_name = "";
-    for idx in 0..lines.len() {
-        let line = lines[idx];
-        if line.starts_with("[") {
-            match current_section_name {
-                "" => { /*noting. first section to be found*/ }
-                "[Socket]" => {
-                    socket_configs = match parse_socket_section(&current_section) {
-                        Ok(conf) => conf,
-                        Err(e) => return Err(format!("Error in file: {:?} :: {}", path, e)),
-                    };
-                }
-                "[Unit]" => {
-                    unit_config = Some(parse_unit_section(&current_section));
-                }
+type ParsedSection = HashMap<String, Vec<String>>;
+type ParsedFile = HashMap<String, ParsedSection>;
 
-                _ => panic!("Unknown section name: {}", current_section_name),
-            }
-            current_section_name = line;
-            current_section.clear();
+fn parse_section(lines: &Vec<&str>) -> ParsedSection {
+    let mut entries: HashMap<String, Vec<String>> = HashMap::new();
+    for line in lines {
+        let pos = if let Some(pos) = line.find(|c| c == '=') {
+            pos
         } else {
-            current_section.push(line);
+            continue;
+        };
+        let (name, value) = line.split_at(pos);
+
+        let value = value.trim_start_matches("=");
+        let value = value.trim();
+        let name = name.trim().to_uppercase();
+        let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
+
+        match entries.get_mut(&name) {
+            Some(vec) => vec.append(&mut values),
+            None => {
+                entries.insert(name, values);
+            }
         }
     }
 
-    Ok(Socket {
-        filepath: path.clone(),
-        sockets: socket_configs
-            .iter()
-            .map(|conf| (conf.clone(), None))
-            .collect(),
-        unit_conf: unit_config,
+    entries
+}
+
+fn parse_file(content: &String) -> ParsedFile {
+    let mut sections = HashMap::new();
+    let lines: Vec<&str> = content.split("\n").collect();
+
+    let mut lines_left = &lines[..];
+
+    let mut current_section_name = "".to_string();
+    let mut current_section_lines = Vec::new();
+    while lines_left.len() > 0 {
+        for idx in 0..lines_left.len() {
+            let line = lines_left[idx];
+            println!("{}", line);
+            if current_section_name == "" {
+                current_section_name = line.into();
+                current_section_lines.clear();
+            } else {
+                if line.starts_with("[") || idx == lines_left.len() - 1 {
+                    sections.insert(
+                        current_section_name.clone(),
+                        parse_section(&current_section_lines),
+                    );
+                    current_section_name = line.into();
+                    current_section_lines.clear();
+                    lines_left = &lines_left[idx + 1..];
+                    break;
+                } else {
+                    current_section_lines.push(line.into());
+                }
+            }
+        }
+    }
+
+    sections
+}
+
+fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
+    let raw = read_to_string(&path).unwrap();
+    let parsed_file = parse_file(&raw);
+
+    let mut socket_configs = Vec::new();
+    let mut install_config = None;
+    let mut unit_config = None;
+
+    for (name, section) in parsed_file {
+        match name.as_str() {
+            "[Socket]" => {
+                socket_configs = match parse_socket_section(section) {
+                    Ok(conf) => conf,
+                    Err(e) => return Err(format!("Error in file: {:?} :: {}", path, e)),
+                };
+            }
+            "[Unit]" => {
+                unit_config = Some(parse_unit_section(section));
+            }
+            "[Install]" => {
+                install_config = Some(parse_install_section(section));
+            }
+
+            _ => panic!("Unknown section name: {}", name),
+        }
+    }
+
+    // TODO handle install configs for sockets
+    let _ = install_config;
+
+    Ok(Unit {
+        conf: unit_config.unwrap().clone(),
         id: chosen_id,
+        specialized: UnitSpecialized::Socket(Socket {
+            filepath: path.clone(),
+            sockets: socket_configs
+                .iter()
+                .map(|conf| (conf.clone(), None))
+                .collect(),
+        }),
     })
 }
 
 fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
     let raw = read_to_string(&path).unwrap();
-    let lines: Vec<&str> = raw.split("\n").collect();
+    let parsed_file = parse_file(&raw);
 
     let mut service_config = None;
     let mut install_config = None;
     let mut unit_config = None;
 
-    let mut current_section = Vec::new();
-    let mut current_section_name = "";
-    for idx in 0..lines.len() {
-        let line = lines[idx];
-        if line.starts_with("[") {
-            match current_section_name {
-                "" => { /*noting. first section to be found*/ }
-                "[Service]" => {
-                    service_config = Some(parse_service_section(&current_section));
-                }
-                "[Unit]" => {
-                    unit_config = Some(parse_unit_section(&current_section));
-                }
-                "[Install]" => {
-                    install_config = Some(parse_install_section(&current_section));
-                }
-
-                _ => panic!("Unknown section name: {}", current_section_name),
+    for (name, section) in parsed_file {
+        match name.as_str() {
+            "[Service]" => {
+                service_config = Some(parse_service_section(section));
             }
-            current_section_name = line;
-            current_section.clear();
-        } else {
-            current_section.push(line);
-        }
-    }
+            "[Unit]" => {
+                unit_config = Some(parse_unit_section(section));
+            }
+            "[Install]" => {
+                install_config = Some(parse_install_section(section));
+            }
 
-    //parse last section
-    match current_section_name {
-        "" => { /*noting. first section to be found*/ }
-        "[Service]" => {
-            service_config = Some(parse_service_section(&current_section));
+            _ => panic!("Unknown section name: {}", name),
         }
-        "[Unit]" => {
-            unit_config = Some(parse_unit_section(&current_section));
-        }
-        "[Install]" => {
-            install_config = Some(parse_install_section(&current_section));
-        }
-
-        _ => panic!("Unknown section name: {}", current_section_name),
     }
 
     Service {
@@ -121,35 +170,24 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
     }
 }
 
-fn parse_socket_section(lines: &Vec<&str>) -> Result<Vec<SocketConfig>, String> {
+fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, String> {
     let mut fdname: Option<String> = None;
     let mut socket_kinds = Vec::new();
 
-    for line in lines {
-        let pos = if let Some(pos) = line.find(|c| c == '=') {
-            pos
-        } else {
-            continue;
-        };
-        let (name, value) = line.split_at(pos);
-
-        let value = value.trim_start_matches("=");
-        let value = value.trim();
-        let name = name.trim().to_uppercase();
-        let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
-
+    // TODO check that there is indeed exactly one value per name
+    for (name, mut values) in section {
         match name.as_str() {
             "FILEDESCRIPTORNAME" => {
-                fdname = Some(value.into());
+                fdname = Some(values.remove(0));
             }
             "LISTENSTREAM" => {
-                socket_kinds.push(SocketKind::Stream(values[0].clone()));
+                socket_kinds.push(SocketKind::Stream(values.remove(0)));
             }
             "LISTENDATAGRAM" => {
-                socket_kinds.push(SocketKind::Datagram(values[0].clone()));
+                socket_kinds.push(SocketKind::Datagram(values.remove(0)));
             }
             "LISTENSEQUENTIALPACKET" => {
-                socket_kinds.push(SocketKind::Sequential(values[0].clone()));
+                socket_kinds.push(SocketKind::Sequential(values.remove(0)));
             }
             _ => panic!("Unknown parameter name: {}", name),
         }
@@ -174,7 +212,7 @@ fn parse_socket_section(lines: &Vec<&str>) -> Result<Vec<SocketConfig>, String> 
                 }
             }
             SocketKind::Stream(addr) => {
-                if addr.starts_with("/")  || addr.starts_with("./") {
+                if addr.starts_with("/") || addr.starts_with("./") {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
                         path: addr.clone().into(),
                         listener: None,
@@ -188,7 +226,7 @@ fn parse_socket_section(lines: &Vec<&str>) -> Result<Vec<SocketConfig>, String> 
                 }
             }
             SocketKind::Datagram(addr) => {
-                if addr.starts_with("/")  || addr.starts_with("./") {
+                if addr.starts_with("/") || addr.starts_with("./") {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
                         path: addr.clone().into(),
                         listener: None,
@@ -216,125 +254,72 @@ fn parse_socket_section(lines: &Vec<&str>) -> Result<Vec<SocketConfig>, String> 
     return Ok(socket_configs);
 }
 
-fn parse_unit_section(lines: &Vec<&str>) -> UnitConfig {
-    let mut wants = Vec::new();
-    let mut requires = Vec::new();
-    let mut after = Vec::new();
-    let mut before = Vec::new();
-
-    for line in lines {
-        let pos = if let Some(pos) = line.find(|c| c == '=') {
-            pos
-        } else {
-            continue;
-        };
-        let (name, value) = line.split_at(pos);
-
-        let value = value.trim_start_matches("=");
-        let value = value.trim();
-        let name = name.trim().to_uppercase();
-        let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
-
-        match name.as_str() {
-            "AFTER" => {
-                after.append(&mut values);
-            }
-            "BEFORE" => {
-                before.append(&mut values);
-            }
-            "WANTS" => {
-                wants.append(&mut values);
-            }
-            "REQUIRES" => {
-                requires.append(&mut values);
-            }
-            "DESCRIPTION" => {
-                //ignore
-            }
-            "PARTOF" => {
-                //ignore
-            }
-            _ => panic!("Unknown parameter name: {}", name),
-        }
-    }
+fn parse_unit_section(mut section: ParsedSection) -> UnitConfig {
+    let wants = section.remove("WANTS");
+    let requires = section.remove("REQUIRES");
+    let after = section.remove("AFTER");
+    let before = section.remove("BEFORE");
 
     UnitConfig {
-        wants: wants,
-        requires: requires,
-        after: after,
-        before: before,
+        wants: wants.unwrap_or(Vec::new()),
+        requires: requires.unwrap_or(Vec::new()),
+        after: after.unwrap_or(Vec::new()),
+        before: before.unwrap_or(Vec::new()),
     }
 }
 
-fn parse_install_section(lines: &Vec<&str>) -> InstallConfig {
-    let mut wantedby = Vec::new();
-    let mut requiredby = Vec::new();
-
-    for line in lines {
-        let pos = if let Some(pos) = line.find(|c| c == '=') {
-            pos
-        } else {
-            continue;
-        };
-        let (name, value) = line.split_at(pos);
-
-        let value = value.trim_start_matches("=");
-        let value = value.trim();
-        let name = name.trim().to_uppercase();
-        let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
-
-        match name.as_str() {
-            "WANTEDBY" => {
-                wantedby.append(&mut values);
-            }
-            "REQUIREDBY" => {
-                requiredby.append(&mut values);
-            }
-            _ => panic!("Unknown parameter name"),
-        }
-    }
+fn parse_install_section(mut section: ParsedSection) -> InstallConfig {
+    let wantedby = section.remove("WANTEDBY");
+    let requiredby = section.remove("REQUIREDBY");
 
     InstallConfig {
-        wanted_by: wantedby,
-        required_by: requiredby,
+        wanted_by: wantedby.unwrap_or(Vec::new()),
+        required_by: requiredby.unwrap_or(Vec::new()),
     }
 }
 
-fn parse_service_section(lines: &Vec<&str>) -> ServiceConfig {
-    let mut exec = None;
-    let mut stop = None;
-    let mut keep_alive = None;
+fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
+    let exec = section.remove("EXEC");
+    let stop = section.remove("STOP");
+    let keep_alive = section.remove("KEEP_ALIVE");
 
-    for line in lines {
-        let pos = if let Some(pos) = line.find(|c| c == '=') {
-            pos
-        } else {
-            continue;
-        };
-        let (name, value) = line.split_at(pos);
-
-        let value = value.trim_start_matches("=");
-        let value = value.trim();
-        let name = name.trim().to_uppercase();
-
-        match name.as_str() {
-            "EXEC" => {
-                exec = Some(value.to_owned());
+    let exec = match exec {
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                vec.remove(0)
+            } else {
+                panic!("Exec had to many entries: {:?}", vec);
             }
-            "STOP" => {
-                stop = Some(value.to_owned());
-            }
-            "KEEP_ALIVE" => {
-                keep_alive = Some(value == "true");
-            }
-            _ => panic!("Unknown parameter name"),
         }
-    }
+        None => "".to_string(),
+    };
+
+    let stop = match stop {
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                vec.remove(0)
+            } else {
+                panic!("Stop had to many entries: {:?}", vec);
+            }
+        }
+        None => "".to_string(),
+    };
+
+    let keep_alive = match keep_alive {
+        Some(vec) => {
+            if vec.len() == 1 {
+                vec[0] == "true"
+            } else {
+                panic!("Keepalive had to many entries: {:?}", vec);
+            }
+        }
+        None => false,
+    };
 
     ServiceConfig {
-        keep_alive: keep_alive.unwrap_or(false),
-        exec: exec.unwrap_or("".to_owned()),
-        stop: stop.unwrap_or("".to_owned()),
+        keep_alive: keep_alive,
+        exec: exec,
+        stop: stop,
     }
 }
 
@@ -362,7 +347,7 @@ pub fn parse_all_services(
 }
 
 pub fn parse_all_sockets(
-    sockets: &mut std::collections::HashMap<InternalId, Socket>,
+    sockets: &mut std::collections::HashMap<InternalId, Unit>,
     path: &PathBuf,
     last_id: &mut InternalId,
 ) {
