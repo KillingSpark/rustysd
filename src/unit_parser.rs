@@ -1,52 +1,11 @@
-use crate::services::{
-    InstallConfig, InternalId, Service, ServiceConfig, ServiceStatus, UnitConfig,
-};
+use crate::units::*;
 
 use crate::sockets::{Socket, SocketConfig, SocketKind, SpecializedSocketConfig, UnixSocketConfig};
+use crate::services::{Service, ServiceStatus};
 
 use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::path::PathBuf;
-
-#[derive(Clone)]
-pub enum UnitSpecialized {
-    Socket(Socket),
-    Service(Service),
-}
-
-#[derive(Default, Clone)]
-pub struct Install {
-    pub wants: Vec<InternalId>,
-    pub requires: Vec<InternalId>,
-
-    pub wanted_by: Vec<InternalId>,
-    pub required_by: Vec<InternalId>,
-
-    pub before: Vec<InternalId>,
-    pub after: Vec<InternalId>,
-
-    pub install_config: Option<InstallConfig>,
-}
-
-#[derive(Clone)]
-pub struct Unit {
-    pub id: InternalId,
-    pub conf: UnitConfig,
-    pub specialized: UnitSpecialized,
-
-    pub install: Install,
-}
-
-impl Unit {
-    pub fn dedup_dependencies(&mut self) {
-        self.install.wants.dedup();
-        self.install.requires.dedup();
-        self.install.wanted_by.dedup();
-        self.install.required_by.dedup();
-        self.install.before.dedup();
-        self.install.after.dedup();
-    }
-}
 
 type ParsedSection = HashMap<String, Vec<String>>;
 type ParsedFile = HashMap<String, ParsedSection>;

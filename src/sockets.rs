@@ -1,4 +1,9 @@
 use std::os::unix::io::RawFd;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::net::UnixListener;
+use std::sync::Arc;
+
+use crate::units::*;
 
 #[derive(Clone)]
 pub struct SocketConfig {
@@ -19,8 +24,6 @@ pub enum SpecializedSocketConfig {
     UnixSocket(UnixSocketConfig),
 }
 
-use std::os::unix::net::UnixListener;
-use std::sync::Arc;
 #[derive(Clone)]
 pub struct UnixSocketConfig {
     pub path: std::path::PathBuf,
@@ -32,12 +35,11 @@ pub struct Socket {
     pub sockets: Vec<(SocketConfig, Option<RawFd>)>,
 }
 
-use std::os::unix::io::AsRawFd;
 pub fn open_all_sockets(
-    sockets: &mut std::collections::HashMap<crate::services::InternalId, crate::unit_parser::Unit>,
+    sockets: &mut std::collections::HashMap<InternalId, Unit>,
 ) -> std::io::Result<()> {
     for (_, socket) in sockets {
-        if let crate::unit_parser::UnitSpecialized::Socket(socket) = &mut socket.specialized {
+        if let UnitSpecialized::Socket(socket) = &mut socket.specialized {
             for idx in 0..socket.sockets.len() {
                 let (conf, fd) = &mut socket.sockets[idx];
                 match &mut conf.specialized {

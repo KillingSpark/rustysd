@@ -1,6 +1,8 @@
 mod services;
 mod sockets;
 mod unit_parser;
+mod units;
+use units::*;
 
 extern crate signal_hook;
 use signal_hook::iterator::Signals;
@@ -70,7 +72,7 @@ fn main() {
     );
     sockets::open_all_sockets(&mut socket_table).unwrap();
 
-    let _name_to_id = services::fill_dependencies(&mut service_table);
+    let _name_to_id = units::fill_dependencies(&mut service_table);
     for (_, srvc) in &mut service_table {
         srvc.dedup_dependencies();
     }
@@ -112,18 +114,16 @@ fn main() {
     }
 }
 
-use services::InternalId;
-use unit_parser::Unit;
 fn apply_sockets_to_services(
     mut service_table: HashMap<InternalId, Unit>,
     socket_table: &HashMap<InternalId, Unit>,
 ) -> HashMap<InternalId, Unit> {
     for (_, sock_unit) in socket_table {
-        if let crate::unit_parser::UnitSpecialized::Socket(sock) = &sock_unit.specialized {
+        if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
             trace!("Searching service for socket: {}", sock_unit.conf.name());
             for (_, srvc_unit) in &mut service_table {
                 let srvc = &mut srvc_unit.specialized;
-                if let crate::unit_parser::UnitSpecialized::Service(srvc) = srvc {
+                if let UnitSpecialized::Service(srvc) = srvc {
                     if srvc_unit.conf.name() == sock_unit.conf.name() {
                         trace!(
                             "add socket: {} to service: {}",
