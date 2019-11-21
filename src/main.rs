@@ -113,19 +113,24 @@ fn main() {
 }
 
 use services::InternalId;
-use services::Service;
 use unit_parser::Unit;
 fn apply_sockets_to_services(
-    mut service_table: HashMap<InternalId, Service>,
+    mut service_table: HashMap<InternalId, Unit>,
     socket_table: &HashMap<InternalId, Unit>,
-) -> HashMap<InternalId, Service> {
-    for (_, x) in socket_table {
-        if let crate::unit_parser::UnitSpecialized::Socket(x) = &x.specialized {
-            if x.name() == "test".to_owned() {
-                for (_, srvc) in &mut service_table {
-                    if srvc.name() == x.name() {
-                        trace!("add socket: {} to service: {}", x.name(), srvc.name());
-                        for (_, fd) in &x.sockets {
+) -> HashMap<InternalId, Unit> {
+    for (_, sock_unit) in socket_table {
+        if let crate::unit_parser::UnitSpecialized::Socket(sock) = &sock_unit.specialized {
+            trace!("Searching service for socket: {}", sock_unit.conf.name());
+            for (_, srvc_unit) in &mut service_table {
+                let srvc = &mut srvc_unit.specialized;
+                if let crate::unit_parser::UnitSpecialized::Service(srvc) = srvc {
+                    if srvc_unit.conf.name() == sock_unit.conf.name() {
+                        trace!(
+                            "add socket: {} to service: {}",
+                            sock_unit.conf.name(),
+                            srvc_unit.conf.name()
+                        );
+                        for (_, fd) in &sock.sockets {
                             srvc.file_descriptors.push(fd.unwrap());
                         }
                     }

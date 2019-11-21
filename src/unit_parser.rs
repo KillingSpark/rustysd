@@ -8,15 +8,44 @@ use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
+#[derive(Clone)]
 pub enum UnitSpecialized {
     Socket(Socket),
     Service(Service),
 }
 
+#[derive(Default, Clone)]
+pub struct Install {
+    pub wants: Vec<InternalId>,
+    pub requires: Vec<InternalId>,
+
+    pub wanted_by: Vec<InternalId>,
+    pub required_by: Vec<InternalId>,
+
+    pub before: Vec<InternalId>,
+    pub after: Vec<InternalId>,
+
+    pub install_config: Option<InstallConfig>,
+}
+
+#[derive(Clone)]
 pub struct Unit {
-    pub conf: UnitConfig,
     pub id: InternalId,
+    pub conf: UnitConfig,
     pub specialized: UnitSpecialized,
+
+    pub install: Install,
+}
+
+impl Unit {
+    pub fn dedup_dependencies(&mut self) {
+        self.install.wants.dedup();
+        self.install.requires.dedup();
+        self.install.wanted_by.dedup();
+        self.install.required_by.dedup();
+        self.install.before.dedup();
+        self.install.after.dedup();
+    }
 }
 
 type ParsedSection = HashMap<String, Vec<String>>;
@@ -59,7 +88,6 @@ fn parse_file(content: &String) -> ParsedFile {
     while lines_left.len() > 0 {
         for idx in 0..lines_left.len() {
             let line = lines_left[idx];
-            println!("{}", line);
             if current_section_name == "" {
                 current_section_name = line.into();
                 current_section_lines.clear();
@@ -100,7 +128,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
                 };
             }
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section));
+                unit_config = Some(parse_unit_section(section, path));
             }
             "[Install]" => {
                 install_config = Some(parse_install_section(section));
@@ -116,8 +144,8 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
     Ok(Unit {
         conf: unit_config.unwrap().clone(),
         id: chosen_id,
+        install: Install::default(),
         specialized: UnitSpecialized::Socket(Socket {
-            filepath: path.clone(),
             sockets: socket_configs
                 .iter()
                 .map(|conf| (conf.clone(), None))
@@ -126,7 +154,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
     })
 }
 
-fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
+fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Unit {
     let raw = read_to_string(&path).unwrap();
     let parsed_file = parse_file(&raw);
 
@@ -140,7 +168,7 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
                 service_config = Some(parse_service_section(section));
             }
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section));
+                unit_config = Some(parse_unit_section(section, path));
             }
             "[Install]" => {
                 install_config = Some(parse_install_section(section));
@@ -150,23 +178,33 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Service {
         }
     }
 
-    Service {
+    Unit {
         id: chosen_id,
-        pid: None,
-        filepath: path.clone(),
-        status: ServiceStatus::NeverRan,
+        conf: unit_config.unwrap_or(UnitConfig {
+            filepath: path.clone(),
 
-        wants: Vec::new(),
-        wanted_by: Vec::new(),
-        requires: Vec::new(),
-        required_by: Vec::new(),
-        before: Vec::new(),
-        after: Vec::new(),
-        service_config: service_config,
-        unit_config: unit_config,
-        install_config: install_config,
+            wants: Vec::new(),
+            requires: Vec::new(),
+            before: Vec::new(),
+            after: Vec::new(),
+        }),
+        install: Install {
+            wants: Vec::new(),
+            wanted_by: Vec::new(),
+            requires: Vec::new(),
+            required_by: Vec::new(),
+            before: Vec::new(),
+            after: Vec::new(),
+            install_config: install_config,
+        },
+        specialized: UnitSpecialized::Service(Service {
+            pid: None,
+            status: ServiceStatus::NeverRan,
 
-        file_descriptors: Vec::new(),
+            service_config: service_config,
+
+            file_descriptors: Vec::new(),
+        }),
     }
 }
 
@@ -254,13 +292,14 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
     return Ok(socket_configs);
 }
 
-fn parse_unit_section(mut section: ParsedSection) -> UnitConfig {
+fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig {
     let wants = section.remove("WANTS");
     let requires = section.remove("REQUIRES");
     let after = section.remove("AFTER");
     let before = section.remove("BEFORE");
 
     UnitConfig {
+        filepath: path.clone(),
         wants: wants.unwrap_or(Vec::new()),
         requires: requires.unwrap_or(Vec::new()),
         after: after.unwrap_or(Vec::new()),
@@ -324,7 +363,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
 }
 
 pub fn parse_all_services(
-    services: &mut std::collections::HashMap<InternalId, Service>,
+    services: &mut std::collections::HashMap<InternalId, Unit>,
     path: &PathBuf,
     last_id: &mut InternalId,
 ) {

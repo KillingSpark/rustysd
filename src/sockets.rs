@@ -20,31 +20,16 @@ pub enum SpecializedSocketConfig {
 }
 
 use std::os::unix::net::UnixListener;
-use std::rc::Rc;
+use std::sync::Arc;
 #[derive(Clone)]
 pub struct UnixSocketConfig {
     pub path: std::path::PathBuf,
-    pub listener: Option<Rc<UnixListener>>,
+    pub listener: Option<Arc<UnixListener>>,
 }
 
+#[derive(Clone)]
 pub struct Socket {
-    pub filepath: std::path::PathBuf,
     pub sockets: Vec<(SocketConfig, Option<RawFd>)>,
-}
-
-impl Socket {
-    pub fn name(&self) -> String {
-        let name = self
-            .filepath
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_owned();
-        let name = name.trim_end_matches(".socket").to_owned();
-
-        name
-    }
 }
 
 use std::os::unix::io::AsRawFd;
@@ -71,7 +56,7 @@ pub fn open_all_sockets(
                         };
                         *fd = Some(stream.as_raw_fd());
                         //need to stop the listener to drop which would close the filedescriptor
-                        unix_conf.listener = Some(Rc::new(stream));
+                        unix_conf.listener = Some(Arc::new(stream));
                     }
                 }
             }
