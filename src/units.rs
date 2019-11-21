@@ -1,4 +1,4 @@
-use crate::sockets::Socket;
+use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use crate::services::Service;
 
 use std::path::PathBuf;
@@ -71,6 +71,14 @@ impl UnitConfig {
 
         name
     }
+}
+
+
+#[derive(Clone)]
+pub struct SocketConfig {
+    pub name: String,
+    pub kind: SocketKind,
+    pub specialized: SpecializedSocketConfig,
 }
 
 #[derive(Clone)]

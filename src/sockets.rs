@@ -6,13 +6,6 @@ use std::sync::Arc;
 use crate::units::*;
 
 #[derive(Clone)]
-pub struct SocketConfig {
-    pub name: String,
-    pub kind: SocketKind,
-    pub specialized: SpecializedSocketConfig,
-}
-
-#[derive(Clone)]
 pub enum SocketKind {
     Stream(String),
     Sequential(String),

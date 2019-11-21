@@ -1,6 +1,6 @@
 use crate::units::*;
 
-use crate::sockets::{Socket, SocketConfig, SocketKind, SpecializedSocketConfig, UnixSocketConfig};
+use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig, UnixSocketConfig};
 use crate::services::{Service, ServiceStatus};
 
 use std::collections::HashMap;
