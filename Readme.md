@@ -3,8 +3,8 @@ A minimal drop-in for (a subset of) the systemd init system in rust. For now tha
 and what would be needed to get a somewhat working system. It is very much a proof of concept. For the love of god do not use this
 in anything that is important.
 
-It does look somewhat promising, the really ugly parts are "working". There is a lot of cleanup to be done especially in the parsing of the
-unit files.
+It does look somewhat promising, the really ugly parts are "working". There is a lot of cleanup to be done. There is a whole lot of unwrap() calling
+where error handling should be done properly.
 
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented
