@@ -130,8 +130,13 @@ fn apply_sockets_to_services(
                             sock_unit.conf.name(),
                             srvc_unit.conf.name()
                         );
-                        for (_, fd) in &sock.sockets {
-                            srvc.file_descriptors.push(fd.unwrap());
+                        for sock in &sock.sockets {
+                            let fd = match &sock.fd {
+                                Some(fd) => fd,
+                                None => unreachable!(),
+                            };
+                            let fd = fd.as_raw_fd();
+                            srvc.file_descriptors.push(fd);
                         }
                     }
                 }

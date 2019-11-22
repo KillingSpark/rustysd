@@ -105,10 +105,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
         id: chosen_id,
         install: Install::default(),
         specialized: UnitSpecialized::Socket(Socket {
-            sockets: socket_configs
-                .iter()
-                .map(|conf| (conf.clone(), None))
-                .collect(),
+            sockets: socket_configs,
         }),
     })
 }
