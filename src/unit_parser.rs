@@ -198,7 +198,6 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 if addr.starts_with("/") || addr.starts_with("./") {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
                         path: addr.clone().into(),
-                        listener: None,
                     })
                 } else {
                     return Err(format!(
@@ -212,7 +211,6 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 if addr.starts_with("/") || addr.starts_with("./") {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
                         path: addr.clone().into(),
-                        listener: None,
                     })
                 } else {
                     return Err(format!(
@@ -226,7 +224,6 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 if addr.starts_with("/") || addr.starts_with("./") {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
                         path: addr.clone().into(),
-                        listener: None,
                     })
                 } else {
                     return Err(format!(
@@ -245,6 +242,7 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
             },
             kind: kind,
             specialized: specialized,
+            fd: None,
         });
     }
 

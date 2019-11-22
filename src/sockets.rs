@@ -20,7 +20,6 @@ pub enum SpecializedSocketConfig {
 #[derive(Clone)]
 pub struct UnixSocketConfig {
     pub path: std::path::PathBuf,
-    pub listener: Option<Arc<UnixListener>>,
 }
 
 #[derive(Clone)]
@@ -51,7 +50,7 @@ pub fn open_all_sockets(
                         };
                         *fd = Some(stream.as_raw_fd());
                         //need to stop the listener to drop which would close the filedescriptor
-                        unix_conf.listener = Some(Arc::new(stream));
+                        conf.fd = Some(Arc::new(Box::new(stream)));
                     }
                 }
             }

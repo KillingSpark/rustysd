@@ -74,12 +74,18 @@ impl UnitConfig {
 }
 
 
+use std::os::unix::io::AsRawFd;
+use std::sync::Arc;
 #[derive(Clone)]
 pub struct SocketConfig {
     pub name: String,
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
+
+    pub fd: Option<Arc<Box<AsRawFd>>>,
 }
+
+unsafe impl Send for SocketConfig{}
 
 #[derive(Clone)]
 pub struct InstallConfig {
