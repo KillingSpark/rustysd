@@ -1,7 +1,9 @@
 use crate::units::*;
 
-use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig, UnixSocketConfig};
 use crate::services::{Service, ServiceStatus};
+use crate::sockets::{
+    Socket, SocketKind, SpecializedSocketConfig, TcpSocketConfig, UnixSocketConfig,
+};
 
 use std::collections::HashMap;
 use std::fs::read_to_string;
@@ -164,6 +166,24 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Unit {
     }
 }
 
+fn parse_unix_addr(addr: &str) -> Result<String, ()> {
+    if addr.starts_with("/") || addr.starts_with("./") {
+        Ok(addr.to_owned())
+    } else {
+        Err(())
+    }
+}
+
+fn parse_ipv4_addr(addr: &str) -> Result<std::net::SocketAddrV4, std::net::AddrParseError> {
+    let sock: Result<std::net::SocketAddrV4, std::net::AddrParseError> = addr.parse();
+    sock
+}
+
+fn parse_ipv6_addr(addr: &str) -> Result<std::net::SocketAddrV6, std::net::AddrParseError> {
+    let sock: Result<std::net::SocketAddrV6, std::net::AddrParseError> = addr.parse();
+    sock
+}
+
 fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, String> {
     let mut fdname: Option<String> = None;
     let mut socket_kinds = Vec::new();
@@ -175,7 +195,9 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 fdname = Some(values.remove(0));
             }
             "LISTENSTREAM" => {
-                socket_kinds.push(SocketKind::Stream(values.remove(0)));
+                for i in 0..values.len() {
+                    socket_kinds.push(SocketKind::Stream(values.remove(0)));
+                }
             }
             "LISTENDATAGRAM" => {
                 socket_kinds.push(SocketKind::Datagram(values.remove(0)));
@@ -205,16 +227,26 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 }
             }
             SocketKind::Stream(addr) => {
-                if addr.starts_with("/") || addr.starts_with("./") {
-                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
-                        path: addr.clone().into(),
-                    })
+                if let Ok(path) = parse_unix_addr(addr) {
+                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { path: path.into() })
                 } else {
-                    return Err(format!(
-                        "No specialized config for socket found for socket addr: {}",
-                        addr
-                    )
-                    .into());
+                    if let Ok(addr) = parse_ipv4_addr(addr) {
+                        SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
+                            addr: std::net::SocketAddr::V4(addr),
+                        })
+                    } else {
+                        if let Ok(addr) = parse_ipv6_addr(addr) {
+                            SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
+                                addr: std::net::SocketAddr::V6(addr),
+                            })
+                        } else {
+                            return Err(format!(
+                                "No specialized config for socket found for socket addr: {}",
+                                addr
+                            )
+                            .into());
+                        }
+                    }
                 }
             }
             SocketKind::Datagram(addr) => {
