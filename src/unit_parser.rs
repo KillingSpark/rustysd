@@ -2,7 +2,7 @@ use crate::units::*;
 
 use crate::services::{Service, ServiceStatus};
 use crate::sockets::{
-    Socket, SocketKind, SpecializedSocketConfig, TcpSocketConfig, UnixSocketConfig,
+    Socket, SocketKind, SpecializedSocketConfig, TcpSocketConfig, UnixSocketConfig, UdpSocketConfig
 };
 
 use std::collections::HashMap;
@@ -255,11 +255,23 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                         path: addr.clone().into(),
                     })
                 } else {
-                    return Err(format!(
-                        "No specialized config for socket found for socket addr: {}",
-                        addr
-                    )
-                    .into());
+                    if let Ok(addr) = parse_ipv4_addr(addr) {
+                        SpecializedSocketConfig::UdpSocket(UdpSocketConfig {
+                            addr: std::net::SocketAddr::V4(addr),
+                        })
+                    } else {
+                        if let Ok(addr) = parse_ipv6_addr(addr) {
+                            SpecializedSocketConfig::UdpSocket(UdpSocketConfig {
+                                addr: std::net::SocketAddr::V6(addr),
+                            })
+                        } else {
+                            return Err(format!(
+                                "No specialized config for socket found for socket addr: {}",
+                                addr
+                            )
+                            .into());
+                        }
+                    }
                 }
             }
         };

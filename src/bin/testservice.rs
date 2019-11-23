@@ -7,6 +7,7 @@ extern crate nix;
 
 // send stuff here with: echo "REEE" | socat - UNIX-CONNECT:./servicelog
 // or with: echo "REEE" | socat - TCP-CONNECT:127.0.0.1:8080
+// or with: echo "REEE" | socat - UDP-CONNECT:127.0.0.1:8081
 
 fn handle_unix_client(mut stream: UnixStream) {
     println!("Got new unix stream! Now printing stuff from the stream:");
@@ -17,6 +18,23 @@ fn handle_unix_client(mut stream: UnixStream) {
             Err(e) => println!("\n Got error from stream: {}", e),
         }
     }
+}
+
+use std::net::UdpSocket;
+fn handle_upd() {
+    std::thread::spawn(move || {
+        let stream: UdpSocket = unsafe { UdpSocket::from_raw_fd(5) };
+        let mut data = [0u8; 512];
+        loop {
+            match stream.recv(&mut data[..]) {
+                Ok(bytes) => {
+                    print!("Got new bytes on udp socket! Now printing stuff from the stream: ");
+                    print!("{}", String::from_utf8(data[0..bytes].to_vec()).unwrap())
+                    },
+                Err(e) => println!("\n Got error from stream: {}", e),
+            }
+        }
+    });
 }
 
 fn unix_accept() {
@@ -91,5 +109,6 @@ fn main() {
     assert!(num_fds >= 1);
 
     unix_accept();
+    handle_upd();
     tcp_accept().join().unwrap();
 }

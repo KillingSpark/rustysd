@@ -5,6 +5,7 @@ PartOf=test.service
 [Socket]
 ListenStream= ./servicelog
 ListenStream= 127.0.0.1:8080
+ListenDatagram= 127.0.0.1:8081
 
 [Install]
 WantedBy=sockets.target

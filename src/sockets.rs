@@ -2,6 +2,7 @@ use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixListener;
 use std::sync::Arc;
 use std::net::TcpListener;
+use std::net::UdpSocket;
 
 use crate::units::*;
 
@@ -16,6 +17,7 @@ pub enum SocketKind {
 pub enum SpecializedSocketConfig {
     UnixSocket(UnixSocketConfig),
     TcpSocket(TcpSocketConfig),
+    UdpSocket(UdpSocketConfig),
 }
 
 impl SpecializedSocketConfig {
@@ -23,6 +25,7 @@ impl SpecializedSocketConfig {
         match self {
             SpecializedSocketConfig::UnixSocket(conf) => conf.open(),
             SpecializedSocketConfig::TcpSocket(conf) => conf.open(),
+            SpecializedSocketConfig::UdpSocket(conf) => conf.open(),
         }
     }
 }
@@ -60,6 +63,20 @@ impl TcpSocketConfig {
     fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
         trace!("opening tcp socket: {:?}", self.addr);
         let listener = TcpListener::bind(self.addr).unwrap();
+        //need to stop the listener to drop which would close the filedescriptor
+        Ok(Arc::new(Box::new(listener)))
+    }
+}
+
+#[derive(Clone)]
+pub struct UdpSocketConfig {
+    pub addr: std::net::SocketAddr,
+}
+
+impl UdpSocketConfig {
+    fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
+        trace!("opening tcp socket: {:?}", self.addr);
+        let listener = UdpSocket::bind(self.addr).unwrap();
         //need to stop the listener to drop which would close the filedescriptor
         Ok(Arc::new(Box::new(listener)))
     }
