@@ -2,7 +2,7 @@ use crate::units::*;
 
 use crate::services::{Service, ServiceStatus};
 use crate::sockets::{
-    Socket, SocketKind, SpecializedSocketConfig, TcpSocketConfig, UnixSocketConfig, UdpSocketConfig
+    Socket, SocketKind, SpecializedSocketConfig, TcpSocketConfig, UdpSocketConfig, UnixSocketConfig,
 };
 
 use std::collections::HashMap;
@@ -195,15 +195,19 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 fdname = Some(values.remove(0));
             }
             "LISTENSTREAM" => {
-                for i in 0..values.len() {
+                for _ in 0..values.len() {
                     socket_kinds.push(SocketKind::Stream(values.remove(0)));
                 }
             }
             "LISTENDATAGRAM" => {
-                socket_kinds.push(SocketKind::Datagram(values.remove(0)));
+                for _ in 0..values.len() {
+                    socket_kinds.push(SocketKind::Datagram(values.remove(0)));
+                }
             }
             "LISTENSEQUENTIALPACKET" => {
-                socket_kinds.push(SocketKind::Sequential(values.remove(0)));
+                for _ in 0..values.len() {
+                    socket_kinds.push(SocketKind::Sequential(values.remove(0)));
+                }
             }
             _ => panic!("Unknown parameter name: {}", name),
         }
@@ -214,10 +218,8 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
     for kind in socket_kinds {
         let specialized: SpecializedSocketConfig = match &kind {
             SocketKind::Sequential(addr) => {
-                if addr.starts_with("/") || addr.starts_with("./") {
-                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
-                        path: addr.clone().into(),
-                    })
+                if let Ok(_) = parse_unix_addr(addr) {
+                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
                 } else {
                     return Err(format!(
                         "No specialized config for socket found for socket addr: {}",
@@ -227,8 +229,8 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 }
             }
             SocketKind::Stream(addr) => {
-                if let Ok(path) = parse_unix_addr(addr) {
-                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { path: path.into() })
+                if let Ok(_) = parse_unix_addr(addr) {
+                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
                 } else {
                     if let Ok(addr) = parse_ipv4_addr(addr) {
                         SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
@@ -250,10 +252,8 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
                 }
             }
             SocketKind::Datagram(addr) => {
-                if addr.starts_with("/") || addr.starts_with("./") {
-                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig {
-                        path: addr.clone().into(),
-                    })
+                if let Ok(_) = parse_unix_addr(addr) {
+                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
                 } else {
                     if let Ok(addr) = parse_ipv4_addr(addr) {
                         SpecializedSocketConfig::UdpSocket(UdpSocketConfig {

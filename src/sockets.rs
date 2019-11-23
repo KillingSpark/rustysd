@@ -1,8 +1,8 @@
-use std::os::unix::io::AsRawFd;
-use std::os::unix::net::UnixListener;
-use std::sync::Arc;
 use std::net::TcpListener;
 use std::net::UdpSocket;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::net::{UnixDatagram, UnixListener};
+use std::sync::Arc;
 
 use crate::units::*;
 
@@ -32,25 +32,48 @@ impl SpecializedSocketConfig {
 
 #[derive(Clone)]
 pub struct UnixSocketConfig {
-    pub path: std::path::PathBuf,
+    pub kind: SocketKind,
 }
 
 impl UnixSocketConfig {
     fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
-        let spath = std::path::Path::new(&self.path);
-        // Delete old socket if necessary
-        if spath.exists() {
-            std::fs::remove_file(&spath).unwrap();
-        }
+        match &self.kind {
+            SocketKind::Stream(path) => {
+                let spath = std::path::Path::new(&path);
+                // Delete old socket if necessary
+                if spath.exists() {
+                    std::fs::remove_file(&spath).unwrap();
+                }
 
-        trace!("opening unix socket: {:?}", self.path);
-        // Bind to socket
-        let stream = match UnixListener::bind(&spath) {
-            Err(_) => panic!("failed to bind socket"),
-            Ok(stream) => stream,
-        };
-        //need to stop the listener to drop which would close the filedescriptor
-        Ok(Arc::new(Box::new(stream)))
+                trace!("opening streaming unix socket: {:?}", path);
+                // Bind to socket
+                let stream = match UnixListener::bind(&spath) {
+                    Err(_) => panic!("failed to bind socket"),
+                    Ok(stream) => stream,
+                };
+                //need to stop the listener to drop which would close the filedescriptor
+                Ok(Arc::new(Box::new(stream)))
+            }
+            SocketKind::Datagram(path) => {
+                let spath = std::path::Path::new(&path);
+                // Delete old socket if necessary
+                if spath.exists() {
+                    std::fs::remove_file(&spath).unwrap();
+                }
+
+                trace!("opening datagram unix socket: {:?}", path);
+                // Bind to socket
+                let stream = match UnixDatagram::bind(&spath) {
+                    Err(_) => panic!("failed to bind socket"),
+                    Ok(stream) => stream,
+                };
+                //need to stop the listener to drop which would close the filedescriptor
+                Ok(Arc::new(Box::new(stream)))
+            }
+            SocketKind::Sequential(_) => {
+                unimplemented!("Sequential sockets are not implemented");
+            }
+        }
     }
 }
 

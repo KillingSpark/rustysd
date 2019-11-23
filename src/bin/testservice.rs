@@ -1,13 +1,15 @@
 use std::env;
 use std::io::Read;
 use std::os::unix::io::FromRawFd;
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
 
 extern crate nix;
 
-// send stuff here with: echo "REEE" | socat - UNIX-CONNECT:./servicelog
-// or with: echo "REEE" | socat - TCP-CONNECT:127.0.0.1:8080
-// or with: echo "REEE" | socat - UDP-CONNECT:127.0.0.1:8081
+// send stuff to this service with:
+// echo "REEE" | socat - TCP-CONNECT:127.0.0.1:8080
+// echo "REEE" | socat - UDP-CONNECT:127.0.0.1:8081
+// echo "REEE" | socat - UNIX-CONNECT:./servicelog_stream 
+// echo "REEE" | socat - UNIX-SENDTO:./servicelog_datagram 
 
 fn handle_unix_client(mut stream: UnixStream) {
     println!("Got new unix stream! Now printing stuff from the stream:");
@@ -15,7 +17,7 @@ fn handle_unix_client(mut stream: UnixStream) {
     loop {
         match stream.read(&mut data[..]) {
             Ok(bytes) => print!("{}", String::from_utf8(data[0..bytes].to_vec()).unwrap()),
-            Err(e) => println!("\n Got error from stream: {}", e),
+            Err(e) => println!("\n Got error from unix stream: {}", e),
         }
     }
 }
@@ -30,8 +32,30 @@ fn handle_upd() {
                 Ok(bytes) => {
                     print!("Got new bytes on udp socket! Now printing stuff from the stream: ");
                     print!("{}", String::from_utf8(data[0..bytes].to_vec()).unwrap())
-                    },
-                Err(e) => println!("\n Got error from stream: {}", e),
+                }
+                Err(e) => {
+                    println!("\n Got error from udp socket: {}", e);
+                    return;
+                }
+            }
+        }
+    });
+}
+
+fn handle_unix_datagram() {
+    std::thread::spawn(move || {
+        let stream = unsafe { UnixDatagram::from_raw_fd(6) };
+        let mut data = [0u8; 512];
+        loop {
+            match stream.recv(&mut data[..]) {
+                Ok(bytes) => {
+                    print!("Got new bytes on unix datagram socket! Now printing stuff from the stream: ");
+                    print!("{}", String::from_utf8(data[0..bytes].to_vec()).unwrap())
+                }
+                Err(e) => {
+                    println!("\n Got error from unix datagram socket: {}", e);
+                    return;
+                }
             }
         }
     });
@@ -48,7 +72,7 @@ fn unix_accept() {
                 }
                 Err(err) => {
                     /* connection failed */
-                    println!("Error while accepting new connections: {}", err);
+                    println!("Error while accepting new unix connections: {}", err);
                     break;
                 }
             }
@@ -64,7 +88,7 @@ fn handle_tcp_client(mut stream: TcpStream) {
     loop {
         match stream.read(&mut data[..]) {
             Ok(bytes) => print!("{}", String::from_utf8(data[0..bytes].to_vec()).unwrap()),
-            Err(e) => println!("\n Got error from stream: {}", e),
+            Err(e) => println!("\n Got error from tcp stream: {}", e),
         }
     }
 }
@@ -79,7 +103,7 @@ fn tcp_accept() -> std::thread::JoinHandle<()> {
                 }
                 Err(err) => {
                     /* connection failed */
-                    println!("Error while accepting new connections: {}", err);
+                    println!("Error while accepting new tcp connections: {}", err);
                     break;
                 }
             }
@@ -110,5 +134,6 @@ fn main() {
 
     unix_accept();
     handle_upd();
+    handle_unix_datagram();
     tcp_accept().join().unwrap();
 }
