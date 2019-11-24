@@ -9,11 +9,13 @@ use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
-type ParsedSection = HashMap<String, Vec<String>>;
+type ParsedSection = HashMap<String, Vec<(u32,String)>>;
 type ParsedFile = HashMap<String, ParsedSection>;
 
 fn parse_section(lines: &Vec<&str>) -> ParsedSection {
-    let mut entries: HashMap<String, Vec<String>> = HashMap::new();
+    let mut entries: ParsedSection = HashMap::new();
+
+    let mut entry_number = 0;
     for line in lines {
         let pos = if let Some(pos) = line.find(|c| c == '=') {
             pos
@@ -25,13 +27,19 @@ fn parse_section(lines: &Vec<&str>) -> ParsedSection {
         let value = value.trim_start_matches("=");
         let value = value.trim();
         let name = name.trim().to_uppercase();
-        let mut values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
+        let values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
 
-        match entries.get_mut(&name) {
-            Some(vec) => vec.append(&mut values),
+        let vec = match entries.get_mut(&name) {
+            Some(vec) => vec,
             None => {
-                entries.insert(name, values);
+                entries.insert(name.clone(), Vec::new());
+                entries.get_mut(&name).unwrap()
             }
+        };
+
+        for value in values {
+            vec.push((entry_number, value));
+            entry_number += 1;
         }
     }
 
@@ -186,32 +194,39 @@ fn parse_ipv6_addr(addr: &str) -> Result<std::net::SocketAddrV6, std::net::AddrP
 
 fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, String> {
     let mut fdname: Option<String> = None;
-    let mut socket_kinds = Vec::new();
+    let mut socket_kinds: Vec<(u32, SocketKind)> = Vec::new();
 
     // TODO check that there is indeed exactly one value per name
     for (name, mut values) in section {
         match name.as_str() {
             "FILEDESCRIPTORNAME" => {
-                fdname = Some(values.remove(0));
+                fdname = Some(values.remove(0).1);
             }
             "LISTENSTREAM" => {
                 for _ in 0..values.len() {
-                    socket_kinds.push(SocketKind::Stream(values.remove(0)));
+                    let (entry_num,value) = values.remove(0);
+                    socket_kinds.push((entry_num, SocketKind::Stream(value)));
                 }
             }
             "LISTENDATAGRAM" => {
                 for _ in 0..values.len() {
-                    socket_kinds.push(SocketKind::Datagram(values.remove(0)));
+                    let (entry_num,value) = values.remove(0);
+                    socket_kinds.push((entry_num, SocketKind::Datagram(value)));
                 }
             }
             "LISTENSEQUENTIALPACKET" => {
                 for _ in 0..values.len() {
-                    socket_kinds.push(SocketKind::Sequential(values.remove(0)));
+                    let (entry_num,value) = values.remove(0);
+                    socket_kinds.push((entry_num, SocketKind::Sequential(value)));
                 }
             }
             _ => panic!("Unknown parameter name: {}", name),
         }
     }
+
+    // we need to preserve the original ordering
+    socket_kinds.sort_by(|l,r| u32::cmp(&l.0, &r.0));
+    let socket_kinds: Vec<SocketKind> = socket_kinds.iter().map(|(_,kind)| kind.clone()).collect();
 
     let mut socket_configs = Vec::new();
 
@@ -290,6 +305,10 @@ fn parse_socket_section(section: ParsedSection) -> Result<Vec<SocketConfig>, Str
     return Ok(socket_configs);
 }
 
+fn map_tupels_to_second<X,Y: Clone>(v: Vec<(X,Y)>) -> Vec<Y> {
+    v.iter().map(|(_,scnd)| scnd.clone()).collect()
+}
+
 fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig {
     let wants = section.remove("WANTS");
     let requires = section.remove("REQUIRES");
@@ -298,10 +317,10 @@ fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig 
 
     UnitConfig {
         filepath: path.clone(),
-        wants: wants.unwrap_or(Vec::new()),
-        requires: requires.unwrap_or(Vec::new()),
-        after: after.unwrap_or(Vec::new()),
-        before: before.unwrap_or(Vec::new()),
+        wants: map_tupels_to_second(wants.unwrap_or(Vec::new())),
+        requires: map_tupels_to_second(requires.unwrap_or(Vec::new())),
+        after: map_tupels_to_second(after.unwrap_or(Vec::new())),
+        before: map_tupels_to_second(before.unwrap_or(Vec::new())),
     }
 }
 
@@ -310,8 +329,8 @@ fn parse_install_section(mut section: ParsedSection) -> InstallConfig {
     let requiredby = section.remove("REQUIREDBY");
 
     InstallConfig {
-        wanted_by: wantedby.unwrap_or(Vec::new()),
-        required_by: requiredby.unwrap_or(Vec::new()),
+        wanted_by: map_tupels_to_second(wantedby.unwrap_or(Vec::new())),
+        required_by: map_tupels_to_second(requiredby.unwrap_or(Vec::new())),
     }
 }
 
@@ -323,7 +342,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let exec = match exec {
         Some(mut vec) => {
             if vec.len() == 1 {
-                vec.remove(0)
+                vec.remove(0).1
             } else {
                 panic!("Exec had to many entries: {:?}", vec);
             }
@@ -334,7 +353,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let stop = match stop {
         Some(mut vec) => {
             if vec.len() == 1 {
-                vec.remove(0)
+                vec.remove(0).1
             } else {
                 panic!("Stop had to many entries: {:?}", vec);
             }
@@ -345,7 +364,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let keep_alive = match keep_alive {
         Some(vec) => {
             if vec.len() == 1 {
-                vec[0] == "true"
+                vec[0].1 == "true"
             } else {
                 panic!("Keepalive had to many entries: {:?}", vec);
             }

@@ -1,15 +1,15 @@
 use std::env;
 use std::io::Read;
 use std::os::unix::io::FromRawFd;
-use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
+use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
 
 extern crate nix;
 
 // send stuff to this service with:
 // echo "REEE" | socat - TCP-CONNECT:127.0.0.1:8080
 // echo "REEE" | socat - UDP-CONNECT:127.0.0.1:8081
-// echo "REEE" | socat - UNIX-CONNECT:./servicelog_stream 
-// echo "REEE" | socat - UNIX-SENDTO:./servicelog_datagram 
+// echo "REEE" | socat - UNIX-CONNECT:./servicelog_stream
+// echo "REEE" | socat - UNIX-SENDTO:./servicelog_datagram
 
 fn handle_unix_client(mut stream: UnixStream) {
     println!("Got new unix stream! Now printing stuff from the stream:");
@@ -80,6 +80,38 @@ fn unix_accept() {
     });
 }
 
+fn handle_unix_seq_pack(fd: i32) {
+    println!("Got new unix seqpack stream! Now printing stuff from the stream:");
+    let mut buf = [0u8; 512];
+    loop {
+        let bytes = match nix::unistd::read(fd, &mut buf[..]) {
+            Ok(b) => b,
+            Err(e) => {
+                println!("Error while reading seqpack stream: {}", e);
+                return;
+            }
+        };
+        print!("{:?}", &buf[0..bytes]);
+    }
+}
+
+fn unix_seq_pack_accept() {
+    std::thread::spawn(move || {
+        let listen_fd = 7;
+
+        loop {
+            let mut new_con_sock_addr = libc::sockaddr {
+                sa_data: [0i8; 14],
+                sa_family: libc::AF_UNIX as u16,
+            };
+            let mut addr_len = 0;
+            let new_con_fd =
+                unsafe { libc::accept(listen_fd, &mut new_con_sock_addr, &mut addr_len) };
+            handle_unix_seq_pack(new_con_fd);
+        }
+    });
+}
+
 use std::net::TcpListener;
 use std::net::TcpStream;
 fn handle_tcp_client(mut stream: TcpStream) {
@@ -133,6 +165,7 @@ fn main() {
     assert!(num_fds >= 1);
 
     unix_accept();
+    unix_seq_pack_accept();
     handle_upd();
     handle_unix_datagram();
     tcp_accept().join().unwrap();

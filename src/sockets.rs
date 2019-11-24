@@ -35,6 +35,30 @@ pub struct UnixSocketConfig {
     pub kind: SocketKind,
 }
 
+struct UnixSeqPacket(Option<i32>);
+impl AsRawFd for UnixSeqPacket {
+    fn as_raw_fd(&self) -> i32 {
+        self.0.unwrap()
+    }
+}
+
+impl Drop for UnixSeqPacket {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
+impl UnixSeqPacket {
+    fn close(&mut self) {
+        if let Some(fd) = self.0 {
+            if let Err(e) = nix::unistd::close(fd) {
+                error!("Error while closing unix sequential packet socket: {}", e);
+            }
+        }
+        self.0 = None;
+    }
+}
+
 impl UnixSocketConfig {
     fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
         match &self.kind {
@@ -70,8 +94,32 @@ impl UnixSocketConfig {
                 //need to stop the listener to drop which would close the filedescriptor
                 Ok(Arc::new(Box::new(stream)))
             }
-            SocketKind::Sequential(_) => {
-                unimplemented!("Sequential sockets are not implemented");
+            SocketKind::Sequential(path) => {
+                let spath = std::path::Path::new(&path);
+                // Delete old socket if necessary
+                if spath.exists() {
+                    std::fs::remove_file(&spath).unwrap();
+                }
+
+                let addr_family = nix::sys::socket::AddressFamily::Unix;
+                let sock_type =  nix::sys::socket::SockType::SeqPacket;
+                let flags = nix::sys::socket::SockFlag::empty(); //flags can be set by using the fnctl calls later if necessary
+                let protocol = 0; // not really important, used to choose protocol but we dont support sockets where thats relevant
+                
+                let path = std::path::PathBuf::from(&path);
+                let unix_addr = nix::sys::socket::UnixAddr::new(&path).unwrap();
+                let sock_addr = nix::sys::socket::SockAddr::Unix(unix_addr);
+                
+                trace!("opening seqpacket unix socket: {:?}", path);
+                // first create the socket
+                let fd = nix::sys::socket::socket(addr_family, sock_type, flags, protocol).unwrap();
+                // then bind the socket to the path
+                nix::sys::socket::bind(fd, &sock_addr).unwrap();
+                // then make the socket an accepting one
+                nix::sys::socket::listen(fd, 128).unwrap();
+
+                // return our own type until the std supports seuqntial packet unix sockets
+                Ok(Arc::new(Box::new(UnixSeqPacket(Some(fd)))))
             }
         }
     }
@@ -98,7 +146,7 @@ pub struct UdpSocketConfig {
 
 impl UdpSocketConfig {
     fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
-        trace!("opening tcp socket: {:?}", self.addr);
+        trace!("opening udp socket: {:?}", self.addr);
         let listener = UdpSocket::bind(self.addr).unwrap();
         //need to stop the listener to drop which would close the filedescriptor
         Ok(Arc::new(Box::new(listener)))
