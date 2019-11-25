@@ -245,12 +245,22 @@ fn start_service_with_filedescriptors(
                         &notify_socket_env_var
                     );
                     let (mut stream, _addr) = listener.accept().unwrap();
+                    trace!("Got notification connection");
                     let mut buf = vec![0u8; 512];
-                    let bytes = stream.read(&mut buf).unwrap();
-                    trace!(
-                        "Notification received from service: {:?}",
-                        String::from_utf8(buf[..bytes].to_vec()).unwrap()
-                    );
+                    loop {
+                        let bytes = stream.read(&mut buf).unwrap();
+                        trace!(
+                            "Notification received from service: {:?}",
+                            String::from_utf8(buf[..bytes].to_vec()).unwrap()
+                        );
+                        let note_string = String::from_utf8(buf[..bytes].to_vec()).unwrap();
+                        if note_string.contains("READY=1") {
+                            trace!("Notification was valid");
+                            break;
+                        } else {
+                            trace!("Notification did not contain 'ready'.Keep waiting");
+                        }
+                    }
                 } else {
                     trace!("service {} doesnt notify", name);
                 }

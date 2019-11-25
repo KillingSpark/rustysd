@@ -177,7 +177,7 @@ fn main() {
 
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
     let mut stream = UnixStream::connect(socket_path).unwrap();
-    stream.write_all(&b"Notification yeeyy"[..]).unwrap();
+    stream.write_all(&b"READY=1"[..]).unwrap();
 
     handle.join().unwrap();
 }
