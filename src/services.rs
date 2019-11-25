@@ -226,10 +226,12 @@ fn start_service_with_filedescriptors(
             // TODO maybe all fd's should be marked with FD_CLOEXEC when openend
             // and here we only unflag those that we want to keep?
             trace!("CLOSING FDS");
+
+            
             for (name, sock) in sockets {
                 trace!("CLOSE FDS FOR SOCKET: {}", name);
-                for conf in &sock.sockets {
-                    if !srvc.sockets.contains(&name) {
+                if !srvc.sockets.contains(&name) {
+                    for conf in &sock.sockets {
                         match &conf.fd {
                             Some(fd) => {
                                 let fd: i32 = (**fd).as_raw_fd();
@@ -240,9 +242,9 @@ fn start_service_with_filedescriptors(
                                 //this should not happen but if it does its not too bad
                             }
                         }
-                    } else {
-                        trace!("DONT CLOSE FD");
                     }
+                } else {
+                    trace!("DONT CLOSE FD");
                 }
             }
 
@@ -267,9 +269,11 @@ fn start_service_with_filedescriptors(
             // This is all just that complicated because systemd promises to pass the correct PID in the env-var LISTEN_PID...
 
             let mut num_fds = 0;
+            let mut name_lists = Vec::new();
             for sock_name in &srvc.sockets {
                 let sock = sockets.get(sock_name).unwrap();
                 num_fds += sock.sockets.len();
+                name_lists.push(sock.build_name_list());
             }
 
             let pid_str = &format!("{}", pid);
@@ -281,18 +285,23 @@ fn start_service_with_filedescriptors(
 
                 libc::setenv(k.as_ptr(), v.as_ptr(), 1);
             }
+            let full_name_list = name_lists.join(":");
             unsafe {
                 setenv("LISTEN_FDS", fds_str);
             }
             unsafe {
                 setenv("LISTEN_PID", pid_str);
             }
+            unsafe {
+                setenv("LISTEN_FDNAMES", &full_name_list);
+            }
 
             trace!(
-                "pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}",
+                "pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}, LISTEN_FDNAMES: {}",
                 pid,
                 pid_str,
-                fds_str
+                fds_str,
+                full_name_list
             );
 
             // no more logging after this point!

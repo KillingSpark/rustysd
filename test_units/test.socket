@@ -3,6 +3,8 @@ Description=test Socket
 PartOf=test.service
 
 [Socket]
+FileDescriptorName= TestSocket
+
 ListenStream= ./servicelog_stream
 ListenStream= 127.0.0.1:8080
 ListenDatagram= 127.0.0.1:8081
