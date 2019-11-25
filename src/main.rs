@@ -64,24 +64,30 @@ fn main() {
         &mut base_id,
     );
 
-    let mut socket_table = HashMap::new();
+    let mut socket_unit_table = HashMap::new();
     unit_parser::parse_all_sockets(
-        &mut socket_table,
+        &mut socket_unit_table,
         &PathBuf::from("./test_units"),
         &mut base_id,
     );
-    sockets::open_all_sockets(&mut socket_table).unwrap();
 
     let _name_to_id = units::fill_dependencies(&mut service_table);
     for (_, srvc) in &mut service_table {
         srvc.dedup_dependencies();
     }
 
-    let service_table = apply_sockets_to_services(service_table, &socket_table);
+    let service_table = apply_sockets_to_services(service_table, &socket_unit_table);
+
+    let mut socket_table = HashMap::new();
+    for (_id, socket_unit) in socket_unit_table {
+        if let UnitSpecialized::Socket(socket) = socket_unit.specialized {
+            socket_table.insert(socket.name.clone(), socket);
+        }
+    }
+
+    sockets::open_all_sockets(&mut socket_table).unwrap();
 
     services::print_all_services(&service_table);
-
-    let socket_table = HashMap::new();
 
     let pid_table = HashMap::new();
     let (mut service_table, mut pid_table) =
@@ -130,14 +136,8 @@ fn apply_sockets_to_services(
                             sock_unit.conf.name(),
                             srvc_unit.conf.name()
                         );
-                        for sock in &sock.sockets {
-                            let fd = match &sock.fd {
-                                Some(fd) => fd,
-                                None => unreachable!(),
-                            };
-                            let fd = fd.as_raw_fd();
-                            srvc.file_descriptors.push(fd);
-                        }
+
+                        srvc.sockets.push(sock.name.clone());
                     }
                 }
             }

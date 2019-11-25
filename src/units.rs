@@ -78,7 +78,6 @@ use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 #[derive(Clone)]
 pub struct SocketConfig {
-    pub name: String,
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
 

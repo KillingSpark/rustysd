@@ -102,14 +102,14 @@ impl UnixSocketConfig {
                 }
 
                 let addr_family = nix::sys::socket::AddressFamily::Unix;
-                let sock_type =  nix::sys::socket::SockType::SeqPacket;
+                let sock_type = nix::sys::socket::SockType::SeqPacket;
                 let flags = nix::sys::socket::SockFlag::empty(); //flags can be set by using the fnctl calls later if necessary
                 let protocol = 0; // not really important, used to choose protocol but we dont support sockets where thats relevant
-                
+
                 let path = std::path::PathBuf::from(&path);
                 let unix_addr = nix::sys::socket::UnixAddr::new(&path).unwrap();
                 let sock_addr = nix::sys::socket::SockAddr::Unix(unix_addr);
-                
+
                 trace!("opening seqpacket unix socket: {:?}", path);
                 // first create the socket
                 let fd = nix::sys::socket::socket(addr_family, sock_type, flags, protocol).unwrap();
@@ -155,20 +155,19 @@ impl UdpSocketConfig {
 
 #[derive(Clone)]
 pub struct Socket {
+    pub name: String,
     pub sockets: Vec<SocketConfig>,
 }
 
 pub fn open_all_sockets(
-    sockets: &mut std::collections::HashMap<InternalId, Unit>,
+    sockets: &mut std::collections::HashMap<String, Socket>,
 ) -> std::io::Result<()> {
     for (_, socket) in sockets {
-        if let UnitSpecialized::Socket(socket) = &mut socket.specialized {
-            for idx in 0..socket.sockets.len() {
-                let conf = &mut socket.sockets[idx];
-                let as_raw_fd = conf.specialized.open().unwrap();
-                conf.fd = Some(as_raw_fd);
-                //need to stop the listener to drop which would close the filedescriptor
-            }
+        for idx in 0..socket.sockets.len() {
+            let conf = &mut socket.sockets[idx];
+            let as_raw_fd = conf.specialized.open().unwrap();
+            conf.fd = Some(as_raw_fd);
+            //need to stop the listener to drop which would close the filedescriptor
         }
     }
 

@@ -1,3 +1,4 @@
+use crate::sockets::Socket;
 use std::collections::HashMap;
 use std::error::Error;
 use std::process::{Command, Stdio};
@@ -19,7 +20,7 @@ pub struct Service {
     pub service_config: Option<ServiceConfig>,
 
     pub status: ServiceStatus,
-    pub file_descriptors: Vec<std::os::unix::io::RawFd>,
+    pub sockets: Vec<String>,
 }
 
 pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Unit>) {
@@ -45,7 +46,11 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<I
 
             match cmd.spawn() {
                 Ok(_) => {
-                    trace!("Stopped Service: {} with pid: {:?}", unit.conf.name(), srvc.pid);
+                    trace!(
+                        "Stopped Service: {} with pid: {:?}",
+                        unit.conf.name(),
+                        srvc.pid
+                    );
                 }
                 Err(e) => panic!(e.description().to_owned()),
             }
@@ -58,7 +63,7 @@ pub fn service_exit_handler(
     code: i8,
     service_table: &mut HashMap<InternalId, Unit>,
     pid_table: &mut HashMap<u32, InternalId>,
-    filedescriptors: &HashMap<String, std::os::unix::io::RawFd>,
+    sockets: &HashMap<String, Socket>,
 ) {
     let srvc_id = *(match pid_table.get(&(pid as u32)) {
         Some(id) => id,
@@ -84,7 +89,7 @@ pub fn service_exit_handler(
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
-                start_service(srvc, unit.conf.name(), filedescriptors);
+                start_service(srvc, unit.conf.name(), sockets);
                 pid_table.insert(srvc.pid.unwrap(), unit.id);
             } else {
                 trace!(
@@ -104,7 +109,7 @@ fn run_services_recursive(
     ids_to_start: Vec<InternalId>,
     services: Arc<Mutex<HashMap<InternalId, Unit>>>,
     pids: Arc<Mutex<HashMap<u32, InternalId>>>,
-    filedescriptors: Arc<HashMap<String, std::os::unix::io::RawFd>>,
+    sockets: Arc<Mutex<HashMap<String, Socket>>>,
     tpool: Arc<Mutex<ThreadPool>>,
     waitgroup: crossbeam::sync::WaitGroup,
 ) {
@@ -113,7 +118,7 @@ fn run_services_recursive(
         let tpool_copy = Arc::clone(&tpool);
         let services_copy = Arc::clone(&services);
         let pids_copy = Arc::clone(&pids);
-        let filedescriptors_copy = Arc::clone(&filedescriptors);
+        let sockets_copy = Arc::clone(&sockets);
 
         let job = move || {
             let mut unit = {
@@ -124,7 +129,10 @@ fn run_services_recursive(
             if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
                 match srvc.status {
                     ServiceStatus::NeverRan => {
-                        start_service(srvc, name, &filedescriptors_copy);
+                        {
+                            let sockets_lock = sockets_copy.lock().unwrap();
+                            start_service(srvc, name, &sockets_lock);
+                        }
                         let new_pid = srvc.pid.unwrap();
                         {
                             let mut services_locked = services_copy.lock().unwrap();
@@ -142,7 +150,7 @@ fn run_services_recursive(
                     unit.install.before.clone(),
                     Arc::clone(&services_copy),
                     Arc::clone(&pids_copy),
-                    Arc::clone(&filedescriptors_copy),
+                    Arc::clone(&sockets_copy),
                     Arc::clone(&tpool_copy),
                     waitgroup_copy,
                 );
@@ -160,7 +168,7 @@ fn run_services_recursive(
 pub fn run_services(
     services: HashMap<InternalId, Unit>,
     pids: HashMap<u32, InternalId>,
-    filedescriptors: HashMap<String, std::os::unix::io::RawFd>,
+    sockets: HashMap<String, Socket>,
 ) -> (HashMap<InternalId, Unit>, HashMap<u32, InternalId>) {
     let mut root_services = Vec::new();
 
@@ -173,13 +181,13 @@ pub fn run_services(
     let pool_arc = Arc::new(Mutex::new(ThreadPool::new(6)));
     let services_arc = Arc::new(Mutex::new(services));
     let pids_arc = Arc::new(Mutex::new(pids));
-    let filedescriptors_arc = Arc::new(filedescriptors);
+    let sockets_arc = Arc::new(Mutex::new(sockets));
     let waitgroup = crossbeam::sync::WaitGroup::new();
     run_services_recursive(
         root_services,
         Arc::clone(&services_arc),
         Arc::clone(&pids_arc),
-        filedescriptors_arc,
+        sockets_arc,
         pool_arc,
         waitgroup.clone(),
     );
@@ -195,7 +203,7 @@ pub fn run_services(
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
     name: String,
-    global_filedescriptors: &HashMap<String, std::os::unix::io::RawFd>,
+    sockets: &HashMap<String, Socket>,
 ) {
     // 1. fork
     // 2. in fork use dup2 to map all relevant file desrciptors to 3..x
@@ -203,148 +211,166 @@ fn start_service_with_filedescriptors(
     // 4. set relevant env varibales $LISTEN_FDS $LISTEN_PID
     // 4. execve the cmd with the args
 
-    
-        match nix::unistd::fork() {
-            Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
-                srvc.pid = Some(child as u32);
-                srvc.status = ServiceStatus::Running;
+    match nix::unistd::fork() {
+        Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
+            srvc.pid = Some(child as u32);
+            srvc.status = ServiceStatus::Running;
 
-                trace!(
-                    "Service: {} forked with pid: {}",
-                    name,
-                    srvc.pid.unwrap()
-                );
-            }
-            Ok(nix::unistd::ForkResult::Child) => {
-                let pid = nix::unistd::getpid();
+            trace!("Service: {} forked with pid: {}", name, srvc.pid.unwrap());
+        }
+        Ok(nix::unistd::ForkResult::Child) => {
+            let pid = nix::unistd::getpid();
 
-                //here we are in the child process. We need to close every file descriptor we dont need anymore after the exec
-                for (_name, fd) in global_filedescriptors {
-                    if !srvc.file_descriptors.contains(fd) {
-                        nix::unistd::close(*fd).unwrap();
+            //here we are in the child process. We need to close every file descriptor we dont need anymore after the exec
+
+            // TODO maybe all fd's should be marked with FD_CLOEXEC when openend
+            // and here we only unflag those that we want to keep?
+            trace!("CLOSING FDS");
+            for (name, sock) in sockets {
+                trace!("CLOSE FDS FOR SOCKET: {}", name);
+                for conf in &sock.sockets {
+                    if !srvc.sockets.contains(&name) {
+                        match &conf.fd {
+                            Some(fd) => {
+                                let fd: i32 = (**fd).as_raw_fd();
+                                nix::unistd::close(fd).unwrap();
+                                trace!("DO CLOSE FD");
+                            }
+                            None => {
+                                //this should not happen but if it does its not too bad
+                            }
+                        }
+                    } else {
+                        trace!("DONT CLOSE FD");
                     }
                 }
+            }
 
-                // The following two lines do deadlock after fork and before exec... I would have loved to just use these
-                // This has probably something to do with the global env_lock() that is being used in the std
-                // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
-                // std::env::set_var("LISTEN_PID", format!("{}", pid));
+            // The following two lines do deadlock after fork and before exec... I would have loved to just use these
+            // This has probably something to do with the global env_lock() that is being used in the std
+            // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
+            // std::env::set_var("LISTEN_PID", format!("{}", pid));
 
-                // so lets use some unsafe instead, and use the same libc::setenv that the std uses but we dont care about the lock
-                // This is the only thread in this process that is still running so we dont need any lock
+            // so lets use some unsafe instead, and use the same libc::setenv that the std uses but we dont care about the lock
+            // This is the only thread in this process that is still running so we dont need any lock
 
-                // Maybe it would be better to have a simple wrapper that we can exec with a few sensible args
-                // 1. list filedescriptors to keep open (maybe not event that. FD handling can be done here probably?)
-                // 2. at least the number of fds
-                // 3. the actual executable that should be run + their args
-                //
-                // This wrapper then does:
-                // 1. Maybe close and dup2 fds
-                // 2. Set appropriate env variables
-                // 3. exec the actual executable we are trying to start here
+            // TODO Maybe it would be better to have a simple wrapper that we can exec with a few sensible args
+            // 1. list filedescriptors to keep open (maybe not event that. FD handling can be done here probably?)
+            // 2. at least the number of fds
+            // 3. the actual executable that should be run + their args
+            //
+            // This wrapper then does:
+            // 1. Maybe close and dup2 fds
+            // 2. Set appropriate env variables
+            // 3. exec the actual executable we are trying to start here
 
-                // This is all just that complicated because systemd promises to pass the correct PID in the env-var LISTEN_PID...
+            // This is all just that complicated because systemd promises to pass the correct PID in the env-var LISTEN_PID...
 
-                let pid_str = &format!("{}", pid);
-                let fds_str = &format!("{}", srvc.file_descriptors.len());
+            let mut num_fds = 0;
+            for sock_name in &srvc.sockets {
+                let sock = sockets.get(sock_name).unwrap();
+                num_fds += sock.sockets.len();
+            }
 
-                unsafe fn setenv(key: &str, value: &str) {
-                    let k = std::ffi::CString::new(key.as_bytes()).unwrap();
-                    let v = std::ffi::CString::new(value.as_bytes()).unwrap();
+            let pid_str = &format!("{}", pid);
+            let fds_str = &format!("{}", num_fds);
 
-                    libc::setenv(k.as_ptr(), v.as_ptr(), 1);
-                }
-                unsafe {
-                    setenv("LISTEN_FDS", fds_str);
-                }
-                unsafe {
-                    setenv("LISTEN_PID", pid_str);
-                }
+            unsafe fn setenv(key: &str, value: &str) {
+                let k = std::ffi::CString::new(key.as_bytes()).unwrap();
+                let v = std::ffi::CString::new(value.as_bytes()).unwrap();
 
-                trace!(
-                    "pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}",
-                    pid,
-                    pid_str,
-                    fds_str
-                );
+                libc::setenv(k.as_ptr(), v.as_ptr(), 1);
+            }
+            unsafe {
+                setenv("LISTEN_FDS", fds_str);
+            }
+            unsafe {
+                setenv("LISTEN_PID", pid_str);
+            }
 
-                // no more logging after this point!
-                // The filedescriptor used by the logger might have been duped to another
-                // one and logging into that one would be.... bad
-                // Hopefully the close() means that no old logs will get written to that filedescriptor
+            trace!(
+                "pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}",
+                pid,
+                pid_str,
+                fds_str
+            );
 
-                // start at 3. 0,1,2 are stdin,stdout,stderr
-                let file_desc_offset = 3;
-                for idx in 0..srvc.file_descriptors.len() {
-                    let new_fd = file_desc_offset + idx;
-                    let old_fd = srvc.file_descriptors[idx];
+            // no more logging after this point!
+            // The filedescriptor used by the logger might have been duped to another
+            // one and logging into that one would be.... bad
+            // Hopefully the close() means that no old logs will get written to that filedescriptor
+
+            // start at 3. 0,1,2 are stdin,stdout,stderr
+            let file_desc_offset = 3;
+            let mut fd_idx = 0;
+            for sock_name in &srvc.sockets {
+                let socket = sockets.get(sock_name).unwrap();
+                for sock_conf in &socket.sockets {
+                    let new_fd = file_desc_offset + fd_idx;
+                    let old_fd = match &sock_conf.fd {
+                        Some(fd) => fd.as_raw_fd(),
+                        None => panic!("No fd found for socket conf"),
+                    };
                     if new_fd as i32 != old_fd {
                         //ignore output. newfd might already be closed
                         let _ = nix::unistd::close(new_fd as i32);
                         nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
                     }
-                }
-
-                let split: Vec<&str> = match &srvc.service_config {
-                    Some(conf) => conf.exec.split(" ").collect(),
-                    None => unreachable!(),
-                };
-
-                let cmd = std::ffi::CString::new(split[0]).unwrap();
-                let mut args = Vec::new();
-                for arg in &split[1..] {
-                    args.push(std::ffi::CString::new(*arg).unwrap());
-                }
-
-                match nix::unistd::execv(&cmd, &args) {
-                    Ok(_) => {
-                        eprintln!("execv returned Ok()... This should never happen");
-                    }
-                    Err(e) => {
-                        eprintln!("execv errored: {:?}", e);
-                    }
+                    fd_idx += 1;
                 }
             }
-            Err(_) => println!("Fork for service: {} failed", name),
+
+            let split: Vec<&str> = match &srvc.service_config {
+                Some(conf) => conf.exec.split(" ").collect(),
+                None => unreachable!(),
+            };
+
+            let cmd = std::ffi::CString::new(split[0]).unwrap();
+            let mut args = Vec::new();
+            for arg in &split[1..] {
+                args.push(std::ffi::CString::new(*arg).unwrap());
+            }
+
+            match nix::unistd::execv(&cmd, &args) {
+                Ok(_) => {
+                    eprintln!("execv returned Ok()... This should never happen");
+                }
+                Err(e) => {
+                    eprintln!("execv errored: {:?}", e);
+                }
+            }
         }
+        Err(_) => println!("Fork for service: {} failed", name),
+    }
 }
 
-pub fn start_service(
-    srvc: &mut Service,
-    name: String,
-    global_filedescriptors: &HashMap<String, std::os::unix::io::RawFd>,
-) {
-    
-        srvc.status = ServiceStatus::Starting;
+pub fn start_service(srvc: &mut Service, name: String, sockets: &HashMap<String, Socket>) {
+    srvc.status = ServiceStatus::Starting;
 
-        let split: Vec<&str> = match &srvc.service_config {
-            Some(conf) => conf.exec.split(" ").collect(),
-            None => return,
-        };
+    let split: Vec<&str> = match &srvc.service_config {
+        Some(conf) => conf.exec.split(" ").collect(),
+        None => return,
+    };
 
-        if srvc.file_descriptors.len() > 0 {
-            start_service_with_filedescriptors(srvc, name, global_filedescriptors);
-        } else {
-            let mut cmd = Command::new(split[0]);
-            for part in &split[1..] {
-                cmd.arg(part);
+    if srvc.sockets.len() > 0 {
+        start_service_with_filedescriptors(srvc, name, sockets);
+    } else {
+        let mut cmd = Command::new(split[0]);
+        for part in &split[1..] {
+            cmd.arg(part);
+        }
+
+        cmd.stdout(Stdio::null());
+
+        match cmd.spawn() {
+            Ok(child) => {
+                srvc.pid = Some(child.id());
+                srvc.status = ServiceStatus::Running;
+
+                trace!("Service: {} started with pid: {}", name, srvc.pid.unwrap());
             }
-
-            cmd.stdout(Stdio::null());
-
-            match cmd.spawn() {
-                Ok(child) => {
-                    srvc.pid = Some(child.id());
-                    srvc.status = ServiceStatus::Running;
-
-                    trace!(
-                        "Service: {} started with pid: {}",
-                        name,
-                        srvc.pid.unwrap()
-                    );
-                }
-                Err(e) => panic!(e.description().to_owned()),
-            }
+            Err(e) => panic!(e.description().to_owned()),
+        }
     }
 }
 
