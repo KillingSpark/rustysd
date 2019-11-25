@@ -5,11 +5,13 @@ PartOf=test.service
 [Socket]
 FileDescriptorName= TestSocketAlternative
 
-ListenStream= 127.0.0.1:8085
-ListenStream= 127.0.0.1:8086
-ListenStream= 127.0.0.1:8087
+ListenStream= ./servicelog_alt_stream
+ListenStream= 127.0.0.1:8083
+ListenDatagram= 127.0.0.1:8084
+ListenDatagram= ./servicelog_alt_datagram
+ListenSequentialPacket= ./servicelog_alt_sequential
 
-Service= test
+#Service= test
 
 [Install]
 WantedBy=sockets.target

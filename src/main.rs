@@ -126,36 +126,52 @@ fn apply_sockets_to_services(
 ) -> HashMap<InternalId, Unit> {
     for (_, sock_unit) in socket_table {
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
-            trace!("Searching service for socket: {}", sock_unit.conf.name());
+            trace!("Searching services for socket: {}", sock_unit.conf.name());
             for (_, srvc_unit) in &mut service_table {
                 let srvc = &mut srvc_unit.specialized;
                 if let UnitSpecialized::Service(srvc) = srvc {
-                    if (srvc_unit.conf.name() == sock_unit.conf.name()) && !srvc.sockets.contains(&sock_unit.conf.name()){
+                    if (srvc_unit.conf.name() == sock_unit.conf.name())
+                        && !srvc.socket_names.contains(&sock_unit.conf.name())
+                    {
                         trace!(
                             "add socket: {} to service: {}",
                             sock_unit.conf.name(),
                             srvc_unit.conf.name()
                         );
 
-                        srvc.sockets.push(sock.name.clone());
+                        srvc.socket_names.push(sock.name.clone());
+                    }
+                    if let Some(srvc_conf) = &srvc.service_config {
+                        if srvc_conf.sockets.contains(&sock_unit.conf.name()) {
+                            trace!(
+                                "add socket: {} to service: {}",
+                                sock_unit.conf.name(),
+                                srvc_unit.conf.name()
+                            );
+                            srvc.socket_names.push(sock.name.clone());
+                        }
                     }
                 }
             }
+
+            // socket specified services
             for srvc_name in &sock.services {
                 for (_, srvc_unit) in &mut service_table {
-                let srvc = &mut srvc_unit.specialized;
-                if let UnitSpecialized::Service(srvc) = srvc {
-                    if (*srvc_name == srvc_unit.conf.name()) && !srvc.sockets.contains(&sock_unit.conf.name()){
-                        trace!(
-                            "add socket: {} to service: {}",
-                            sock_unit.conf.name(),
-                            srvc_unit.conf.name()
-                        );
+                    let srvc = &mut srvc_unit.specialized;
+                    if let UnitSpecialized::Service(srvc) = srvc {
+                        if (*srvc_name == srvc_unit.conf.name())
+                            && !srvc.socket_names.contains(&sock_unit.conf.name())
+                        {
+                            trace!(
+                                "add socket: {} to service: {}",
+                                sock_unit.conf.name(),
+                                srvc_unit.conf.name()
+                            );
 
-                        srvc.sockets.push(sock.name.clone());
+                            srvc.socket_names.push(sock.name.clone());
+                        }
                     }
                 }
-            }
             }
         }
     }

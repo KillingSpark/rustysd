@@ -17,6 +17,12 @@ fn parse_section(lines: &Vec<&str>) -> ParsedSection {
 
     let mut entry_number = 0;
     for line in lines {
+        //ignore comments
+        if line.starts_with("#") {
+            continue;
+        }
+
+        //check if this is a key value pair
         let pos = if let Some(pos) = line.find(|c| c == '=') {
             pos
         } else {
@@ -172,8 +178,7 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Unit {
             status: ServiceStatus::NeverRan,
 
             service_config: service_config,
-
-            sockets: Vec::new(),
+            socket_names: Vec::new(),
         }),
     }
 }
@@ -350,6 +355,8 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let exec = section.remove("EXEC");
     let stop = section.remove("STOP");
     let keep_alive = section.remove("KEEP_ALIVE");
+    let sockets = section.remove("SOCKETS");
+    println!("SOCKETS found: {:?}", sockets);
 
     let exec = match exec {
         Some(mut vec) => {
@@ -388,6 +395,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
         keep_alive: keep_alive,
         exec: exec,
         stop: stop,
+        sockets: map_tupels_to_second(sockets.unwrap_or(Vec::new())),
     }
 }
 

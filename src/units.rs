@@ -97,6 +97,8 @@ pub struct ServiceConfig {
     pub keep_alive: bool,
     pub exec: String,
     pub stop: String,
+
+    pub sockets: Vec<String>,
 }
 
 pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) -> HashMap<String, u64> {

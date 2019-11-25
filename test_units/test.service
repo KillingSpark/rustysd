@@ -1,3 +1,4 @@
 [Service]
 Exec= ./target/debug/testservice
 keep_alive = false
+Sockets= test_second

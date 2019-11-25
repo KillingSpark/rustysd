@@ -20,7 +20,7 @@ pub struct Service {
     pub service_config: Option<ServiceConfig>,
 
     pub status: ServiceStatus,
-    pub sockets: Vec<String>,
+    pub socket_names: Vec<String>,
 }
 
 pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Unit>) {
@@ -227,10 +227,9 @@ fn start_service_with_filedescriptors(
             // and here we only unflag those that we want to keep?
             trace!("CLOSING FDS");
 
-            
             for (name, sock) in sockets {
                 trace!("CLOSE FDS FOR SOCKET: {}", name);
-                if !srvc.sockets.contains(&name) {
+                if !srvc.socket_names.contains(&name) {
                     for conf in &sock.sockets {
                         match &conf.fd {
                             Some(fd) => {
@@ -270,10 +269,13 @@ fn start_service_with_filedescriptors(
 
             let mut num_fds = 0;
             let mut name_lists = Vec::new();
-            for sock_name in &srvc.sockets {
-                let sock = sockets.get(sock_name).unwrap();
-                num_fds += sock.sockets.len();
-                name_lists.push(sock.build_name_list());
+
+            for sock_name in &srvc.socket_names {
+                trace!("Counting fds for socket: {}", sock_name);
+                if let Some(sock) = sockets.get(sock_name) {
+                    num_fds += sock.sockets.len();
+                    name_lists.push(sock.build_name_list());
+                }
             }
 
             let pid_str = &format!("{}", pid);
@@ -312,7 +314,8 @@ fn start_service_with_filedescriptors(
             // start at 3. 0,1,2 are stdin,stdout,stderr
             let file_desc_offset = 3;
             let mut fd_idx = 0;
-            for sock_name in &srvc.sockets {
+
+            for sock_name in &srvc.socket_names {
                 let socket = sockets.get(sock_name).unwrap();
                 for sock_conf in &socket.sockets {
                     let new_fd = file_desc_offset + fd_idx;
@@ -361,24 +364,26 @@ pub fn start_service(srvc: &mut Service, name: String, sockets: &HashMap<String,
         None => return,
     };
 
-    if srvc.sockets.len() > 0 {
-        start_service_with_filedescriptors(srvc, name, sockets);
-    } else {
-        let mut cmd = Command::new(split[0]);
-        for part in &split[1..] {
-            cmd.arg(part);
-        }
-
-        cmd.stdout(Stdio::null());
-
-        match cmd.spawn() {
-            Ok(child) => {
-                srvc.pid = Some(child.id());
-                srvc.status = ServiceStatus::Running;
-
-                trace!("Service: {} started with pid: {}", name, srvc.pid.unwrap());
+    if let Some(srvc_conf) = &srvc.service_config {
+        if srvc_conf.sockets.len() > 0 {
+            start_service_with_filedescriptors(srvc, name, sockets);
+        } else {
+            let mut cmd = Command::new(split[0]);
+            for part in &split[1..] {
+                cmd.arg(part);
             }
-            Err(e) => panic!(e.description().to_owned()),
+
+            cmd.stdout(Stdio::null());
+
+            match cmd.spawn() {
+                Ok(child) => {
+                    srvc.pid = Some(child.id());
+                    srvc.status = ServiceStatus::Running;
+
+                    trace!("Service: {} started with pid: {}", name, srvc.pid.unwrap());
+                }
+                Err(e) => panic!(e.description().to_owned()),
+            }
         }
     }
 }
