@@ -22,7 +22,6 @@ Just some stuff I know does not work but would be cool
 1. The whole dbus shenanigans
 1. Matching services and sockets more dynamically
 1. More socket types 
-    1. unix sequential sockets ar missing... does any even use these?
     1. fifos are missing
 1. The whole sd_notify API (with storing filedescriptors and such)
 1. Naming file descriptors in the env variables with the name from the *.socket file
