@@ -1,0 +1,15 @@
+[Unit]
+Description=test Socket
+PartOf=test.service
+
+[Socket]
+FileDescriptorName= TestSocketAlternative
+
+ListenStream= 127.0.0.1:8085
+ListenStream= 127.0.0.1:8086
+ListenStream= 127.0.0.1:8087
+
+Service= test
+
+[Install]
+WantedBy=sockets.target

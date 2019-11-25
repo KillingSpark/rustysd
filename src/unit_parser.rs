@@ -110,7 +110,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
     // TODO handle install configs for sockets
     let _ = install_config;
 
-    let (sock_name, sock_configs) = socket_configs.unwrap(); 
+    let (sock_name, services, sock_configs) = socket_configs.unwrap(); 
 
     Ok(Unit {
         conf: unit_config.unwrap().clone(),
@@ -119,6 +119,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
         specialized: UnitSpecialized::Socket(Socket {
             name: sock_name,
             sockets: sock_configs,
+            services: services,
         }),
     })
 }
@@ -195,9 +196,10 @@ fn parse_ipv6_addr(addr: &str) -> Result<std::net::SocketAddrV6, std::net::AddrP
     sock
 }
 
-fn parse_socket_section(section: ParsedSection) -> Result<(String, Vec<SocketConfig>), String> {
+fn parse_socket_section(section: ParsedSection) -> Result<(String, Vec<String>, Vec<SocketConfig>), String> {
     let mut fdname: Option<String> = None;
     let mut socket_kinds: Vec<(u32, SocketKind)> = Vec::new();
+    let mut services: Vec<String> = Vec::new();
 
     // TODO check that there is indeed exactly one value per name
     for (name, mut values) in section {
@@ -221,6 +223,12 @@ fn parse_socket_section(section: ParsedSection) -> Result<(String, Vec<SocketCon
                 for _ in 0..values.len() {
                     let (entry_num, value) = values.remove(0);
                     socket_kinds.push((entry_num, SocketKind::Sequential(value)));
+                }
+            }
+            "SERVICE" => {
+                for _ in 0..values.len() {
+                    let (_, value) = values.remove(0);
+                    services.push(value);
                 }
             }
             _ => panic!("Unknown parameter name: {}", name),
@@ -306,7 +314,7 @@ fn parse_socket_section(section: ParsedSection) -> Result<(String, Vec<SocketCon
         None => "unknown".into(),
     };
 
-    return Ok((name, socket_configs));
+    return Ok((name, services, socket_configs));
 }
 
 fn map_tupels_to_second<X, Y: Clone>(v: Vec<(X, Y)>) -> Vec<Y> {

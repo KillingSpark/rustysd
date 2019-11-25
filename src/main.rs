@@ -130,7 +130,7 @@ fn apply_sockets_to_services(
             for (_, srvc_unit) in &mut service_table {
                 let srvc = &mut srvc_unit.specialized;
                 if let UnitSpecialized::Service(srvc) = srvc {
-                    if srvc_unit.conf.name() == sock_unit.conf.name() {
+                    if (srvc_unit.conf.name() == sock_unit.conf.name()) && !srvc.sockets.contains(&sock_unit.conf.name()){
                         trace!(
                             "add socket: {} to service: {}",
                             sock_unit.conf.name(),
@@ -140,6 +140,22 @@ fn apply_sockets_to_services(
                         srvc.sockets.push(sock.name.clone());
                     }
                 }
+            }
+            for srvc_name in &sock.services {
+                for (_, srvc_unit) in &mut service_table {
+                let srvc = &mut srvc_unit.specialized;
+                if let UnitSpecialized::Service(srvc) = srvc {
+                    if (*srvc_name == srvc_unit.conf.name()) && !srvc.sockets.contains(&sock_unit.conf.name()){
+                        trace!(
+                            "add socket: {} to service: {}",
+                            sock_unit.conf.name(),
+                            srvc_unit.conf.name()
+                        );
+
+                        srvc.sockets.push(sock.name.clone());
+                    }
+                }
+            }
             }
         }
     }

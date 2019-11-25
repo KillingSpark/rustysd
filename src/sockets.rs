@@ -157,6 +157,7 @@ impl UdpSocketConfig {
 pub struct Socket {
     pub name: String,
     pub sockets: Vec<SocketConfig>,
+    pub services: Vec<String>,
 }
 
 impl Socket {
