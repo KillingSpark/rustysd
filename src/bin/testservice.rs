@@ -2,6 +2,7 @@ use std::env;
 use std::io::Read;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
+use std::io::Write;
 
 extern crate nix;
 
@@ -172,5 +173,11 @@ fn main() {
     unix_seq_pack_accept();
     handle_upd();
     handle_unix_datagram();
-    tcp_accept().join().unwrap();
+    let handle = tcp_accept();
+
+    let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
+    let mut stream = UnixStream::connect(socket_path).unwrap();
+    stream.write_all(&b"Notification yeeyy"[..]).unwrap();
+
+    handle.join().unwrap();
 }

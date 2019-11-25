@@ -93,10 +93,26 @@ pub struct InstallConfig {
 }
 
 #[derive(Clone)]
+pub enum ServiceType {
+    Simple,
+    Notify,
+}
+
+#[derive(Clone)]
+pub enum NotifyKind {
+    Main,
+    Exec,
+    All,
+    None,
+}
+
+#[derive(Clone)]
 pub struct ServiceConfig {
     pub keep_alive: bool,
+    pub notifyaccess: NotifyKind,
     pub exec: String,
     pub stop: String,
+    pub srcv_type: ServiceType,
 
     pub sockets: Vec<String>,
 }

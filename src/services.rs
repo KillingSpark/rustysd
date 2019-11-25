@@ -1,8 +1,12 @@
 use crate::sockets::Socket;
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::Read;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use threadpool::ThreadPool;
+
+use std::os::unix::net::UnixListener;
 
 use crate::units::*;
 
@@ -21,6 +25,7 @@ pub struct Service {
 
     pub status: ServiceStatus,
     pub socket_names: Vec<String>,
+    pub notify_access_socket: Option<Arc<UnixListener>>,
 }
 
 pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Unit>) {
@@ -103,7 +108,6 @@ pub fn service_exit_handler(
     }
 }
 
-use std::sync::Arc;
 use std::sync::Mutex;
 fn run_services_recursive(
     ids_to_start: Vec<InternalId>,
@@ -211,12 +215,47 @@ fn start_service_with_filedescriptors(
     // 4. set relevant env varibales $LISTEN_FDS $LISTEN_PID
     // 4. execve the cmd with the args
 
+    // setup socket for notifications from the service
+    let notify_dir_path = std::path::PathBuf::from("./notifications");
+    if !notify_dir_path.exists() {
+        std::fs::create_dir_all(&notify_dir_path).unwrap();
+    }
+    let daemon_socket_path = notify_dir_path.join(format!("{}.notifiy_socket", &name));
+    if daemon_socket_path.exists() {
+        std::fs::remove_file(&daemon_socket_path).unwrap();
+    }
+    let listener = UnixListener::bind(&daemon_socket_path).unwrap();
+
+    // NOTIFY_SOCKET
+    let cur_dir = std::env::current_dir().unwrap();
+    let notify_socket_env_var = cur_dir.join(&daemon_socket_path);
+
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             srvc.pid = Some(child as u32);
             srvc.status = ServiceStatus::Running;
 
             trace!("Service: {} forked with pid: {}", name, srvc.pid.unwrap());
+
+            if let Some(conf) = &srvc.service_config {
+                if let ServiceType::Notify = conf.srcv_type {
+                    // TODO wait for the service to notify us before returning
+                    trace!(
+                        "Waiting for a notification on: {:?}",
+                        &notify_socket_env_var
+                    );
+                    let (mut stream, _addr) = listener.accept().unwrap();
+                    let mut buf = vec![0u8; 512];
+                    let bytes = stream.read(&mut buf).unwrap();
+                    trace!(
+                        "Notification received from service: {:?}",
+                        String::from_utf8(buf[..bytes].to_vec()).unwrap()
+                    );
+                } else {
+                    trace!("service {} doesnt notify", name);
+                }
+            }
+            srvc.notify_access_socket = Some(Arc::new(listener));
         }
         Ok(nix::unistd::ForkResult::Child) => {
             let pid = nix::unistd::getpid();
@@ -296,6 +335,9 @@ fn start_service_with_filedescriptors(
             }
             unsafe {
                 setenv("LISTEN_FDNAMES", &full_name_list);
+            }
+            unsafe {
+                setenv("NOTIFY_SOCKET", notify_socket_env_var.to_str().unwrap());
             }
 
             trace!(

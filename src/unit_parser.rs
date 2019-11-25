@@ -116,7 +116,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
     // TODO handle install configs for sockets
     let _ = install_config;
 
-    let (sock_name, services, sock_configs) = socket_configs.unwrap(); 
+    let (sock_name, services, sock_configs) = socket_configs.unwrap();
 
     Ok(Unit {
         conf: unit_config.unwrap().clone(),
@@ -179,6 +179,7 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Unit {
 
             service_config: service_config,
             socket_names: Vec::new(),
+            notify_access_socket: None,
         }),
     }
 }
@@ -201,7 +202,9 @@ fn parse_ipv6_addr(addr: &str) -> Result<std::net::SocketAddrV6, std::net::AddrP
     sock
 }
 
-fn parse_socket_section(section: ParsedSection) -> Result<(String, Vec<String>, Vec<SocketConfig>), String> {
+fn parse_socket_section(
+    section: ParsedSection,
+) -> Result<(String, Vec<String>, Vec<SocketConfig>), String> {
     let mut fdname: Option<String> = None;
     let mut socket_kinds: Vec<(u32, SocketKind)> = Vec::new();
     let mut services: Vec<String> = Vec::new();
@@ -356,7 +359,8 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let stop = section.remove("STOP");
     let keep_alive = section.remove("KEEP_ALIVE");
     let sockets = section.remove("SOCKETS");
-    println!("SOCKETS found: {:?}", sockets);
+    let notify_access = section.remove("NOTIFYACCESS");
+    let srcv_type = section.remove("TYPE");
 
     let exec = match exec {
         Some(mut vec) => {
@@ -367,6 +371,38 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
             }
         }
         None => "".to_string(),
+    };
+
+    let srcv_type = match srcv_type {
+        Some(vec) => {
+            if vec.len() == 1 {
+                match vec[0].1.as_str() {
+                    "simple" => ServiceType::Simple,
+                    "notify" => ServiceType::Notify,
+                    _ => panic!("Unknown service type: {}", vec[0].1),
+                }
+            } else {
+                panic!("Type had to many entries: {:?}", vec);
+            }
+        }
+        None => ServiceType::Simple,
+    };
+
+    let notify_access = match notify_access {
+        Some(vec) => {
+            if vec.len() == 1 {
+                match vec[0].1.as_str() {
+                    "all" => NotifyKind::All,
+                    "main" => NotifyKind::Main,
+                    "exec" => NotifyKind::Exec,
+                    "none" => NotifyKind::None,
+                    _ => panic!("Unknown notify access: {}", vec[0].1),
+                }
+            } else {
+                panic!("Type had to many entries: {:?}", vec);
+            }
+        }
+        None => NotifyKind::Main,
     };
 
     let stop = match stop {
@@ -392,6 +428,8 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     };
 
     ServiceConfig {
+        srcv_type: srcv_type,
+        notifyaccess: notify_access,
         keep_alive: keep_alive,
         exec: exec,
         stop: stop,
