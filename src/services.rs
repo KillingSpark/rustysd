@@ -227,25 +227,29 @@ fn start_service_with_filedescriptors(
     let listener = UnixListener::bind(&daemon_socket_path).unwrap();
 
     // NOTIFY_SOCKET
-    let cur_dir = std::env::current_dir().unwrap();
-    let notify_socket_env_var = cur_dir.join(&daemon_socket_path);
+    let notify_socket_env_var = if daemon_socket_path.starts_with(".") {
+        let cur_dir = std::env::current_dir().unwrap();
+        cur_dir.join(&daemon_socket_path)
+    }else{
+        daemon_socket_path
+    };
 
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             srvc.pid = Some(child as u32);
             srvc.status = ServiceStatus::Running;
 
-            trace!("Service: {} forked with pid: {}", name, srvc.pid.unwrap());
+            trace!(" [FORK_PARENT] Service: {} forked with pid: {}", name, srvc.pid.unwrap());
 
             if let Some(conf) = &srvc.service_config {
                 if let ServiceType::Notify = conf.srcv_type {
-                    // TODO wait for the service to notify us before returning
                     trace!(
-                        "Waiting for a notification on: {:?}",
+                        " [FORK_PARENT] Waiting for a notification on: {:?}",
                         &notify_socket_env_var
                     );
+
                     let (mut stream, _addr) = listener.accept().unwrap();
-                    trace!("Got notification connection");
+                    trace!(" [FORK_PARENT] Got notification connection");
                     let mut buf = vec![0u8; 512];
                     loop {
                         let bytes = stream.read(&mut buf).unwrap();
@@ -255,14 +259,14 @@ fn start_service_with_filedescriptors(
                         );
                         let note_string = String::from_utf8(buf[..bytes].to_vec()).unwrap();
                         if note_string.contains("READY=1") {
-                            trace!("Notification was valid");
+                            trace!(" [FORK_PARENT] Notification was valid");
                             break;
                         } else {
-                            trace!("Notification did not contain 'ready'.Keep waiting");
+                            trace!(" [FORK_PARENT] Notification did not contain 'ready'.Keep waiting");
                         }
                     }
                 } else {
-                    trace!("service {} doesnt notify", name);
+                    trace!(" [FORK_PARENT] service {} doesnt notify", name);
                 }
             }
             srvc.notify_access_socket = Some(Arc::new(listener));
@@ -274,17 +278,17 @@ fn start_service_with_filedescriptors(
 
             // TODO maybe all fd's should be marked with FD_CLOEXEC when openend
             // and here we only unflag those that we want to keep?
-            trace!("CLOSING FDS");
+            trace!(" [FORK_CHILD] CLOSING FDS");
 
             for (name, sock) in sockets {
-                trace!("CLOSE FDS FOR SOCKET: {}", name);
+                trace!(" [FORK_CHILD] CLOSE FDS FOR SOCKET: {}", name);
                 if !srvc.socket_names.contains(&name) {
                     for conf in &sock.sockets {
                         match &conf.fd {
                             Some(fd) => {
                                 let fd: i32 = (**fd).as_raw_fd();
                                 nix::unistd::close(fd).unwrap();
-                                trace!("DO CLOSE FD");
+                                trace!(" [FORK_CHILD] DO CLOSE FD: {}", fd);
                             }
                             None => {
                                 //this should not happen but if it does its not too bad
@@ -292,7 +296,7 @@ fn start_service_with_filedescriptors(
                         }
                     }
                 } else {
-                    trace!("DONT CLOSE FD");
+                    trace!(" [FORK_CHILD] DONT CLOSE FDS");
                 }
             }
 
@@ -320,7 +324,7 @@ fn start_service_with_filedescriptors(
             let mut name_lists = Vec::new();
 
             for sock_name in &srvc.socket_names {
-                trace!("Counting fds for socket: {}", sock_name);
+                trace!(" [FORK_CHILD] Counting fds for socket: {}", sock_name);
                 if let Some(sock) = sockets.get(sock_name) {
                     num_fds += sock.sockets.len();
                     name_lists.push(sock.build_name_list());
@@ -351,7 +355,7 @@ fn start_service_with_filedescriptors(
             }
 
             trace!(
-                "pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}, LISTEN_FDNAMES: {}",
+                " [FORK_CHILD] pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}, LISTEN_FDNAMES: {}",
                 pid,
                 pid_str,
                 fds_str,

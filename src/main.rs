@@ -3,6 +3,7 @@ mod sockets;
 mod unit_parser;
 mod units;
 use units::*;
+mod unix_listener_select;
 
 extern crate signal_hook;
 use signal_hook::iterator::Signals;
@@ -18,6 +19,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 fn main() {
     let lmbrjck_conf = lumberjack_rs::Conf {
@@ -90,8 +92,47 @@ fn main() {
     services::print_all_services(&service_table);
 
     let pid_table = HashMap::new();
-    let (mut service_table, mut pid_table) =
+    let (service_table, pid_table) =
         services::run_services(service_table, pid_table, socket_table.clone());
+
+    let service_table = Arc::new(Mutex::new(service_table));
+    let pid_table = Arc::new(Mutex::new(pid_table));
+    let socket_table = Arc::new(Mutex::new(socket_table));
+
+    let service_table_clone = service_table.clone();
+    std::thread::spawn(move || {
+        // setup the list to listen to
+        let mut select_vec = Vec::new();
+        {
+            let service_table: &HashMap<_, _> = &service_table_clone.lock().unwrap();
+            for (_name, srvc_unit) in service_table {
+                if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+                    if let Some(sock) = &srvc.notify_access_socket {
+                        select_vec.push((srvc_unit.conf.name(), sock.clone()));
+                    }
+                }
+            }
+        }
+
+        loop {
+            // take refs from the Arc's
+            let select_vec: Vec<_> = select_vec
+                .iter()
+                .map(|(n, x)| (n.clone(), x.as_ref()))
+                .collect();
+            let streams = crate::unix_listener_select::select(&select_vec, None).unwrap();
+            for (name, (mut _stream, _addr)) in streams {
+                trace!(
+                    " [Notification-Listener] Service: {} has connected on the notification socket",
+                    name
+                );
+                // TODO handle notification content
+                {
+                    let _service_table_locked = service_table_clone.lock().unwrap();
+                }
+            }
+        }
+    });
 
     loop {
         // Pick up new signals
@@ -104,9 +145,9 @@ fn main() {
                             Ok((pid, code)) => services::service_exit_handler(
                                 pid,
                                 code,
-                                &mut service_table,
-                                &mut pid_table,
-                                &socket_table,
+                                &mut service_table.lock().unwrap(),
+                                &mut pid_table.lock().unwrap(),
+                                &socket_table.lock().unwrap(),
                             ),
                             Err(e) => {
                                 error!("{}", e);

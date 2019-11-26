@@ -3,4 +3,4 @@ Exec= ./target/debug/testservice
 Sockets= test_second
 NotifyAccess= all
 Type= notify
-keep_alive = false
+keep_alive = true

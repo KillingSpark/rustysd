@@ -151,8 +151,8 @@ fn tcp_accept() -> std::thread::JoinHandle<()> {
 fn main() {
     println!(
         "STARTED DEAMON WITH PID: {} AND FDS: {}",
+        env::var("LISTEN_PID").unwrap(),
         env::var("LISTEN_FDS").unwrap(),
-        env::var("LISTEN_PID").unwrap()
     );
 
     let pid_should: i32 = String::from_utf8(env::var("LISTEN_PID").unwrap().as_bytes().to_vec())
@@ -178,6 +178,8 @@ fn main() {
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
     let mut stream = UnixStream::connect(socket_path).unwrap();
     stream.write_all(&b"READY=1"[..]).unwrap();
+
+    println!("DAEMON sent notification");
 
     handle.join().unwrap();
 }
