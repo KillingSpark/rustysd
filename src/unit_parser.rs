@@ -58,30 +58,39 @@ fn parse_file(content: &String) -> ParsedFile {
 
     let mut lines_left = &lines[..];
 
-    let mut current_section_name = "".to_string();
-    let mut current_section_lines = Vec::new();
-    while lines_left.len() > 0 {
-        for idx in 0..lines_left.len() {
-            let line = lines_left[idx];
-            if current_section_name == "" {
-                current_section_name = line.into();
-                current_section_lines.clear();
-            } else {
-                if line.starts_with("[") || idx == lines_left.len() - 1 {
-                    sections.insert(
-                        current_section_name.clone(),
-                        parse_section(&current_section_lines),
-                    );
-                    current_section_name = line.into();
-                    current_section_lines.clear();
-                    lines_left = &lines_left[idx + 1..];
-                    break;
-                } else {
-                    current_section_lines.push(line.into());
-                }
-            }
-        }
+    
+    // remove lines before the first section
+    while !lines_left[0].starts_with("[") {
+        lines_left = &lines_left[1..];
     }
+    let mut current_section_name: String = lines_left[0].into();
+    let mut current_section_lines = Vec::new();
+    
+    lines_left = &lines_left[1..];
+
+    while lines_left.len() > 0 {
+        let line = lines_left[0];
+
+        if line.starts_with("[") {
+            sections.insert(
+                current_section_name.clone(),
+                parse_section(&current_section_lines),
+            );
+            println!("Name {}", current_section_name);
+            current_section_name = line.into();
+            current_section_lines.clear();
+        } else {
+            println!("{}", line);
+            current_section_lines.push(line.into());
+        }
+        lines_left = &lines_left[1..];
+    }
+
+    // insert last section
+    sections.insert(
+        current_section_name.clone(),
+        parse_section(&current_section_lines),
+    );
 
     sections
 }
