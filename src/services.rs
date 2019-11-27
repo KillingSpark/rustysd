@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
 
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::{UnixListener};
 
 use crate::units::*;
 
@@ -66,7 +66,7 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<I
 pub fn service_exit_handler(
     pid: i32,
     code: i8,
-    service_table: &mut HashMap<InternalId, Unit>,
+    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
     pid_table: &mut HashMap<u32, InternalId>,
     sockets: &HashMap<String, Socket>,
 ) {
@@ -87,14 +87,16 @@ pub fn service_exit_handler(
         code
     );
 
-    let unit = service_table.get_mut(&srvc_id).unwrap();
+    let mut service_table_locked = service_table.lock().unwrap();
+    let service_table_locked: &mut HashMap<_,_> = &mut service_table_locked;
+    let unit = service_table_locked.get_mut(&srvc_id).unwrap();
     if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
         pid_table.remove(&(pid as u32));
         srvc.status = ServiceStatus::Stopped;
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
-                start_service(srvc, unit.conf.name(), sockets);
+                start_service(srvc, unit.conf.name(), sockets, srvc_id, service_table.clone());
                 pid_table.insert(srvc.pid.unwrap(), unit.id);
             } else {
                 trace!(
@@ -102,7 +104,7 @@ pub fn service_exit_handler(
                     srvc_id,
                     unit.install.required_by
                 );
-                kill_services(unit.install.required_by.clone(), service_table);
+                kill_services(unit.install.required_by.clone(), service_table_locked);
             }
         }
     }
@@ -135,7 +137,7 @@ fn run_services_recursive(
                     ServiceStatus::NeverRan => {
                         {
                             let sockets_lock = sockets_copy.lock().unwrap();
-                            start_service(srvc, name, &sockets_lock);
+                            start_service(srvc, name, &sockets_lock, id, services_copy.clone());
                         }
                         let new_pid = srvc.pid.unwrap();
                         {
@@ -206,6 +208,8 @@ pub fn run_services(
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
+    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+    id: InternalId,
     name: String,
     sockets: &HashMap<String, Socket>,
 ) {
@@ -221,16 +225,22 @@ fn start_service_with_filedescriptors(
         std::fs::create_dir_all(&notify_dir_path).unwrap();
     }
     let daemon_socket_path = notify_dir_path.join(format!("{}.notifiy_socket", &name));
-    if daemon_socket_path.exists() {
-        std::fs::remove_file(&daemon_socket_path).unwrap();
-    }
-    let listener = UnixListener::bind(&daemon_socket_path).unwrap();
+    let listener = match &srvc.notify_access_socket {
+        None => {
+            if daemon_socket_path.exists() {
+                std::fs::remove_file(&daemon_socket_path).unwrap();
+            }
+            let new_listener = Arc::new(UnixListener::bind(&daemon_socket_path).unwrap());
+            srvc.notify_access_socket.get_or_insert(new_listener)
+        },
+        Some(l) => l,
+    };
 
     // NOTIFY_SOCKET
     let notify_socket_env_var = if daemon_socket_path.starts_with(".") {
         let cur_dir = std::env::current_dir().unwrap();
         cur_dir.join(&daemon_socket_path)
-    }else{
+    } else {
         daemon_socket_path
     };
 
@@ -239,7 +249,11 @@ fn start_service_with_filedescriptors(
             srvc.pid = Some(child as u32);
             srvc.status = ServiceStatus::Running;
 
-            trace!(" [FORK_PARENT] Service: {} forked with pid: {}", name, srvc.pid.unwrap());
+            trace!(
+                " [FORK_PARENT] Service: {} forked with pid: {}",
+                name,
+                srvc.pid.unwrap()
+            );
 
             if let Some(conf) = &srvc.service_config {
                 if let ServiceType::Notify = conf.srcv_type {
@@ -262,14 +276,16 @@ fn start_service_with_filedescriptors(
                             trace!(" [FORK_PARENT] Notification was valid");
                             break;
                         } else {
-                            trace!(" [FORK_PARENT] Notification did not contain 'ready'.Keep waiting");
+                            trace!(
+                                " [FORK_PARENT] Notification did not contain 'ready'.Keep waiting"
+                            );
                         }
                     }
+                    crate::notification_handler::handle_stream(stream, id, service_table);
                 } else {
                     trace!(" [FORK_PARENT] service {} doesnt notify", name);
                 }
             }
-            srvc.notify_access_socket = Some(Arc::new(listener));
         }
         Ok(nix::unistd::ForkResult::Child) => {
             let pid = nix::unistd::getpid();
@@ -412,7 +428,7 @@ fn start_service_with_filedescriptors(
     }
 }
 
-pub fn start_service(srvc: &mut Service, name: String, sockets: &HashMap<String, Socket>) {
+pub fn start_service(srvc: &mut Service, name: String, sockets: &HashMap<String, Socket>, id: InternalId, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
     srvc.status = ServiceStatus::Starting;
 
     let split: Vec<&str> = match &srvc.service_config {
@@ -422,7 +438,7 @@ pub fn start_service(srvc: &mut Service, name: String, sockets: &HashMap<String,
 
     if let Some(srvc_conf) = &srvc.service_config {
         if srvc_conf.sockets.len() > 0 {
-            start_service_with_filedescriptors(srvc, name, sockets);
+            start_service_with_filedescriptors(srvc, service_table, id, name, sockets);
         } else {
             let mut cmd = Command::new(split[0]);
             for part in &split[1..] {

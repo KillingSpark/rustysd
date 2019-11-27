@@ -1,9 +1,12 @@
+use std::os::unix::io::AsRawFd;
+use std::os::unix::net::SocketAddr;
 use std::os::unix::net::UnixListener;
 use std::os::unix::net::UnixStream;
-use std::os::unix::net::SocketAddr;
-use std::os::unix::io::AsRawFd;
 
-pub fn select(listeners: &Vec<(String, &UnixListener)>, time_out: Option<&mut nix::sys::time::TimeVal>) -> nix::Result<Vec<(String,(UnixStream, SocketAddr))>> {
+pub fn select<Key: Clone>(
+    listeners: &Vec<(Key, &UnixListener)>,
+    time_out: Option<&mut nix::sys::time::TimeVal>,
+) -> nix::Result<Vec<(Key, (UnixStream, SocketAddr))>> {
     let mut fd_to_name = Vec::new();
     let mut streams = Vec::new();
 
@@ -18,15 +21,29 @@ pub fn select(listeners: &Vec<(String, &UnixListener)>, time_out: Option<&mut ni
         if max_fd < fd {
             max_fd = fd;
         }
-    };
+    }
 
-    nix::sys::select::select(max_fd + 1, Some(&mut fd_set), None, Some(&mut fd_set_err), time_out)?;
+    loop {
+        match nix::sys::select::select(
+            max_fd + 1,
+            Some(&mut fd_set),
+            None,
+            Some(&mut fd_set_err),
+            time_out,
+        ) {
+            Ok(_) => break,
+            Err(e) => match e {
+                nix::Error::Sys(nix::errno::EINTR) => break,
+                _ => return Err(e),
+            },
+        }
+    }
 
-    for (fd, (name,listener)) in fd_to_name {
+    for (fd, (name, listener)) in fd_to_name {
         if fd_set.contains(fd) {
             streams.push((name.clone(), listener.accept().unwrap()));
         }
     }
-    
+
     Ok(streams)
 }

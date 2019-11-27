@@ -179,7 +179,19 @@ fn main() {
     let mut stream = UnixStream::connect(socket_path).unwrap();
     stream.write_all(&b"READY=1"[..]).unwrap();
 
-    println!("DAEMON sent notification");
+    for _ in 0..10 {
+        stream.write_all(&b"STATUS=Still looping first"[..]).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    stream.shutdown(std::net::Shutdown::Both).unwrap();
+
+    let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
+    let mut stream = UnixStream::connect(socket_path).unwrap();
+
+    for _ in 0..10 {
+        stream.write_all(&b"STATUS=Still looping second"[..]).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
 
     handle.join().unwrap();
 }
