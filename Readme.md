@@ -17,12 +17,14 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Passing filedescriptors to the daemons
 1. Naming file descriptors in the env variables with the name from the *.socket file
 1. Waiting for the READY=1 notification
+1. Matching services and sockets either by name or dynamically by parsing the appropiate settings in the .service/.socket files
+1. The parts of the sd_notify API
 
 ## What does not work
 Just some stuff I know does not work but would be cool
 
 1. The whole dbus shenanigans
-1. Matching services and sockets more dynamically
 1. More socket types 
     1. fifos are missing
 1. The whole sd_notify API (with storing filedescriptors and such)
+1. A systemctl equivalent to control/query rustysd 
