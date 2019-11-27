@@ -189,6 +189,8 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Unit {
             service_config: service_config,
             socket_names: Vec::new(),
             notify_access_socket: None,
+
+            status_msgs: Vec::new(),
         }),
     }
 }

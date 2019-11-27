@@ -5,11 +5,17 @@ use std::io::Read;
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 
-fn handle_stream_mut(stream: &mut UnixStream, id: InternalId, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+fn handle_stream_mut(
+    stream: &mut UnixStream,
+    id: InternalId,
+    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+) {
+    let mut buffer = String::new();
     loop {
         let mut buf = [0u8; 512];
         let bytes = stream.read(&mut buf[..]).unwrap();
-        
+        buffer.push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
+
         if bytes == 0 {
             let service_table: &HashMap<_, _> = &service_table.lock().unwrap();
             let srvc_unit = service_table.get(&id).unwrap();
@@ -19,21 +25,39 @@ fn handle_stream_mut(stream: &mut UnixStream, id: InternalId, service_table: Arc
             );
             break;
         }
-        {
-            let service_table: &HashMap<_, _> = &service_table.lock().unwrap();
-            let srvc_unit = service_table.get(&id).unwrap();
-            trace!(
-                " [Notification-Listener] Service: {} sent notification: {}",
-                srvc_unit.conf.name(),
-                String::from_utf8(Vec::from(&buf[..bytes])).unwrap(),
-            );
+        while buffer.contains('\n') {
+            let (line, rest) = buffer.split_at(buffer.find('\n').unwrap());
+            let line = line.to_owned();
+            buffer = rest[1..].to_owned();
+            let split: Vec<_> = line.split("=").collect();
 
-            // TODO process notification content
+            {
+                let service_table: &mut HashMap<_, _> = &mut service_table.lock().unwrap();
+                let srvc_unit = service_table.get_mut(&id).unwrap();
+                let name = srvc_unit.conf.name();
+
+                // TODO process notification content
+                match split[0] {
+                    "STATUS" => {
+                        if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
+                            srvc.status_msgs.push(split[1].to_owned());
+                            trace!("New status message pushed from service {}: {}", name, srvc.status_msgs.last().unwrap());
+                        }
+                    },
+                    _ => {
+                        warn!("Unknown notification name{}", split[0]);
+                    }
+                }
+            }
         }
     }
 }
 
-pub fn handle_stream(mut stream: UnixStream, id: InternalId, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+pub fn handle_stream(
+    mut stream: UnixStream,
+    id: InternalId,
+    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+) {
     std::thread::spawn(move || {
         handle_stream_mut(&mut stream, id, service_table);
     });

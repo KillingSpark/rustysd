@@ -26,6 +26,8 @@ pub struct Service {
     pub status: ServiceStatus,
     pub socket_names: Vec<String>,
     pub notify_access_socket: Option<Arc<UnixListener>>,
+
+    pub status_msgs: Vec<String>,
 }
 
 pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Unit>) {

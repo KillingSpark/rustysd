@@ -173,25 +173,22 @@ fn main() {
     unix_seq_pack_accept();
     handle_upd();
     handle_unix_datagram();
-    let handle = tcp_accept();
+    let _handle = tcp_accept();
 
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
     let mut stream = UnixStream::connect(socket_path).unwrap();
     stream.write_all(&b"READY=1"[..]).unwrap();
-
-    for _ in 0..10 {
-        stream.write_all(&b"STATUS=Still looping first"[..]).unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
     stream.shutdown(std::net::Shutdown::Both).unwrap();
 
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
     let mut stream = UnixStream::connect(socket_path).unwrap();
 
-    for _ in 0..10 {
-        stream.write_all(&b"STATUS=Still looping second"[..]).unwrap();
+    let mut counter = 0;
+    loop {
+        stream.write_all(format!("STATUS=Looping since {} seconds\n", counter).as_bytes()).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(1));
+        counter += 1;
     }
 
-    handle.join().unwrap();
+    //_handle.join().unwrap();
 }
