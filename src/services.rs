@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
 
-use std::os::unix::net::{UnixListener};
+use std::os::unix::net::UnixListener;
 
 use crate::units::*;
 
@@ -90,7 +90,7 @@ pub fn service_exit_handler(
     );
 
     let mut service_table_locked = service_table.lock().unwrap();
-    let service_table_locked: &mut HashMap<_,_> = &mut service_table_locked;
+    let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
     let unit = service_table_locked.get_mut(&srvc_id).unwrap();
     if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
         pid_table.remove(&(pid as u32));
@@ -98,7 +98,13 @@ pub fn service_exit_handler(
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
-                start_service(srvc, unit.conf.name(), sockets, srvc_id, service_table.clone());
+                start_service(
+                    srvc,
+                    unit.conf.name(),
+                    sockets,
+                    srvc_id,
+                    service_table.clone(),
+                );
                 pid_table.insert(srvc.pid.unwrap(), unit.id);
             } else {
                 trace!(
@@ -234,7 +240,7 @@ fn start_service_with_filedescriptors(
             }
             let new_listener = Arc::new(UnixListener::bind(&daemon_socket_path).unwrap());
             srvc.notify_access_socket.get_or_insert(new_listener)
-        },
+        }
         Some(l) => l,
     };
 
@@ -430,7 +436,13 @@ fn start_service_with_filedescriptors(
     }
 }
 
-pub fn start_service(srvc: &mut Service, name: String, sockets: &HashMap<String, Socket>, id: InternalId, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+pub fn start_service(
+    srvc: &mut Service,
+    name: String,
+    sockets: &HashMap<String, Socket>,
+    id: InternalId,
+    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+) {
     srvc.status = ServiceStatus::Starting;
 
     let split: Vec<&str> = match &srvc.service_config {

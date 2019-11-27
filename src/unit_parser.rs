@@ -58,14 +58,13 @@ fn parse_file(content: &String) -> ParsedFile {
 
     let mut lines_left = &lines[..];
 
-    
     // remove lines before the first section
     while !lines_left[0].starts_with("[") {
         lines_left = &lines_left[1..];
     }
     let mut current_section_name: String = lines_left[0].into();
     let mut current_section_lines = Vec::new();
-    
+
     lines_left = &lines_left[1..];
 
     while lines_left.len() > 0 {

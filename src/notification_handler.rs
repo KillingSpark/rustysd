@@ -41,9 +41,13 @@ fn handle_stream_mut(
                     "STATUS" => {
                         if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
                             srvc.status_msgs.push(split[1].to_owned());
-                            trace!("New status message pushed from service {}: {}", name, srvc.status_msgs.last().unwrap());
+                            trace!(
+                                "New status message pushed from service {}: {}",
+                                name,
+                                srvc.status_msgs.last().unwrap()
+                            );
                         }
-                    },
+                    }
                     _ => {
                         warn!("Unknown notification name{}", split[0]);
                     }

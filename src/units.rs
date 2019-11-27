@@ -1,8 +1,8 @@
-use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use crate::services::Service;
+use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 pub type InternalId = u64;
 
@@ -49,7 +49,7 @@ impl Unit {
 #[derive(Clone)]
 pub struct UnitConfig {
     pub filepath: PathBuf,
-    
+
     pub wants: Vec<String>,
     pub requires: Vec<String>,
     pub before: Vec<String>,
@@ -67,12 +67,11 @@ impl UnitConfig {
             .to_owned();
 
         let split: Vec<_> = name.split(".").collect();
-        let name = split[0..split.len()-1].join(".");
+        let name = split[0..split.len() - 1].join(".");
 
         name
     }
 }
-
 
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
@@ -84,7 +83,7 @@ pub struct SocketConfig {
     pub fd: Option<Arc<Box<AsRawFd>>>,
 }
 
-unsafe impl Send for SocketConfig{}
+unsafe impl Send for SocketConfig {}
 
 #[derive(Clone)]
 pub struct InstallConfig {
@@ -139,7 +138,9 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) -> HashMap<Strin
             wanted_by.push((*id, unit.id));
         }
         for name in &conf.requires {
-            let id = name_to_id.get(name.as_str()).expect(&format!("Name {} had no matching id", name));
+            let id = name_to_id
+                .get(name.as_str())
+                .expect(&format!("Name {} had no matching id", name));
             unit.install.requires.push(*id);
             required_by.push((*id, unit.id));
         }

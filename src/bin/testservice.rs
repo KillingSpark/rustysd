@@ -1,8 +1,8 @@
 use std::env;
 use std::io::Read;
+use std::io::Write;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
-use std::io::Write;
 
 extern crate nix;
 
@@ -108,10 +108,10 @@ fn unix_seq_pack_accept() {
             let mut addr_len = 0;
             let new_con_fd =
                 unsafe { libc::accept(listen_fd, &mut new_con_sock_addr, &mut addr_len) };
-                if new_con_fd < 0  {
-                    println!("Error while accepting unix seqpack fd: {}", new_con_fd);
-                    return;
-                }
+            if new_con_fd < 0 {
+                println!("Error while accepting unix seqpack fd: {}", new_con_fd);
+                return;
+            }
             handle_unix_seq_pack(new_con_fd);
         }
     });
@@ -185,7 +185,9 @@ fn main() {
 
     let mut counter = 0;
     loop {
-        stream.write_all(format!("STATUS=Looping since {} seconds\n", counter).as_bytes()).unwrap();
+        stream
+            .write_all(format!("STATUS=Looping since {} seconds\n", counter).as_bytes())
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_secs(1));
         counter += 1;
     }

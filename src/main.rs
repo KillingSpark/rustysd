@@ -3,8 +3,8 @@ mod sockets;
 mod unit_parser;
 mod units;
 use units::*;
-mod unix_listener_select;
 mod notification_handler;
+mod unix_listener_select;
 
 extern crate signal_hook;
 use signal_hook::iterator::Signals;
@@ -100,7 +100,11 @@ fn main() {
     let pid_table = Arc::new(Mutex::new(pid_table));
     let socket_table = Arc::new(Mutex::new(socket_table));
 
-    notification_handler::handle_notifications(socket_table.clone(), service_table.clone(), pid_table.clone());
+    notification_handler::handle_notifications(
+        socket_table.clone(),
+        service_table.clone(),
+        pid_table.clone(),
+    );
 
     loop {
         // Pick up new signals

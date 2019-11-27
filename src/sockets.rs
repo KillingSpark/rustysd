@@ -162,9 +162,11 @@ pub struct Socket {
 
 impl Socket {
     pub fn build_name_list(&self) -> String {
-        let mut name_list = String::with_capacity(self.name.as_bytes().len() * self.sockets.len() + self.sockets.len());
+        let mut name_list = String::with_capacity(
+            self.name.as_bytes().len() * self.sockets.len() + self.sockets.len(),
+        );
         name_list.push_str(&self.name);
-        for _ in 0..self.sockets.len()-1 {
+        for _ in 0..self.sockets.len() - 1 {
             name_list.push(':');
             name_list.push_str(&self.name);
         }
