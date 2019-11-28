@@ -203,7 +203,7 @@ pub fn apply_sockets_to_services(
                 if let UnitSpecialized::Service(srvc) = srvc {
                     // add sockets for services with the exact same name
                     if (srvc_unit.conf.name() == sock_unit.conf.name())
-                        && !srvc.socket_names.contains(&sock_unit.conf.name())
+                        && !srvc.socket_names.contains(&sock.name)
                     {
                         trace!(
                             "add socket: {} to service: {}",
@@ -217,7 +217,9 @@ pub fn apply_sockets_to_services(
 
                     // add sockets to services that specify that the socket belongs to them
                     if let Some(srvc_conf) = &srvc.service_config {
-                        if srvc_conf.sockets.contains(&sock_unit.conf.name()) {
+                        if srvc_conf.sockets.contains(&sock_unit.conf.name())
+                            && !srvc.socket_names.contains(&sock.name)
+                        {
                             trace!(
                                 "add socket: {} to service: {}",
                                 sock_unit.conf.name(),
@@ -236,7 +238,7 @@ pub fn apply_sockets_to_services(
                     let srvc = &mut srvc_unit.specialized;
                     if let UnitSpecialized::Service(srvc) = srvc {
                         if (*srvc_name == srvc_unit.conf.name())
-                            && !srvc.socket_names.contains(&sock_unit.conf.name())
+                            && !srvc.socket_names.contains(&sock.name)
                         {
                             trace!(
                                 "add socket: {} to service: {}",

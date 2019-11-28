@@ -1,9 +1,9 @@
 [Service]
 Exec= ./target/debug/testservice
-Sockets= test_second
+Sockets= test2
 NotifyAccess= all
 Type= notify
 keep_alive = true
 
-[Unit]
-Before= test2
+[Install]
+Before= test

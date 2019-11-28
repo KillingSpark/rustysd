@@ -25,7 +25,7 @@ pub fn handle_signals(
                                 code,
                                 service_table.clone(),
                                 &mut pid_table.lock().unwrap(),
-                                &socket_table.lock().unwrap(),
+                                socket_table.clone(),
                             ),
                             Err(e) => {
                                 error!("{}", e);

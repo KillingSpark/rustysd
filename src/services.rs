@@ -69,7 +69,7 @@ pub fn service_exit_handler(
     code: i8,
     service_table: ArcMutServiceTable,
     pid_table: &mut HashMap<u32, InternalId>,
-    sockets: &SocketTable,
+    sockets: ArcMutSocketTable,
 ) {
     let srvc_id = *(match pid_table.get(&(pid as u32)) {
         Some(id) => id,
@@ -142,10 +142,8 @@ fn run_services_recursive(
             if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
                 match srvc.status {
                     ServiceStatus::NeverRan => {
-                        {
-                            let sockets_lock = sockets_copy.lock().unwrap();
-                            start_service(srvc, name, &sockets_lock, id, services_copy.clone());
-                        }
+                        
+                        start_service(srvc, name.clone(), sockets_copy.clone(), id, services_copy.clone());
                         let new_pid = srvc.pid.unwrap();
                         {
                             let mut services_locked = services_copy.lock().unwrap();
@@ -188,6 +186,7 @@ pub fn run_services(
     for (id, unit) in &services {
         if unit.install.after.is_empty() {
             root_services.push(*id);
+            trace!("Root service: {}", unit.conf.name());
         }
     }
 

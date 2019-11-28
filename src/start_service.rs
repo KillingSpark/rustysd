@@ -7,24 +7,27 @@ use std::sync::Arc;
 
 use std::process::{Command, Stdio};
 
-fn after_fork_child(srvc: &mut Service, sockets: &SocketTable, notify_socket_env_var: &str) {
-    let pid = nix::unistd::getpid();
-    //here we are in the child process. We need to close every file descriptor we dont need anymore after the exec
+fn after_fork_child(srvc: &mut Service, name: &String, sockets: &SocketTable, notify_socket_env_var: &str) {
+    // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
+    // But since this is the only thread that is in the child process the lock will never be released!
 
+    //here we are in the child process. We need to close every file descriptor we dont need anymore after the exec
+    
     // TODO maybe all fd's should be marked with FD_CLOEXEC when openend
     // and here we only unflag those that we want to keep?
-    trace!("[FORK_CHILD] CLOSING FDS");
-
+    //trace!("[FORK_CHILD {}] CLOSING FDS", name);
+    
+    let pid = nix::unistd::getpid();
     for sock_unit in sockets.values() {
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
             if !srvc.socket_names.contains(&sock.name) {
-                trace!("[FORK_CHILD] CLOSE FDS FOR SOCKET: {}", sock.name);
+                //trace!("[FORK_CHILD {}] CLOSE FDS FOR SOCKET: {}", name, sock.name);
                 for conf in &sock.sockets {
                     match &conf.fd {
                         Some(fd) => {
                             let fd: i32 = (**fd).as_raw_fd();
                             nix::unistd::close(fd).unwrap();
-                            trace!("[FORK_CHILD] DO CLOSE FD: {}", fd);
+                            //trace!("[FORK_CHILD {}] DO CLOSE FD: {}", name, fd);
                         }
                         None => {
                             //this should not happen but if it does its not too bad
@@ -32,7 +35,7 @@ fn after_fork_child(srvc: &mut Service, sockets: &SocketTable, notify_socket_env
                     }
                 }
             } else {
-                trace!("[FORK_CHILD] DONT CLOSE FDS");
+                //trace!("[FORK_CHILD {}] DONT CLOSE FDS", name);
             }
         }
     }
@@ -62,40 +65,14 @@ fn after_fork_child(srvc: &mut Service, sockets: &SocketTable, notify_socket_env
 
     let sockets_by_name = get_sockets_by_name(sockets);
     for sock_name in &srvc.socket_names {
-        trace!("[FORK_CHILD] Counting fds for socket: {}", sock_name);
+        //trace!("[FORK_CHILD {}] Counting fds for socket: {}", name, sock_name);
         match sockets_by_name.get(sock_name) {
             Some(sock) => {
                 num_fds += sock.sockets.len();
                 name_lists.push(sock.build_name_list());
             }
-            None => warn!("Socket was specified that cannot be found: {}", sock_name),
+            None => eprintln!("[FORK_CHILD {}] Socket was specified that cannot be found: {}", name, sock_name),
         }
-        //let sock: Vec<_> = sockets
-        //    .iter()
-        //    .map(|(_id, unit)| {
-        //        if let UnitSpecialized::Socket(sock) = unit.specialized {
-        //            Some(sock)
-        //        } else {
-        //            None
-        //        }
-        //    })
-        //    .filter(|sock| match sock {
-        //        Some(sock) => {
-        //            if sock.name == *sock_name {
-        //                true
-        //            } else {
-        //                false
-        //            }
-        //        }
-        //        None => false,
-        //    })
-        //    .map(|x| x.unwrap())
-        //    .collect();
-        //if sock.len() == 1 {
-        //    let sock = sock[0];
-        //    num_fds += sock.sockets.len();
-        //    name_lists.push(sock.build_name_list());
-        //}
     }
 
     let pid_str = &format!("{}", pid);
@@ -121,13 +98,14 @@ fn after_fork_child(srvc: &mut Service, sockets: &SocketTable, notify_socket_env
         setenv("NOTIFY_SOCKET", notify_socket_env_var);
     }
 
-    trace!(
-        "[FORK_CHILD] pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}, LISTEN_FDNAMES: {}",
-        pid,
-        pid_str,
-        fds_str,
-        full_name_list
-    );
+    //trace!(
+    //    "[FORK_CHILD {}] pid: {}, ENV: LISTEN_PID: {}  LISTEN_FD: {}, LISTEN_FDNAMES: {}",
+    //    name,
+    //    pid,
+    //    pid_str,
+    //    fds_str,
+    //    full_name_list
+    //);
 
     // no more logging after this point!
     // The filedescriptor used by the logger might have been duped to another
@@ -155,7 +133,7 @@ fn after_fork_child(srvc: &mut Service, sockets: &SocketTable, notify_socket_env
                     fd_idx += 1;
                 }
             }
-            None => warn!("Socket was specified that cannot be found: {}", sock_name),
+            None => eprintln!("[FORK_CHILD {}] Socket was specified that cannot be found: {}", name, sock_name),
         }
     }
 
@@ -252,7 +230,7 @@ fn start_service_with_filedescriptors(
     service_table: ArcMutServiceTable,
     id: InternalId,
     name: String,
-    sockets: &SocketTable,
+    sockets: ArcMutSocketTable,
 ) {
     // 1. fork
     // 2. in fork use dup2 to map all relevant file desrciptors to 3..x
@@ -275,8 +253,11 @@ fn start_service_with_filedescriptors(
         daemon_socket_path
     };
 
+    // make sure we have the lock that the child will need
+    let sockets_lock = sockets.lock().unwrap();
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
+            std::mem::drop(sockets_lock);
             after_fork_parent(
                 srvc,
                 service_table,
@@ -287,16 +268,16 @@ fn start_service_with_filedescriptors(
             );
         }
         Ok(nix::unistd::ForkResult::Child) => {
-            after_fork_child(srvc, sockets, notify_socket_env_var.to_str().unwrap());
+            after_fork_child(srvc, &name, &*sockets_lock, notify_socket_env_var.to_str().unwrap());
         }
-        Err(_) => println!("Fork for service: {} failed", name),
+        Err(e) => error!("Fork for service: {} failed with: {}", name, e),
     }
 }
 
 pub fn start_service(
     srvc: &mut Service,
     name: String,
-    sockets: &SocketTable,
+    sockets: ArcMutServiceTable,
     id: InternalId,
     service_table: ArcMutServiceTable,
 ) {
