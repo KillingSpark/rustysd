@@ -6,6 +6,7 @@ use units::*;
 mod control;
 mod notification_handler;
 mod unix_listener_select;
+mod start_service;
 
 extern crate signal_hook;
 use signal_hook::iterator::Signals;
