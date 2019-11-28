@@ -12,6 +12,25 @@ use std::path::PathBuf;
 type ParsedSection = HashMap<String, Vec<(u32, String)>>;
 type ParsedFile = HashMap<String, ParsedSection>;
 
+pub fn load_all_units(path: &PathBuf) -> Result<(ServiceTable, SocketTable), String> {
+    let mut base_id = 0;
+    let mut service_table = HashMap::new();
+    let mut socket_unit_table = HashMap::new();
+    parse_all_services(
+        &mut service_table,
+        path,
+        &mut base_id,
+    )?;
+
+    parse_all_sockets(
+        &mut socket_unit_table,
+        path,
+        &mut base_id,
+    )?;
+
+    Ok((service_table, socket_unit_table))
+}
+
 fn parse_section(lines: &[&str]) -> ParsedSection {
     let mut entries: ParsedSection = HashMap::new();
 

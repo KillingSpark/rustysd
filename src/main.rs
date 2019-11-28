@@ -26,22 +26,7 @@ use std::sync::{Arc, Mutex};
 fn main() {
     logging::setup_logging().unwrap();
 
-    let mut base_id = 0;
-    let mut service_table = HashMap::new();
-    unit_parser::parse_all_services(
-        &mut service_table,
-        &PathBuf::from("./test_units"),
-        &mut base_id,
-    )
-    .unwrap();
-
-    let mut socket_unit_table = HashMap::new();
-    unit_parser::parse_all_sockets(
-        &mut socket_unit_table,
-        &PathBuf::from("./test_units"),
-        &mut base_id,
-    )
-    .unwrap();
+    let (mut service_table, mut socket_unit_table) = unit_parser::load_all_units(&PathBuf::from("./test_units")).unwrap();
 
     units::fill_dependencies(&mut service_table);
     for srvc in service_table.values_mut() {
