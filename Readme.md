@@ -6,6 +6,7 @@ in anything that is important.
 It does look somewhat promising, the really ugly parts are "working". There is a lot of cleanup to be done. There is a whole lot of unwrap() calling
 where error handling should be done properly.
 
+
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented
 
@@ -20,8 +21,12 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Matching services and sockets either by name or dynamically by parsing the appropiate settings in the .service/.socket files
 1. The parts of the sd_notify API
 
+
+### See for yourself
+Running `cargo build && cargo run --bin rustysd` will build the test service and run rustysd which will start that testservice
+
 ## What does not work
-Just some stuff I know does not work but would be cool
+Just some stuff I know does not work but would be cool to have
 
 1. The whole dbus shenanigans
 1. More socket types 
