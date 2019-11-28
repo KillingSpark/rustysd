@@ -24,7 +24,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-fn main() {
+fn setup_logging() -> Result<(), String>{
     let lmbrjck_conf = lumberjack_rs::Conf {
         max_age: None,
         max_files: Some(10),
@@ -55,26 +55,31 @@ fn main() {
             //TODO do something with the result
             let _ = result;
         }))
-        .apply()
-        .unwrap();
+        .apply().map_err(|e| format!("Error while stting up logger: {}", e))
+}
+
+
+
+fn main() {
+    setup_logging().unwrap();
 
     let signals =
         Signals::new(&[signal_hook::SIGCHLD]).expect("Couldnt setup listening to the signals");
 
-    let mut service_table = HashMap::new();
     let mut base_id = 0;
+    let mut service_table = HashMap::new();
     unit_parser::parse_all_services(
         &mut service_table,
         &PathBuf::from("./test_units"),
         &mut base_id,
-    );
+    ).unwrap();
 
     let mut socket_unit_table = HashMap::new();
     unit_parser::parse_all_sockets(
         &mut socket_unit_table,
         &PathBuf::from("./test_units"),
         &mut base_id,
-    );
+    ).unwrap();
 
     let _name_to_id = units::fill_dependencies(&mut service_table);
     for srvc in service_table.values_mut() {
