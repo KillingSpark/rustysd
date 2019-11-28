@@ -83,24 +83,17 @@ fn main() {
 
     let service_table = apply_sockets_to_services(service_table, &socket_unit_table);
 
-    let mut socket_table = HashMap::new();
-    for (_id, socket_unit) in socket_unit_table {
-        if let UnitSpecialized::Socket(socket) = socket_unit.specialized {
-            socket_table.insert(socket.name.clone(), socket);
-        }
-    }
-
-    sockets::open_all_sockets(&mut socket_table).unwrap();
+    sockets::open_all_sockets(&mut socket_unit_table).unwrap();
 
     services::print_all_services(&service_table);
 
     let pid_table = HashMap::new();
     let (service_table, pid_table) =
-        services::run_services(service_table, pid_table, socket_table.clone());
+        services::run_services(service_table, pid_table, socket_unit_table.clone());
 
     let service_table = Arc::new(Mutex::new(service_table));
     let pid_table = Arc::new(Mutex::new(pid_table));
-    let socket_table = Arc::new(Mutex::new(socket_table));
+    let socket_table = Arc::new(Mutex::new(socket_unit_table));
 
     notification_handler::handle_notifications(
         socket_table.clone(),

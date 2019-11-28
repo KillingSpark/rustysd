@@ -3,8 +3,42 @@ use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 pub type InternalId = u64;
+pub type SocketTable = HashMap<u64, Unit>;
+pub type ArcMutSocketTable = Arc<Mutex<SocketTable>>;
+pub type ServiceTable = HashMap<u64, Unit>;
+pub type ArcMutServiceTable = Arc<Mutex<ServiceTable>>;
+
+pub fn find_sock_with_name<'a, 'b>(name: &String, sockets: &'b SocketTable) -> Option<&'b Socket> {
+    let sock: Vec<&'b Socket> = sockets
+        .iter()
+        .map(|(_id, unit)| {
+            if let UnitSpecialized::Socket(sock) = &unit.specialized {
+                Some(sock)
+            } else {
+                None
+            }
+        })
+        .filter(|sock| match sock {
+            Some(sock) => {
+                if sock.name == *name {
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        })
+        .map(|x| x.unwrap())
+        .collect();
+    if sock.len() == 1 {
+        Some(sock[0])
+    } else {
+        None
+    }
+}
 
 #[derive(Clone)]
 pub enum UnitSpecialized {
@@ -74,7 +108,6 @@ impl UnitConfig {
 }
 
 use std::os::unix::io::AsRawFd;
-use std::sync::Arc;
 #[derive(Clone)]
 pub struct SocketConfig {
     pub kind: SocketKind,

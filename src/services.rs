@@ -68,9 +68,9 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<I
 pub fn service_exit_handler(
     pid: i32,
     code: i8,
-    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+    service_table: ArcMutServiceTable,
     pid_table: &mut HashMap<u32, InternalId>,
-    sockets: &HashMap<String, Socket>,
+    sockets: &SocketTable,
 ) {
     let srvc_id = *(match pid_table.get(&(pid as u32)) {
         Some(id) => id,
@@ -121,9 +121,9 @@ pub fn service_exit_handler(
 use std::sync::Mutex;
 fn run_services_recursive(
     ids_to_start: Vec<InternalId>,
-    services: Arc<Mutex<HashMap<InternalId, Unit>>>,
+    services: ArcMutServiceTable,
     pids: Arc<Mutex<HashMap<u32, InternalId>>>,
-    sockets: Arc<Mutex<HashMap<String, Socket>>>,
+    sockets: ArcMutSocketTable,
     tpool: Arc<Mutex<ThreadPool>>,
     waitgroup: crossbeam::sync::WaitGroup,
 ) {
@@ -180,9 +180,9 @@ fn run_services_recursive(
 }
 
 pub fn run_services(
-    services: HashMap<InternalId, Unit>,
+    services: ServiceTable,
     pids: HashMap<u32, InternalId>,
-    sockets: HashMap<String, Socket>,
+    sockets: SocketTable,
 ) -> (HashMap<InternalId, Unit>, HashMap<u32, InternalId>) {
     let mut root_services = Vec::new();
 
@@ -216,10 +216,10 @@ pub fn run_services(
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
-    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+    service_table: ArcMutServiceTable,
     id: InternalId,
     name: String,
-    sockets: &HashMap<String, Socket>,
+    sockets: &SocketTable,
 ) {
     // 1. fork
     // 2. in fork use dup2 to map all relevant file desrciptors to 3..x
@@ -271,22 +271,27 @@ fn start_service_with_filedescriptors(
 
                     let (mut stream, _addr) = listener.accept().unwrap();
                     trace!(" [FORK_PARENT] Got notification connection");
-                    
-                   
+
                     loop {
-                        let bytes: Vec<_> = (&mut stream).bytes().map(|x| x.unwrap()).take_while(|x| *x != b'\n').collect();
+                        let bytes: Vec<_> = (&mut stream)
+                            .bytes()
+                            .map(|x| x.unwrap())
+                            .take_while(|x| *x != b'\n')
+                            .collect();
                         let note_string = String::from_utf8(bytes).unwrap();
                         trace!(
                             " [FORK_PARENT] Notification received from service: {:?}",
                             note_string,
                         );
-                        crate::notification_handler::handle_notification_message(&note_string, srvc, name.clone());
-                        if let ServiceStatus::Running = srvc.status  {
+                        crate::notification_handler::handle_notification_message(
+                            &note_string,
+                            srvc,
+                            name.clone(),
+                        );
+                        if let ServiceStatus::Running = srvc.status {
                             break;
-                        }else{
-                            trace!(
-                                " [FORK_PARENT] Service still not ready",
-                            );
+                        } else {
+                            trace!(" [FORK_PARENT] Service still not ready",);
                         }
                     }
                     crate::notification_handler::handle_stream(stream, id, service_table);
@@ -305,23 +310,25 @@ fn start_service_with_filedescriptors(
             // and here we only unflag those that we want to keep?
             trace!(" [FORK_CHILD] CLOSING FDS");
 
-            for (name, sock) in sockets {
-                trace!(" [FORK_CHILD] CLOSE FDS FOR SOCKET: {}", name);
-                if !srvc.socket_names.contains(&name) {
-                    for conf in &sock.sockets {
-                        match &conf.fd {
-                            Some(fd) => {
-                                let fd: i32 = (**fd).as_raw_fd();
-                                nix::unistd::close(fd).unwrap();
-                                trace!(" [FORK_CHILD] DO CLOSE FD: {}", fd);
-                            }
-                            None => {
-                                //this should not happen but if it does its not too bad
+            for (_id, sock_unit) in sockets {
+                if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
+                    if !srvc.socket_names.contains(&sock.name) {
+                        trace!(" [FORK_CHILD] CLOSE FDS FOR SOCKET: {}", sock.name);
+                        for conf in &sock.sockets {
+                            match &conf.fd {
+                                Some(fd) => {
+                                    let fd: i32 = (**fd).as_raw_fd();
+                                    nix::unistd::close(fd).unwrap();
+                                    trace!(" [FORK_CHILD] DO CLOSE FD: {}", fd);
+                                }
+                                None => {
+                                    //this should not happen but if it does its not too bad
+                                }
                             }
                         }
+                    } else {
+                        trace!(" [FORK_CHILD] DONT CLOSE FDS");
                     }
-                } else {
-                    trace!(" [FORK_CHILD] DONT CLOSE FDS");
                 }
             }
 
@@ -350,10 +357,39 @@ fn start_service_with_filedescriptors(
 
             for sock_name in &srvc.socket_names {
                 trace!(" [FORK_CHILD] Counting fds for socket: {}", sock_name);
-                if let Some(sock) = sockets.get(sock_name) {
-                    num_fds += sock.sockets.len();
+                match find_sock_with_name(sock_name, sockets) {
+                    Some(sock) => {
+                        num_fds += sock.sockets.len();
                     name_lists.push(sock.build_name_list());
+                    }
+                    None => warn!("Socket was specified that cannot be found: {}", sock_name),
                 }
+                //let sock: Vec<_> = sockets
+                //    .iter()
+                //    .map(|(_id, unit)| {
+                //        if let UnitSpecialized::Socket(sock) = unit.specialized {
+                //            Some(sock)
+                //        } else {
+                //            None
+                //        }
+                //    })
+                //    .filter(|sock| match sock {
+                //        Some(sock) => {
+                //            if sock.name == *sock_name {
+                //                true
+                //            } else {
+                //                false
+                //            }
+                //        }
+                //        None => false,
+                //    })
+                //    .map(|x| x.unwrap())
+                //    .collect();
+                //if sock.len() == 1 {
+                //    let sock = sock[0];
+                //    num_fds += sock.sockets.len();
+                //    name_lists.push(sock.build_name_list());
+                //}
             }
 
             let pid_str = &format!("{}", pid);
@@ -397,19 +433,23 @@ fn start_service_with_filedescriptors(
             let mut fd_idx = 0;
 
             for sock_name in &srvc.socket_names {
-                let socket = sockets.get(sock_name).unwrap();
-                for sock_conf in &socket.sockets {
-                    let new_fd = file_desc_offset + fd_idx;
-                    let old_fd = match &sock_conf.fd {
-                        Some(fd) => fd.as_raw_fd(),
-                        None => panic!("No fd found for socket conf"),
-                    };
-                    if new_fd as i32 != old_fd {
-                        //ignore output. newfd might already be closed
-                        let _ = nix::unistd::close(new_fd as i32);
-                        nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                match find_sock_with_name(sock_name, sockets) {
+                    Some(socket) => {
+                        for sock_conf in &socket.sockets {
+                            let new_fd = file_desc_offset + fd_idx;
+                            let old_fd = match &sock_conf.fd {
+                                Some(fd) => fd.as_raw_fd(),
+                                None => panic!("No fd found for socket conf"),
+                            };
+                            if new_fd as i32 != old_fd {
+                                //ignore output. newfd might already be closed
+                                let _ = nix::unistd::close(new_fd as i32);
+                                nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                            }
+                            fd_idx += 1;
+                        }
                     }
-                    fd_idx += 1;
+                    None => warn!("Socket was specified that cannot be found: {}", sock_name),
                 }
             }
 
@@ -440,9 +480,9 @@ fn start_service_with_filedescriptors(
 pub fn start_service(
     srvc: &mut Service,
     name: String,
-    sockets: &HashMap<String, Socket>,
+    sockets: &SocketTable,
     id: InternalId,
-    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+    service_table: ArcMutServiceTable,
 ) {
     srvc.status = ServiceStatus::Starting;
 

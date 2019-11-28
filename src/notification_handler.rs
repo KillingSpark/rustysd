@@ -80,8 +80,8 @@ pub fn handle_stream(
 }
 
 pub fn handle_notifications(
-    _socket_table: Arc<Mutex<HashMap<String, Socket>>>,
-    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+    _socket_table: ArcMutSocketTable,
+    service_table: ArcMutServiceTable,
     _pid_table: Arc<Mutex<HashMap<u32, InternalId>>>,
 ) {
     std::thread::spawn(move || {

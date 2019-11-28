@@ -175,14 +175,16 @@ impl Socket {
 }
 
 pub fn open_all_sockets(
-    sockets: &mut std::collections::HashMap<String, Socket>,
+    sockets: &mut SocketTable,
 ) -> std::io::Result<()> {
-    for (_, socket) in sockets {
-        for idx in 0..socket.sockets.len() {
-            let conf = &mut socket.sockets[idx];
-            let as_raw_fd = conf.specialized.open().unwrap();
-            conf.fd = Some(as_raw_fd);
-            //need to stop the listener to drop which would close the filedescriptor
+    for (_, socket_unit) in sockets {
+        if let UnitSpecialized::Socket(socket) = &mut socket_unit.specialized {
+            for idx in 0..socket.sockets.len() {
+                let conf = &mut socket.sockets[idx];
+                let as_raw_fd = conf.specialized.open().unwrap();
+                conf.fd = Some(as_raw_fd);
+                //need to stop the listener to drop which would close the filedescriptor
+            }
         }
     }
 
