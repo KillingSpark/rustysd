@@ -262,18 +262,17 @@ fn parse_socket_section(
     for kind in socket_kinds {
         let specialized: SpecializedSocketConfig = match &kind {
             SocketKind::Sequential(addr) => {
-                if let Ok(_) = parse_unix_addr(addr) {
+                if parse_unix_addr(addr).is_ok() {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
                 } else {
                     return Err(format!(
                         "No specialized config for socket found for socket addr: {}",
                         addr
-                    )
-                    .into());
+                    ));
                 }
             }
             SocketKind::Stream(addr) => {
-                if let Ok(_) = parse_unix_addr(addr) {
+                if parse_unix_addr(addr).is_ok() {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
                 } else {
                     if let Ok(addr) = parse_ipv4_addr(addr) {
@@ -289,14 +288,13 @@ fn parse_socket_section(
                             return Err(format!(
                                 "No specialized config for socket found for socket addr: {}",
                                 addr
-                            )
-                            .into());
+                            ));
                         }
                     }
                 }
             }
             SocketKind::Datagram(addr) => {
-                if let Ok(_) = parse_unix_addr(addr) {
+                if parse_unix_addr(addr).is_ok() {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
                 } else {
                     if let Ok(addr) = parse_ipv4_addr(addr) {
@@ -312,8 +310,7 @@ fn parse_socket_section(
                             return Err(format!(
                                 "No specialized config for socket found for socket addr: {}",
                                 addr
-                            )
-                            .into());
+                            ));
                         }
                     }
                 }
@@ -347,10 +344,10 @@ fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig 
 
     UnitConfig {
         filepath: path.clone(),
-        wants: map_tupels_to_second(wants.unwrap_or(Vec::new())),
-        requires: map_tupels_to_second(requires.unwrap_or(Vec::new())),
-        after: map_tupels_to_second(after.unwrap_or(Vec::new())),
-        before: map_tupels_to_second(before.unwrap_or(Vec::new())),
+        wants: map_tupels_to_second(wants.unwrap_or_default()),
+        requires: map_tupels_to_second(requires.unwrap_or_default()),
+        after: map_tupels_to_second(after.unwrap_or_default()),
+        before: map_tupels_to_second(before.unwrap_or_default()),
     }
 }
 
@@ -359,8 +356,8 @@ fn parse_install_section(mut section: ParsedSection) -> InstallConfig {
     let requiredby = section.remove("REQUIREDBY");
 
     InstallConfig {
-        wanted_by: map_tupels_to_second(wantedby.unwrap_or(Vec::new())),
-        required_by: map_tupels_to_second(requiredby.unwrap_or(Vec::new())),
+        wanted_by: map_tupels_to_second(wantedby.unwrap_or_default()),
+        required_by: map_tupels_to_second(requiredby.unwrap_or_default()),
     }
 }
 
@@ -443,7 +440,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
         keep_alive: keep_alive,
         exec: exec,
         stop: stop,
-        sockets: map_tupels_to_second(sockets.unwrap_or(Vec::new())),
+        sockets: map_tupels_to_second(sockets.unwrap_or_default()),
     }
 }
 
@@ -454,7 +451,7 @@ pub fn parse_all_services(
 ) {
     let mut files: Vec<_> = std::fs::read_dir(path)
         .unwrap()
-        .map(|e| e.unwrap())
+        .map(std::result::Result::unwrap)
         .collect();
     files.sort_by(|l, r| l.path().cmp(&r.path()));
     for entry in files {
@@ -477,7 +474,7 @@ pub fn parse_all_sockets(
 ) {
     let mut files: Vec<_> = std::fs::read_dir(path)
         .unwrap()
-        .map(|e| e.unwrap())
+        .map(std::result::Result::unwrap)
         .collect();
     files.sort_by(|l, r| l.path().cmp(&r.path()));
     for entry in files {

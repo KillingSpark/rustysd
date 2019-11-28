@@ -11,7 +11,7 @@ pub type ArcMutSocketTable = Arc<Mutex<SocketTable>>;
 pub type ServiceTable = HashMap<u64, Unit>;
 pub type ArcMutServiceTable = Arc<Mutex<ServiceTable>>;
 
-pub fn find_sock_with_name<'a, 'b>(name: &String, sockets: &'b SocketTable) -> Option<&'b Socket> {
+pub fn find_sock_with_name<'b>(name: &str, sockets: &'b SocketTable) -> Option<&'b Socket> {
     let sock: Vec<&'b Socket> = sockets
         .iter()
         .map(|(_id, unit)| {
@@ -22,16 +22,10 @@ pub fn find_sock_with_name<'a, 'b>(name: &String, sockets: &'b SocketTable) -> O
             }
         })
         .filter(|sock| match sock {
-            Some(sock) => {
-                if sock.name == *name {
-                    true
-                } else {
-                    false
-                }
-            }
+            Some(sock) => sock.name == *name,
             None => false,
         })
-        .map(|x| x.unwrap())
+        .map(std::option::Option::unwrap)
         .collect();
     if sock.len() == 1 {
         Some(sock[0])
@@ -100,7 +94,7 @@ impl UnitConfig {
             .unwrap()
             .to_owned();
 
-        let split: Vec<_> = name.split(".").collect();
+        let split: Vec<_> = name.split('.').collect();
         let name = split[0..split.len() - 1].join(".");
 
         name
@@ -163,7 +157,7 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) -> HashMap<Strin
     let mut before = Vec::new();
     let mut after = Vec::new();
 
-    for (_, unit) in &mut *units {
+    for unit in (*units).values_mut() {
         let conf = &unit.conf;
         for name in &conf.wants {
             let id = name_to_id.get(name.as_str()).unwrap();

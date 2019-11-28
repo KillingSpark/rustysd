@@ -5,7 +5,7 @@ use std::io::Read;
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 
-pub fn handle_notification_message(msg: &String, srvc: &mut Service, name: String) {
+pub fn handle_notification_message(msg: &str, srvc: &mut Service, name: String) {
     // TODO process notification content
     let split: Vec<_> = msg.split('=').collect();
     match split[0] {
