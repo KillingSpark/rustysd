@@ -5,6 +5,7 @@ mod units;
 use units::*;
 mod notification_handler;
 mod unix_listener_select;
+mod control;
 
 extern crate signal_hook;
 use signal_hook::iterator::Signals;
@@ -15,6 +16,7 @@ extern crate crossbeam;
 extern crate fern;
 extern crate lumberjack_rs;
 extern crate threadpool;
+extern crate serde_json;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -105,6 +107,9 @@ fn main() {
         service_table.clone(),
         pid_table.clone(),
     );
+
+    let cmd = control::parse_command("{\"cmd\":\"status\"}").unwrap();
+    trace!{"Command executed: \n{}", control::execute_command(cmd, service_table.clone(), socket_table.clone()).unwrap()};
 
     loop {
         // Pick up new signals
