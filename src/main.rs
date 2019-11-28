@@ -25,30 +25,31 @@ use std::sync::{Arc, Mutex};
 fn main() {
     logging::setup_logging().unwrap();
 
-    let (mut service_table, mut socket_unit_table) = unit_parser::load_all_units(&PathBuf::from("./test_units")).unwrap();
-
-    units::fill_dependencies(&mut service_table);
-
-    let service_table =
-        sockets::apply_sockets_to_services(service_table, &socket_unit_table).unwrap();
-
-    sockets::open_all_sockets(&mut socket_unit_table).unwrap();
-
+    // initial loading of the units and matching of the various before/after settings
+    // also opening all fildescriptors in the socket files
+    let (service_table, socket_unit_table) = unit_parser::load_all_units(&PathBuf::from("./test_units")).unwrap();
+    
+    
+    // parallel startup of all services
     let (service_table, pid_table) =
         services::run_services(service_table, socket_unit_table.clone());
 
+    // wrapping in arc<mutex<>> to share between the various threads 
     let service_table = Arc::new(Mutex::new(service_table));
     let pid_table = Arc::new(Mutex::new(pid_table));
     let socket_table = Arc::new(Mutex::new(socket_unit_table));
 
+    // listen on notifications pushed by the services
     notification_handler::handle_notifications(
         socket_table.clone(),
         service_table.clone(),
         pid_table.clone(),
     );
 
+    // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(service_table.clone(), socket_table.clone());
 
+    // listen on signals from the child processes
     signal_handler::handle_signals(
         service_table.clone(),
         socket_table.clone(),

@@ -1,9 +1,7 @@
 use crate::units::*;
 
 use crate::services::{Service, ServiceStatus};
-use crate::sockets::{
-    Socket, SocketKind, SpecializedSocketConfig, TcpSocketConfig, UdpSocketConfig, UnixSocketConfig,
-};
+use crate::sockets::*;
 
 use std::collections::HashMap;
 use std::fs::read_to_string;
@@ -16,18 +14,14 @@ pub fn load_all_units(path: &PathBuf) -> Result<(ServiceTable, SocketTable), Str
     let mut base_id = 0;
     let mut service_table = HashMap::new();
     let mut socket_unit_table = HashMap::new();
-    parse_all_services(
-        &mut service_table,
-        path,
-        &mut base_id,
-    )?;
+    parse_all_services(&mut service_table, path, &mut base_id)?;
 
-    parse_all_sockets(
-        &mut socket_unit_table,
-        path,
-        &mut base_id,
-    )?;
+    parse_all_sockets(&mut socket_unit_table, path, &mut base_id)?;
 
+    fill_dependencies(&mut service_table);
+    let service_table = apply_sockets_to_services(service_table, &socket_unit_table).unwrap();
+
+    open_all_sockets(&mut socket_unit_table).unwrap();
     Ok((service_table, socket_unit_table))
 }
 
