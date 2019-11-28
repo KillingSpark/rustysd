@@ -12,13 +12,13 @@ use std::path::PathBuf;
 type ParsedSection = HashMap<String, Vec<(u32, String)>>;
 type ParsedFile = HashMap<String, ParsedSection>;
 
-fn parse_section(lines: &Vec<&str>) -> ParsedSection {
+fn parse_section(lines: &[&str]) -> ParsedSection {
     let mut entries: ParsedSection = HashMap::new();
 
     let mut entry_number = 0;
     for line in lines {
         //ignore comments
-        if line.starts_with("#") {
+        if line.starts_with('#') {
             continue;
         }
 
@@ -30,10 +30,10 @@ fn parse_section(lines: &Vec<&str>) -> ParsedSection {
         };
         let (name, value) = line.split_at(pos);
 
-        let value = value.trim_start_matches("=");
+        let value = value.trim_start_matches('=');
         let value = value.trim();
         let name = name.trim().to_uppercase();
-        let values: Vec<String> = value.split(",").map(|x| x.to_owned()).collect();
+        let values: Vec<String> = value.split(',').map(|x| x.into()).collect();
 
         let vec = match entries.get_mut(&name) {
             Some(vec) => vec,
@@ -52,14 +52,14 @@ fn parse_section(lines: &Vec<&str>) -> ParsedSection {
     entries
 }
 
-fn parse_file(content: &String) -> ParsedFile {
+fn parse_file(content: &str) -> ParsedFile {
     let mut sections = HashMap::new();
-    let lines: Vec<&str> = content.split("\n").collect();
+    let lines: Vec<&str> = content.split('\n').collect();
 
     let mut lines_left = &lines[..];
 
     // remove lines before the first section
-    while !lines_left[0].starts_with("[") {
+    while !lines_left[0].starts_with('[') {
         lines_left = &lines_left[1..];
     }
     let mut current_section_name: String = lines_left[0].into();
@@ -67,10 +67,10 @@ fn parse_file(content: &String) -> ParsedFile {
 
     lines_left = &lines_left[1..];
 
-    while lines_left.len() > 0 {
+    while !lines_left.is_empty() {
         let line = lines_left[0];
 
-        if line.starts_with("[") {
+        if line.starts_with('[') {
             sections.insert(
                 current_section_name.clone(),
                 parse_section(&current_section_lines),
@@ -80,7 +80,7 @@ fn parse_file(content: &String) -> ParsedFile {
             current_section_lines.clear();
         } else {
             println!("{}", line);
-            current_section_lines.push(line.into());
+            current_section_lines.push(line);
         }
         lines_left = &lines_left[1..];
     }
@@ -195,7 +195,7 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Unit {
 }
 
 fn parse_unix_addr(addr: &str) -> Result<String, ()> {
-    if addr.starts_with("/") || addr.starts_with("./") {
+    if addr.starts_with('/') || addr.starts_with("./") {
         Ok(addr.to_owned())
     } else {
         Err(())

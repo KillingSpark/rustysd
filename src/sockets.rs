@@ -72,7 +72,7 @@ impl UnixSocketConfig {
                 trace!("opening streaming unix socket: {:?}", path);
                 // Bind to socket
                 let stream = match UnixListener::bind(&spath) {
-                    Err(_) => panic!("failed to bind socket"),
+                    Err(e) => panic!(format!("failed to bind socket: {}", e)),
                     Ok(stream) => stream,
                 };
                 //need to stop the listener to drop which would close the filedescriptor
@@ -88,7 +88,7 @@ impl UnixSocketConfig {
                 trace!("opening datagram unix socket: {:?}", path);
                 // Bind to socket
                 let stream = match UnixDatagram::bind(&spath) {
-                    Err(_) => panic!("failed to bind socket"),
+                    Err(e) => panic!(format!("failed to bind socket: {}", e)),
                     Ok(stream) => stream,
                 };
                 //need to stop the listener to drop which would close the filedescriptor
@@ -175,7 +175,7 @@ impl Socket {
 }
 
 pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
-    for (_, socket_unit) in sockets {
+    for socket_unit in sockets.values_mut() {
         if let UnitSpecialized::Socket(socket) = &mut socket_unit.specialized {
             for idx in 0..socket.sockets.len() {
                 let conf = &mut socket.sockets[idx];
