@@ -255,7 +255,6 @@ fn start_service_with_filedescriptors(
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             srvc.pid = Some(child as u32);
-            srvc.status = ServiceStatus::Running;
 
             trace!(
                 " [FORK_PARENT] Service: {} forked with pid: {}",
@@ -273,25 +272,32 @@ fn start_service_with_filedescriptors(
                     let (mut stream, _addr) = listener.accept().unwrap();
                     trace!(" [FORK_PARENT] Got notification connection");
                     let mut buf = vec![0u8; 512];
+                    let iter_stream = &mut stream;
+                    let mut iter = std::iter::from_fn(||match iter_stream.read(&mut buf[0..1]){
+                        Ok(0) => None,
+                        Ok(_) => Some(buf[0]),
+                        Err(_) => None,
+                    });
                     loop {
-                        let bytes = stream.read(&mut buf).unwrap();
+                        let bytes: Vec<_> = (&mut iter).take_while(|x| *x != b'\n').collect();
+                        let note_string = String::from_utf8(bytes).unwrap();
                         trace!(
-                            "Notification received from service: {:?}",
-                            String::from_utf8(buf[..bytes].to_vec()).unwrap()
+                            " [FORK_PARENT] Notification received from service: {:?}",
+                            note_string,
                         );
-                        let note_string = String::from_utf8(buf[..bytes].to_vec()).unwrap();
-                        if note_string.contains("READY=1") {
-                            trace!(" [FORK_PARENT] Notification was valid");
+                        crate::notification_handler::handle_notification_message(&note_string, srvc, name.clone());
+                        if let ServiceStatus::Running = srvc.status  {
                             break;
-                        } else {
+                        }else{
                             trace!(
-                                " [FORK_PARENT] Notification did not contain 'ready'.Keep waiting"
+                                " [FORK_PARENT] Service still not ready",
                             );
                         }
                     }
                     crate::notification_handler::handle_stream(stream, id, service_table);
                 } else {
                     trace!(" [FORK_PARENT] service {} doesnt notify", name);
+                    srvc.status = ServiceStatus::Running;
                 }
             }
         }

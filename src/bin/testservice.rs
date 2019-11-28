@@ -177,7 +177,7 @@ fn main() {
 
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
     let mut stream = UnixStream::connect(socket_path).unwrap();
-    stream.write_all(&b"READY=1"[..]).unwrap();
+    stream.write_all(&b"STATUS=Next message that should be read before the READY message\nREADY=1\nSTATUS=Next message that should not be read directly after the fork\n"[..]).unwrap();
     stream.shutdown(std::net::Shutdown::Both).unwrap();
 
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();

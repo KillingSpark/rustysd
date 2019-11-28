@@ -1,9 +1,31 @@
+use crate::services::{Service, ServiceStatus};
 use crate::sockets::Socket;
 use crate::units::*;
 use std::collections::HashMap;
 use std::io::Read;
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
+
+pub fn handle_notification_message(msg: &String, srvc: &mut Service, name: String) {
+    // TODO process notification content
+    let split: Vec<_> = msg.split("=").collect();
+    match split[0] {
+        "STATUS" => {
+            srvc.status_msgs.push(split[1].to_owned());
+            trace!(
+                "New status message pushed from service {}: {}",
+                name,
+                srvc.status_msgs.last().unwrap()
+            );
+        }
+        "READY" => {
+            srvc.status = ServiceStatus::Running;
+        }
+        _ => {
+            warn!("Unknown notification name{}", split[0]);
+        }
+    }
+}
 
 fn handle_stream_mut(
     stream: &mut UnixStream,
@@ -17,8 +39,13 @@ fn handle_stream_mut(
         buffer.push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
 
         if bytes == 0 {
-            let service_table: &HashMap<_, _> = &service_table.lock().unwrap();
-            let srvc_unit = service_table.get(&id).unwrap();
+            // Handle the current buffer and then exit the handler
+            let service_table: &mut HashMap<_, _> = &mut service_table.lock().unwrap();
+            let srvc_unit = service_table.get_mut(&id).unwrap();
+            let name = srvc_unit.conf.name();
+            if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
+                handle_notification_message(&buffer, srvc, name);
+            }
             trace!(
                 " [Notification-Listener] Service: {} closed a notification connection",
                 srvc_unit.conf.name(),
@@ -29,28 +56,13 @@ fn handle_stream_mut(
             let (line, rest) = buffer.split_at(buffer.find('\n').unwrap());
             let line = line.to_owned();
             buffer = rest[1..].to_owned();
-            let split: Vec<_> = line.split("=").collect();
 
             {
                 let service_table: &mut HashMap<_, _> = &mut service_table.lock().unwrap();
                 let srvc_unit = service_table.get_mut(&id).unwrap();
                 let name = srvc_unit.conf.name();
-
-                // TODO process notification content
-                match split[0] {
-                    "STATUS" => {
-                        if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
-                            srvc.status_msgs.push(split[1].to_owned());
-                            trace!(
-                                "New status message pushed from service {}: {}",
-                                name,
-                                srvc.status_msgs.last().unwrap()
-                            );
-                        }
-                    }
-                    _ => {
-                        warn!("Unknown notification name{}", split[0]);
-                    }
+                if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
+                    handle_notification_message(&line, srvc, name);
                 }
             }
         }
