@@ -1,8 +1,8 @@
-use signal_hook::iterator::Signals;
-use crate::units::*;
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
 use crate::services;
+use crate::units::*;
+use signal_hook::iterator::Signals;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 pub fn handle_signals(
     service_table: ArcMutServiceTable,

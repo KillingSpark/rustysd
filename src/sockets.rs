@@ -195,13 +195,12 @@ pub fn apply_sockets_to_services(
 ) -> Result<ServiceTable, String> {
     for sock_unit in socket_table.values() {
         let mut counter = 0;
-        
+
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
             trace!("Searching services for socket: {}", sock_unit.conf.name());
             for srvc_unit in service_table.values_mut() {
                 let srvc = &mut srvc_unit.specialized;
                 if let UnitSpecialized::Service(srvc) = srvc {
-
                     // add sockets for services with the exact same name
                     if (srvc_unit.conf.name() == sock_unit.conf.name())
                         && !srvc.socket_names.contains(&sock_unit.conf.name())
@@ -213,9 +212,9 @@ pub fn apply_sockets_to_services(
                         );
 
                         srvc.socket_names.push(sock.name.clone());
-                        counter+=1;
+                        counter += 1;
                     }
-                    
+
                     // add sockets to services that specify that the socket belongs to them
                     if let Some(srvc_conf) = &srvc.service_config {
                         if srvc_conf.sockets.contains(&sock_unit.conf.name()) {
@@ -225,35 +224,39 @@ pub fn apply_sockets_to_services(
                                 srvc_unit.conf.name()
                             );
                             srvc.socket_names.push(sock.name.clone());
-                            counter+=1;
+                            counter += 1;
                         }
                     }
                 }
             }
-            
+
             // add socket to the specified services
             for srvc_name in &sock.services {
                 for srvc_unit in service_table.values_mut() {
                     let srvc = &mut srvc_unit.specialized;
                     if let UnitSpecialized::Service(srvc) = srvc {
                         if (*srvc_name == srvc_unit.conf.name())
-                        && !srvc.socket_names.contains(&sock_unit.conf.name())
+                            && !srvc.socket_names.contains(&sock_unit.conf.name())
                         {
                             trace!(
                                 "add socket: {} to service: {}",
                                 sock_unit.conf.name(),
                                 srvc_unit.conf.name()
                             );
-                            
+
                             srvc.socket_names.push(sock.name.clone());
-                            counter+=1;
+                            counter += 1;
                         }
                     }
                 }
             }
         }
         if counter > 1 {
-            return Err(format!("Added socket: {} to too many services (should be at most one): {}", sock_unit.conf.name(), counter));
+            return Err(format!(
+                "Added socket: {} to too many services (should be at most one): {}",
+                sock_unit.conf.name(),
+                counter
+            ));
         }
         if counter == 0 {
             warn!("Added socket: {} to no service", sock_unit.conf.name());

@@ -1,9 +1,9 @@
+use crate::services::{Service, ServiceStatus};
+use crate::units::*;
+use std::error::Error;
 use std::io::Read;
 use std::os::unix::net::UnixListener;
-use crate::units::*;
-use crate::services::{Service, ServiceStatus};
 use std::sync::Arc;
-use std::error::Error;
 
 use std::process::{Command, Stdio};
 
@@ -180,7 +180,14 @@ fn after_fork_child(srvc: &mut Service, sockets: &SocketTable, notify_socket_env
     }
 }
 
-fn after_fork_parent(srvc: &mut Service, service_table: ArcMutServiceTable, id: InternalId, name: String, child: i32, notify_socket_env_var: &std::path::Path) {
+fn after_fork_parent(
+    srvc: &mut Service,
+    service_table: ArcMutServiceTable,
+    id: InternalId,
+    name: String,
+    child: i32,
+    notify_socket_env_var: &std::path::Path,
+) {
     srvc.pid = Some(child as u32);
 
     trace!(
@@ -270,7 +277,14 @@ fn start_service_with_filedescriptors(
 
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
-            after_fork_parent(srvc, service_table, id, name, child, std::path::Path::new(notify_socket_env_var.to_str().unwrap()));
+            after_fork_parent(
+                srvc,
+                service_table,
+                id,
+                name,
+                child,
+                std::path::Path::new(notify_socket_env_var.to_str().unwrap()),
+            );
         }
         Ok(nix::unistd::ForkResult::Child) => {
             after_fork_child(srvc, sockets, notify_socket_env_var.to_str().unwrap());

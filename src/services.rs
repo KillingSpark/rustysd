@@ -1,9 +1,9 @@
+use crate::start_service::*;
 use std::collections::HashMap;
 use std::error::Error;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
-use crate::start_service::*;
 
 use std::os::unix::net::UnixListener;
 
@@ -212,5 +212,3 @@ pub fn run_services(
 
     (services, pids)
 }
-
-
