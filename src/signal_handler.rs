@@ -43,15 +43,12 @@ fn get_next_exited_child() -> Option<Result<(i32, i8), nix::Error>> {
     match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
         Ok(exit_status) => match exit_status {
             nix::sys::wait::WaitStatus::Exited(pid, code) => Some(Ok((pid, code))),
-            nix::sys::wait::WaitStatus::Signaled(pid, signal, dumped_core) => {
+            nix::sys::wait::WaitStatus::Signaled(pid, signal, _dumped_core) => {
                 // signals get handed to the parent if the child got killed by it but didnt handle the
                 // signal itself
                 if signal == libc::SIGTERM {
-                    if dumped_core {
-                        Some(Ok((pid, signal as i8)))
-                    } else {
-                        Some(Ok((pid, signal as i8)))
-                    }
+                    // we dont care if the service dumped it's core
+                    Some(Ok((pid, signal as i8)))
                 } else {
                     None
                 }

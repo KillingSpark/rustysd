@@ -48,7 +48,7 @@ fn parse_section(lines: &[&str]) -> ParsedSection {
         let name = name.trim().to_uppercase();
         let values: Vec<String> = value.split(',').map(|x| x.into()).collect();
 
-        let vec = entries.entry(name).or_insert(Vec::new());
+        let vec = entries.entry(name).or_insert_with(Vec::new);
         for value in values {
             vec.push((entry_number, value));
             entry_number += 1;

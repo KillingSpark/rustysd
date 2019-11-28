@@ -172,38 +172,36 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     for unit in (*units).values_mut() {
         let conf = &unit.conf;
         for name in &conf.wants {
-            let id = name_to_id.get(name.as_str()).unwrap();
-            unit.install.wants.push(*id);
-            wanted_by.push((*id, unit.id));
+            let id = name_to_id[name.as_str()];
+            unit.install.wants.push(id);
+            wanted_by.push((id, unit.id));
         }
         for name in &conf.requires {
-            let id = name_to_id
-                .get(name.as_str())
-                .expect(&format!("Name {} had no matching id", name));
-            unit.install.requires.push(*id);
-            required_by.push((*id, unit.id));
+            let id = name_to_id[name.as_str()];
+            unit.install.requires.push(id);
+            required_by.push((id, unit.id));
         }
         for name in &conf.before {
-            let id = name_to_id.get(name.as_str()).unwrap();
-            unit.install.before.push(*id);
-            after.push((unit.id, *id))
+            let id = name_to_id[name.as_str()];
+            unit.install.before.push(id);
+            after.push((unit.id, id))
         }
         for name in &conf.after {
-            let id = name_to_id.get(name.as_str()).unwrap();
-            unit.install.after.push(*id);
-            before.push((unit.id, *id))
+            let id = name_to_id[name.as_str()];
+            unit.install.after.push(id);
+            before.push((unit.id, id))
         }
 
         if let Some(conf) = &unit.install.install_config {
             for name in &conf.wanted_by {
-                let id = name_to_id.get(name.as_str()).unwrap();
-                wanted_by.push((unit.id, *id));
+                let id = name_to_id[name.as_str()];
+                wanted_by.push((unit.id, id));
             }
         }
         if let Some(conf) = &unit.install.install_config {
             for name in &conf.required_by {
-                let id = name_to_id.get(name.as_str()).unwrap();
-                required_by.push((unit.id, *id));
+                let id = name_to_id[name.as_str()];
+                required_by.push((unit.id, id));
             }
         }
     }
