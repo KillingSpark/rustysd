@@ -142,8 +142,13 @@ fn run_services_recursive(
             if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
                 match srvc.status {
                     ServiceStatus::NeverRan => {
-                        
-                        start_service(srvc, name.clone(), sockets_copy.clone(), id, services_copy.clone());
+                        start_service(
+                            srvc,
+                            name.clone(),
+                            sockets_copy.clone(),
+                            id,
+                            services_copy.clone(),
+                        );
                         let new_pid = srvc.pid.unwrap();
                         {
                             let mut services_locked = services_copy.lock().unwrap();

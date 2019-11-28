@@ -7,16 +7,21 @@ use std::sync::Arc;
 
 use std::process::{Command, Stdio};
 
-fn after_fork_child(srvc: &mut Service, name: &String, sockets: &SocketTable, notify_socket_env_var: &str) {
+fn after_fork_child(
+    srvc: &mut Service,
+    name: &String,
+    sockets: &SocketTable,
+    notify_socket_env_var: &str,
+) {
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
 
     //here we are in the child process. We need to close every file descriptor we dont need anymore after the exec
-    
+
     // TODO maybe all fd's should be marked with FD_CLOEXEC when openend
     // and here we only unflag those that we want to keep?
     //trace!("[FORK_CHILD {}] CLOSING FDS", name);
-    
+
     let pid = nix::unistd::getpid();
     for sock_unit in sockets.values() {
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
@@ -71,7 +76,10 @@ fn after_fork_child(srvc: &mut Service, name: &String, sockets: &SocketTable, no
                 num_fds += sock.sockets.len();
                 name_lists.push(sock.build_name_list());
             }
-            None => eprintln!("[FORK_CHILD {}] Socket was specified that cannot be found: {}", name, sock_name),
+            None => eprintln!(
+                "[FORK_CHILD {}] Socket was specified that cannot be found: {}",
+                name, sock_name
+            ),
         }
     }
 
@@ -133,7 +141,10 @@ fn after_fork_child(srvc: &mut Service, name: &String, sockets: &SocketTable, no
                     fd_idx += 1;
                 }
             }
-            None => eprintln!("[FORK_CHILD {}] Socket was specified that cannot be found: {}", name, sock_name),
+            None => eprintln!(
+                "[FORK_CHILD {}] Socket was specified that cannot be found: {}",
+                name, sock_name
+            ),
         }
     }
 
@@ -268,7 +279,12 @@ fn start_service_with_filedescriptors(
             );
         }
         Ok(nix::unistd::ForkResult::Child) => {
-            after_fork_child(srvc, &name, &*sockets_lock, notify_socket_env_var.to_str().unwrap());
+            after_fork_child(
+                srvc,
+                &name,
+                &*sockets_lock,
+                notify_socket_env_var.to_str().unwrap(),
+            );
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),
     }
