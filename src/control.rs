@@ -112,14 +112,14 @@ pub fn execute_command(
                 None => {
                     //list all
                     let srvc_table_locked = &*service_table.lock().unwrap();
-                    for (_id, srvc_unit) in srvc_table_locked {
+                    for srvc_unit in srvc_table_locked.values() {
                         result_vec
                             .as_array_mut()
                             .unwrap()
                             .push(Value::String(format!("Service: {}", srvc_unit.conf.name())));
                     }
                     let socket_table_locked = &*socket_table.lock().unwrap();
-                    for (_id, sock_unit) in socket_table_locked {
+                    for sock_unit in socket_table_locked.values() {
                         result_vec
                             .as_array_mut()
                             .unwrap()

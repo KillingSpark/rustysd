@@ -77,7 +77,7 @@ fn main() {
     );
 
     let _name_to_id = units::fill_dependencies(&mut service_table);
-    for (_, srvc) in &mut service_table {
+    for srvc in service_table.values_mut() {
         srvc.dedup_dependencies();
     }
 
@@ -135,10 +135,10 @@ fn apply_sockets_to_services(
     mut service_table: HashMap<InternalId, Unit>,
     socket_table: &HashMap<InternalId, Unit>,
 ) -> HashMap<InternalId, Unit> {
-    for (_, sock_unit) in socket_table {
+    for sock_unit in socket_table.values() {
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
             trace!("Searching services for socket: {}", sock_unit.conf.name());
-            for (_, srvc_unit) in &mut service_table {
+            for srvc_unit in service_table.values_mut() {
                 let srvc = &mut srvc_unit.specialized;
                 if let UnitSpecialized::Service(srvc) = srvc {
                     if (srvc_unit.conf.name() == sock_unit.conf.name())
@@ -167,7 +167,7 @@ fn apply_sockets_to_services(
 
             // socket specified services
             for srvc_name in &sock.services {
-                for (_, srvc_unit) in &mut service_table {
+                for srvc_unit in service_table.values_mut() {
                     let srvc = &mut srvc_unit.specialized;
                     if let UnitSpecialized::Service(srvc) = srvc {
                         if (*srvc_name == srvc_unit.conf.name())

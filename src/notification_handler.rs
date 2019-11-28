@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 pub fn handle_notification_message(msg: &String, srvc: &mut Service, name: String) {
     // TODO process notification content
-    let split: Vec<_> = msg.split("=").collect();
+    let split: Vec<_> = msg.split('=').collect();
     match split[0] {
         "STATUS" => {
             srvc.status_msgs.push(split[1].to_owned());
@@ -88,7 +88,7 @@ pub fn handle_notifications(
         let mut select_vec = Vec::new();
         {
             let service_table_locked: &HashMap<_, _> = &service_table.lock().unwrap();
-            for (_name, srvc_unit) in service_table_locked {
+            for srvc_unit in service_table_locked.values() {
                 if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
                     if let Some(sock) = &srvc.notify_access_socket {
                         select_vec.push((srvc_unit.conf.name(), srvc_unit.id, sock.clone()));

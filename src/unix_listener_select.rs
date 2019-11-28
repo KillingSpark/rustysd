@@ -4,7 +4,7 @@ use std::os::unix::net::UnixListener;
 use std::os::unix::net::UnixStream;
 
 pub fn select<Key: Clone>(
-    listeners: &Vec<(Key, &UnixListener)>,
+    listeners: &[(Key, &UnixListener)],
     time_out: Option<&mut nix::sys::time::TimeVal>,
 ) -> nix::Result<Vec<(Key, (UnixStream, SocketAddr))>> {
     let mut fd_to_name = Vec::new();
@@ -23,20 +23,37 @@ pub fn select<Key: Clone>(
         }
     }
 
-    loop {
-        match nix::sys::select::select(
-            max_fd + 1,
-            Some(&mut fd_set),
-            None,
-            Some(&mut fd_set_err),
-            time_out,
-        ) {
-            Ok(_) => break,
-            Err(e) => match e {
-                nix::Error::Sys(nix::errno::EINTR) => break,
-                _ => return Err(e),
-            },
-        }
+    match time_out {
+        Some(time_out) => loop {
+            match nix::sys::select::select(
+                max_fd + 1,
+                Some(&mut fd_set),
+                None,
+                Some(&mut fd_set_err),
+                Some(time_out),
+            ) {
+                Ok(_) => break,
+                Err(e) => match e {
+                    nix::Error::Sys(nix::errno::EINTR) => continue,
+                    _ => return Err(e),
+                },
+            }
+        },
+        None => loop {
+            match nix::sys::select::select(
+                max_fd + 1,
+                Some(&mut fd_set),
+                None,
+                Some(&mut fd_set_err),
+                None,
+            ) {
+                Ok(_) => break,
+                Err(e) => match e {
+                    nix::Error::Sys(nix::errno::EINTR) => continue,
+                    _ => return Err(e),
+                },
+            }
+        },
     }
 
     for (fd, (name, listener)) in fd_to_name {
