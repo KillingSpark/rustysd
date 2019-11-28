@@ -19,7 +19,6 @@ extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -35,9 +34,8 @@ fn main() {
 
     sockets::open_all_sockets(&mut socket_unit_table).unwrap();
 
-    let pid_table = HashMap::new();
     let (service_table, pid_table) =
-        services::run_services(service_table, pid_table, socket_unit_table.clone());
+        services::run_services(service_table, socket_unit_table.clone());
 
     let service_table = Arc::new(Mutex::new(service_table));
     let pid_table = Arc::new(Mutex::new(pid_table));

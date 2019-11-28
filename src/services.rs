@@ -180,9 +180,9 @@ fn run_services_recursive(
 
 pub fn run_services(
     services: ServiceTable,
-    pids: HashMap<u32, InternalId>,
     sockets: SocketTable,
 ) -> (HashMap<InternalId, Unit>, HashMap<u32, InternalId>) {
+    let pids = HashMap::new();
     let mut root_services = Vec::new();
 
     for (id, unit) in &services {
