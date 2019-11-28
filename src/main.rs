@@ -81,16 +81,14 @@ fn main() {
         &mut base_id,
     ).unwrap();
 
-    let _name_to_id = units::fill_dependencies(&mut service_table);
+    units::fill_dependencies(&mut service_table);
     for srvc in service_table.values_mut() {
         srvc.dedup_dependencies();
     }
 
-    let service_table = apply_sockets_to_services(service_table, &socket_unit_table);
+    let service_table = apply_sockets_to_services(service_table, &socket_unit_table).unwrap();
 
     sockets::open_all_sockets(&mut socket_unit_table).unwrap();
-
-    services::print_all_services(&service_table);
 
     let pid_table = HashMap::new();
     let (service_table, pid_table) =
@@ -106,8 +104,7 @@ fn main() {
         pid_table.clone(),
     );
 
-    let cmd = control::parse_command("{\"cmd\":\"status\"}").unwrap();
-    trace! {"Command executed: \n{}", control::execute_command(cmd, service_table.clone(), socket_table.clone()).unwrap()};
+    control::accept_control_connections(service_table.clone(), socket_table.clone());
 
     loop {
         // Pick up new signals
@@ -139,13 +136,17 @@ fn main() {
 fn apply_sockets_to_services(
     mut service_table: HashMap<InternalId, Unit>,
     socket_table: &HashMap<InternalId, Unit>,
-) -> HashMap<InternalId, Unit> {
+) -> Result<HashMap<InternalId, Unit>, String> {
     for sock_unit in socket_table.values() {
+        let mut counter = 0;
+        
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
             trace!("Searching services for socket: {}", sock_unit.conf.name());
             for srvc_unit in service_table.values_mut() {
                 let srvc = &mut srvc_unit.specialized;
                 if let UnitSpecialized::Service(srvc) = srvc {
+
+                    // add sockets for services with the exact same name
                     if (srvc_unit.conf.name() == sock_unit.conf.name())
                         && !srvc.socket_names.contains(&sock_unit.conf.name())
                     {
@@ -156,7 +157,10 @@ fn apply_sockets_to_services(
                         );
 
                         srvc.socket_names.push(sock.name.clone());
+                        counter+=1;
                     }
+                    
+                    // add sockets to services that specify that the socket belongs to them
                     if let Some(srvc_conf) = &srvc.service_config {
                         if srvc_conf.sockets.contains(&sock_unit.conf.name()) {
                             trace!(
@@ -165,34 +169,42 @@ fn apply_sockets_to_services(
                                 srvc_unit.conf.name()
                             );
                             srvc.socket_names.push(sock.name.clone());
+                            counter+=1;
                         }
                     }
                 }
             }
-
-            // socket specified services
+            
+            // add socket to the specified services
             for srvc_name in &sock.services {
                 for srvc_unit in service_table.values_mut() {
                     let srvc = &mut srvc_unit.specialized;
                     if let UnitSpecialized::Service(srvc) = srvc {
                         if (*srvc_name == srvc_unit.conf.name())
-                            && !srvc.socket_names.contains(&sock_unit.conf.name())
+                        && !srvc.socket_names.contains(&sock_unit.conf.name())
                         {
                             trace!(
                                 "add socket: {} to service: {}",
                                 sock_unit.conf.name(),
                                 srvc_unit.conf.name()
                             );
-
+                            
                             srvc.socket_names.push(sock.name.clone());
+                            counter+=1;
                         }
                     }
                 }
             }
         }
+        if counter > 1 {
+            return Err(format!("Added socket: {} to too many services (should be at most one): {}", sock_unit.conf.name(), counter));
+        }
+        if counter == 0 {
+            warn!("Added socket: {} to no service", sock_unit.conf.name());
+        }
     }
 
-    service_table
+    Ok(service_table)
 }
 
 fn get_next_exited_child() -> Option<Result<(i32, i8), nix::Error>> {

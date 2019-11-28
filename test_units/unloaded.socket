@@ -1,0 +1,9 @@
+[Unit]
+Description=test Socket
+
+[Socket]
+FileDescriptorName= TestSock2
+
+ListenStream= 127.0.0.1:8090
+[Install]
+WantedBy=sockets.target

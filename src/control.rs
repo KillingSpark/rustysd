@@ -1,5 +1,4 @@
 use crate::units::*;
-use serde_json::from_str;
 use serde_json::Value;
 
 pub enum Command {
@@ -7,8 +6,7 @@ pub enum Command {
     Status(Option<String>),
 }
 
-pub fn parse_command(cmd: &str) -> Result<Command, String> {
-    let cmd = from_str(cmd).map_err(|e| format!("Error while decoding json: {}", e))?;
+pub fn parse_command(cmd: Value) -> Result<Command, String> {
     let command: Command = match cmd {
         Value::Object(map) => {
             let cmd_str = map.get("cmd");
@@ -123,4 +121,40 @@ pub fn execute_command(
     }
 
     Ok(serde_json::to_string_pretty(&result_vec).unwrap())
+}
+
+use std::io::Read;
+pub fn listen_on_commands(
+    mut source: Box<Read + Send>,
+    service_table: ArcMutServiceTable,
+    socket_table: ArcMutSocketTable,
+) {
+    std::thread::spawn(move || loop {
+        match serde_json::from_reader(&mut source) {
+            Ok(v) => {
+                let v: Value = v;
+                let cmd = parse_command(v).unwrap();
+                execute_command(cmd, service_table.clone(), socket_table.clone()).unwrap();
+            }
+            Err(e) => error!("Error while reading from command source {}", e),
+        }
+    });
+}
+
+pub fn accept_control_connections(
+    service_table: ArcMutServiceTable,
+    socket_table: ArcMutSocketTable,
+) {
+    std::thread::spawn(move || {
+        use std::os::unix::net::UnixListener;
+        let path: std::path::PathBuf = "./notifications/control.socket".into();
+        if path.exists() {
+            std::fs::remove_file(&path).unwrap();
+        }
+        let cmd_source = UnixListener::bind(&path).unwrap();
+        loop {
+            let stream = Box::new(cmd_source.accept().unwrap().0);
+            listen_on_commands(stream, service_table.clone(), socket_table.clone())
+        }
+    });
 }

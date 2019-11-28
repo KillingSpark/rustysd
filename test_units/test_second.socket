@@ -3,7 +3,7 @@ Description=test Socket
 PartOf=test.service
 
 [Socket]
-FileDescriptorName= TestSocketAlternative
+FileDescriptorName= TestSockAlt
 
 ListenStream= ./servicelog_alt_stream
 ListenStream= 127.0.0.1:8083

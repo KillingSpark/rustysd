@@ -11,6 +11,9 @@ pub type ArcMutSocketTable = Arc<Mutex<SocketTable>>;
 pub type ServiceTable = HashMap<u64, Unit>;
 pub type ArcMutServiceTable = Arc<Mutex<ServiceTable>>;
 
+// TODO delete this
+// keep around while refactoring in case it is needed again
+#[allow(dead_code)]
 pub fn find_sock_with_name<'b>(name: &str, sockets: &'b SocketTable) -> Option<&'b Socket> {
     let sock: Vec<&'b Socket> = sockets
         .iter()
@@ -32,6 +35,18 @@ pub fn find_sock_with_name<'b>(name: &str, sockets: &'b SocketTable) -> Option<&
     } else {
         None
     }
+}
+
+pub fn get_sockets_by_name<'b>(socket_units: &'b SocketTable) -> HashMap<String, &'b Socket>  {
+    let mut sockets = HashMap::new();
+
+    for sock_unit in socket_units.values() {
+        if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
+            sockets.insert(sock.name.clone(), sock);
+        }
+    }
+
+    sockets
 }
 
 #[derive(Clone)]
@@ -141,12 +156,11 @@ pub struct ServiceConfig {
     pub sockets: Vec<String>,
 }
 
-pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) -> HashMap<String, u64> {
+pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     let mut name_to_id = HashMap::new();
 
     for (id, unit) in &*units {
         let name = unit.conf.name();
-        trace!("Added id for name: {}", name);
         name_to_id.insert(name, *id);
     }
 
@@ -216,6 +230,4 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) -> HashMap<Strin
         let unit = units.get_mut(&before).unwrap();
         unit.install.after.push(after);
     }
-
-    name_to_id
 }
