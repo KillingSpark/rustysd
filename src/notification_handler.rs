@@ -1,5 +1,4 @@
 use crate::services::{Service, ServiceStatus};
-use crate::sockets::Socket;
 use crate::units::*;
 use std::collections::HashMap;
 use std::io::Read;

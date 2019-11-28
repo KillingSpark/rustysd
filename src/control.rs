@@ -1,4 +1,3 @@
-use crate::sockets::Socket;
 use crate::units::*;
 use serde_json::from_str;
 use serde_json::Value;
@@ -28,8 +27,6 @@ pub fn parse_command(cmd: &str) -> Result<Command, String> {
     Ok(command)
 }
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 pub fn execute_command(
     cmd: Command,
     service_table: ArcMutServiceTable,

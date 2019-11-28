@@ -1,4 +1,3 @@
-use crate::sockets::Socket;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Read;
@@ -360,7 +359,7 @@ fn start_service_with_filedescriptors(
                 match find_sock_with_name(sock_name, sockets) {
                     Some(sock) => {
                         num_fds += sock.sockets.len();
-                    name_lists.push(sock.build_name_list());
+                        name_lists.push(sock.build_name_list());
                     }
                     None => warn!("Socket was specified that cannot be found: {}", sock_name),
                 }

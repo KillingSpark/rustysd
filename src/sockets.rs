@@ -174,9 +174,7 @@ impl Socket {
     }
 }
 
-pub fn open_all_sockets(
-    sockets: &mut SocketTable,
-) -> std::io::Result<()> {
+pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
     for (_, socket_unit) in sockets {
         if let UnitSpecialized::Socket(socket) = &mut socket_unit.specialized {
             for idx in 0..socket.sockets.len() {
