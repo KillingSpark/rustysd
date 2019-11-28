@@ -271,15 +271,10 @@ fn start_service_with_filedescriptors(
 
                     let (mut stream, _addr) = listener.accept().unwrap();
                     trace!(" [FORK_PARENT] Got notification connection");
-                    let mut buf = vec![0u8; 512];
-                    let iter_stream = &mut stream;
-                    let mut iter = std::iter::from_fn(||match iter_stream.read(&mut buf[0..1]){
-                        Ok(0) => None,
-                        Ok(_) => Some(buf[0]),
-                        Err(_) => None,
-                    });
+                    
+                   
                     loop {
-                        let bytes: Vec<_> = (&mut iter).take_while(|x| *x != b'\n').collect();
+                        let bytes: Vec<_> = (&mut stream).bytes().map(|x| x.unwrap()).take_while(|x| *x != b'\n').collect();
                         let note_string = String::from_utf8(bytes).unwrap();
                         trace!(
                             " [FORK_PARENT] Notification received from service: {:?}",
