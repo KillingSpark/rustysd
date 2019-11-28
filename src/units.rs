@@ -230,4 +230,8 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
         let unit = units.get_mut(&before).unwrap();
         unit.install.after.push(after);
     }
+
+    for srvc in units.values_mut() {
+        srvc.dedup_dependencies();
+    }
 }

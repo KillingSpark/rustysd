@@ -29,9 +29,6 @@ fn main() {
     let (mut service_table, mut socket_unit_table) = unit_parser::load_all_units(&PathBuf::from("./test_units")).unwrap();
 
     units::fill_dependencies(&mut service_table);
-    for srvc in service_table.values_mut() {
-        srvc.dedup_dependencies();
-    }
 
     let service_table =
         sockets::apply_sockets_to_services(service_table, &socket_unit_table).unwrap();
