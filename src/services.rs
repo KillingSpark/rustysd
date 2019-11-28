@@ -36,10 +36,10 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<I
         if let UnitSpecialized::Service(srvc) = &unit.specialized {
             let split: Vec<&str> = match &srvc.service_config {
                 Some(conf) => {
-                    if conf.stop.len() == 0 {
+                    if conf.stop.is_empty() {
                         continue;
                     }
-                    conf.stop.split(" ").collect()
+                    conf.stop.split(' ').collect()
                 }
                 None => continue,
             };
@@ -186,7 +186,7 @@ pub fn run_services(
     let mut root_services = Vec::new();
 
     for (id, unit) in &services {
-        if unit.install.after.len() == 0 {
+        if unit.install.after.is_empty() {
             root_services.push(*id);
         }
     }
@@ -274,7 +274,7 @@ fn start_service_with_filedescriptors(
                     loop {
                         let bytes: Vec<_> = (&mut stream)
                             .bytes()
-                            .map(|x| x.unwrap())
+                            .map(std::result::Result::unwrap)
                             .take_while(|x| *x != b'\n')
                             .collect();
                         let note_string = String::from_utf8(bytes).unwrap();
@@ -309,7 +309,7 @@ fn start_service_with_filedescriptors(
             // and here we only unflag those that we want to keep?
             trace!(" [FORK_CHILD] CLOSING FDS");
 
-            for (_id, sock_unit) in sockets {
+            for sock_unit in sockets.values() {
                 if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
                     if !srvc.socket_names.contains(&sock.name) {
                         trace!(" [FORK_CHILD] CLOSE FDS FOR SOCKET: {}", sock.name);
@@ -453,7 +453,7 @@ fn start_service_with_filedescriptors(
             }
 
             let split: Vec<&str> = match &srvc.service_config {
-                Some(conf) => conf.exec.split(" ").collect(),
+                Some(conf) => conf.exec.split(' ').collect(),
                 None => unreachable!(),
             };
 
@@ -486,12 +486,12 @@ pub fn start_service(
     srvc.status = ServiceStatus::Starting;
 
     let split: Vec<&str> = match &srvc.service_config {
-        Some(conf) => conf.exec.split(" ").collect(),
+        Some(conf) => conf.exec.split(' ').collect(),
         None => return,
     };
 
     if let Some(srvc_conf) = &srvc.service_config {
-        if srvc_conf.sockets.len() > 0 {
+        if !srvc_conf.sockets.is_empty() {
             start_service_with_filedescriptors(srvc, service_table, id, name, sockets);
         } else {
             let mut cmd = Command::new(split[0]);
