@@ -95,9 +95,7 @@ impl UnitConfig {
             .to_owned();
 
         let split: Vec<_> = name.split('.').collect();
-        let name = split[0..split.len() - 1].join(".");
-
-        name
+        split[0..split.len() - 1].join(".")
     }
 }
 

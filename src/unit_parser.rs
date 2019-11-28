@@ -133,7 +133,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
         specialized: UnitSpecialized::Socket(Socket {
             name: sock_name,
             sockets: sock_configs,
-            services: services,
+            services,
         }),
     })
 }
@@ -179,13 +179,13 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Unit {
             required_by: Vec::new(),
             before: Vec::new(),
             after: Vec::new(),
-            install_config: install_config,
+            install_config,
         },
         specialized: UnitSpecialized::Service(Service {
             pid: None,
             status: ServiceStatus::NeverRan,
 
-            service_config: service_config,
+            service_config,
             socket_names: Vec::new(),
             notify_access_socket: None,
 
@@ -274,52 +274,44 @@ fn parse_socket_section(
             SocketKind::Stream(addr) => {
                 if parse_unix_addr(addr).is_ok() {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
+                } else if let Ok(addr) = parse_ipv4_addr(addr) {
+                    SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
+                        addr: std::net::SocketAddr::V4(addr),
+                    })
+                } else if let Ok(addr) = parse_ipv6_addr(addr) {
+                    SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
+                        addr: std::net::SocketAddr::V6(addr),
+                    })
                 } else {
-                    if let Ok(addr) = parse_ipv4_addr(addr) {
-                        SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
-                            addr: std::net::SocketAddr::V4(addr),
-                        })
-                    } else {
-                        if let Ok(addr) = parse_ipv6_addr(addr) {
-                            SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
-                                addr: std::net::SocketAddr::V6(addr),
-                            })
-                        } else {
-                            return Err(format!(
-                                "No specialized config for socket found for socket addr: {}",
-                                addr
-                            ));
-                        }
-                    }
+                    return Err(format!(
+                        "No specialized config for socket found for socket addr: {}",
+                        addr
+                    ));
                 }
             }
             SocketKind::Datagram(addr) => {
                 if parse_unix_addr(addr).is_ok() {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
+                } else if let Ok(addr) = parse_ipv4_addr(addr) {
+                    SpecializedSocketConfig::UdpSocket(UdpSocketConfig {
+                        addr: std::net::SocketAddr::V4(addr),
+                    })
+                } else if let Ok(addr) = parse_ipv6_addr(addr) {
+                    SpecializedSocketConfig::UdpSocket(UdpSocketConfig {
+                        addr: std::net::SocketAddr::V6(addr),
+                    })
                 } else {
-                    if let Ok(addr) = parse_ipv4_addr(addr) {
-                        SpecializedSocketConfig::UdpSocket(UdpSocketConfig {
-                            addr: std::net::SocketAddr::V4(addr),
-                        })
-                    } else {
-                        if let Ok(addr) = parse_ipv6_addr(addr) {
-                            SpecializedSocketConfig::UdpSocket(UdpSocketConfig {
-                                addr: std::net::SocketAddr::V6(addr),
-                            })
-                        } else {
-                            return Err(format!(
-                                "No specialized config for socket found for socket addr: {}",
-                                addr
-                            ));
-                        }
-                    }
+                    return Err(format!(
+                        "No specialized config for socket found for socket addr: {}",
+                        addr
+                    ));
                 }
             }
         };
 
         socket_configs.push(SocketConfig {
-            kind: kind,
-            specialized: specialized,
+            kind,
+            specialized,
             fd: None,
         });
     }
@@ -329,7 +321,7 @@ fn parse_socket_section(
         None => "unknown".into(),
     };
 
-    return Ok((name, services, socket_configs));
+    Ok((name, services, socket_configs))
 }
 
 fn map_tupels_to_second<X, Y: Clone>(v: Vec<(X, Y)>) -> Vec<Y> {
@@ -395,7 +387,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
         None => ServiceType::Simple,
     };
 
-    let notify_access = match notify_access {
+    let notifyaccess = match notify_access {
         Some(vec) => {
             if vec.len() == 1 {
                 match vec[0].1.as_str() {
@@ -435,11 +427,11 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     };
 
     ServiceConfig {
-        srcv_type: srcv_type,
-        notifyaccess: notify_access,
-        keep_alive: keep_alive,
-        exec: exec,
-        stop: stop,
+        srcv_type,
+        notifyaccess,
+        keep_alive,
+        exec,
+        stop,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),
     }
 }
@@ -457,12 +449,10 @@ pub fn parse_all_services(
     for entry in files {
         if entry.path().is_dir() {
             parse_all_services(services, path, last_id);
-        } else {
-            if entry.path().to_str().unwrap().ends_with(".service") {
-                trace!("{:?}", entry.path());
-                *last_id += 1;
-                services.insert(*last_id, parse_service(&entry.path(), *last_id));
-            }
+        } else if entry.path().to_str().unwrap().ends_with(".service") {
+            trace!("{:?}", entry.path());
+            *last_id += 1;
+            services.insert(*last_id, parse_service(&entry.path(), *last_id));
         }
     }
 }
@@ -480,12 +470,10 @@ pub fn parse_all_sockets(
     for entry in files {
         if entry.path().is_dir() {
             parse_all_sockets(sockets, path, last_id);
-        } else {
-            if entry.path().to_str().unwrap().ends_with(".socket") {
-                trace!("{:?}", entry.path());
-                *last_id += 1;
-                sockets.insert(*last_id, parse_socket(&entry.path(), *last_id).unwrap());
-            }
+        } else if entry.path().to_str().unwrap().ends_with(".socket") {
+            trace!("{:?}", entry.path());
+            *last_id += 1;
+            sockets.insert(*last_id, parse_socket(&entry.path(), *last_id).unwrap());
         }
     }
 }

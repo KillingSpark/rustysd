@@ -210,7 +210,7 @@ pub fn run_services(
     let services = services_arc.as_ref().lock().unwrap().clone();
     let pids = pids_arc.as_ref().lock().unwrap().clone();
 
-    return (services, pids);
+    (services, pids)
 }
 
 fn start_service_with_filedescriptors(

@@ -53,59 +53,48 @@ pub fn execute_command(
                             .as_array_mut()
                             .unwrap()
                             .push(Value::String(format!("Service: {}", srvc[0].1.conf.name())));
+                    } else if name.ends_with(".socket") {
+                        let name = name.trim_end_matches(".socket");
+                        let socket_table_locked = socket_table.lock().unwrap();
+                        let sock: Vec<_> = socket_table_locked
+                            .iter()
+                            .filter(|(_id, unit)| unit.conf.name() == name)
+                            .collect();
+                        if sock.len() != 1 {
+                            return Err(format!("No socket found with name: {}", name));
+                        }
+
+                        result_vec
+                            .as_array_mut()
+                            .unwrap()
+                            .push(Value::String(format!("Socket: {}", sock[0].1.conf.name())));
                     } else {
-                        if name.ends_with(".socket") {
-                            let name = name.trim_end_matches(".socket");
+                        let srvc_name = name.trim_end_matches(".service");
+                        let srvc_table_locked = service_table.lock().unwrap();
+                        let srvc: Vec<_> = srvc_table_locked
+                            .iter()
+                            .filter(|(_id, unit)| unit.conf.name() == srvc_name)
+                            .collect();
+                        if srvc.len() == 1 {
+                            result_vec
+                                .as_array_mut()
+                                .unwrap()
+                                .push(Value::String(format!("Service: {}", srvc[0].1.conf.name())));
+                        } else {
+                            let sock_name = name.trim_end_matches(".socket");
                             let socket_table_locked = socket_table.lock().unwrap();
                             let sock: Vec<_> = socket_table_locked
                                 .iter()
-                                .filter(|(_id, unit)| unit.conf.name() == name)
+                                .filter(|(_id, unit)| unit.conf.name() == sock_name)
                                 .collect();
                             if sock.len() != 1 {
-                                return Err(format!("No socket found with name: {}", name));
+                                return Err(format!("No socket found with name: {}", sock_name));
                             }
 
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
                                 .push(Value::String(format!("Socket: {}", sock[0].1.conf.name())));
-                        } else {
-                            let srvc_name = name.trim_end_matches(".service");
-                            let srvc_table_locked = service_table.lock().unwrap();
-                            let srvc: Vec<_> = srvc_table_locked
-                                .iter()
-                                .filter(|(_id, unit)| unit.conf.name() == srvc_name)
-                                .collect();
-                            if srvc.len() == 1 {
-                                result_vec
-                                    .as_array_mut()
-                                    .unwrap()
-                                    .push(Value::String(format!(
-                                        "Service: {}",
-                                        srvc[0].1.conf.name()
-                                    )));
-                            } else {
-                                let sock_name = name.trim_end_matches(".socket");
-                                let socket_table_locked = socket_table.lock().unwrap();
-                                let sock: Vec<_> = socket_table_locked
-                                    .iter()
-                                    .filter(|(_id, unit)| unit.conf.name() == sock_name)
-                                    .collect();
-                                if sock.len() != 1 {
-                                    return Err(format!(
-                                        "No socket found with name: {}",
-                                        sock_name
-                                    ));
-                                }
-
-                                result_vec
-                                    .as_array_mut()
-                                    .unwrap()
-                                    .push(Value::String(format!(
-                                        "Socket: {}",
-                                        sock[0].1.conf.name()
-                                    )));
-                            }
                         }
                     }
                 }
