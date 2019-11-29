@@ -1,6 +1,6 @@
 use crate::units::*;
 
-use crate::services::{Service, ServiceStatus};
+use crate::services::{Service, ServiceStatus, ServiceRuntimeInfo};
 use crate::sockets::*;
 
 use std::collections::HashMap;
@@ -203,6 +203,11 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> 
             socket_names: Vec::new(),
 
             status_msgs: Vec::new(),
+
+            runtime_info: ServiceRuntimeInfo {
+                restarted: 0,
+                up_since: None,
+            }
         }),
     })
 }

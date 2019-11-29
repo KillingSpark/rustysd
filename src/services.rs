@@ -16,6 +16,12 @@ pub enum ServiceStatus {
 }
 
 #[derive(Clone)]
+pub struct ServiceRuntimeInfo {
+    pub restarted: u64,
+    pub up_since: Option<std::time::Instant>,
+}
+
+#[derive(Clone)]
 pub struct Service {
     pub pid: Option<u32>,
     pub service_config: Option<ServiceConfig>,
@@ -24,6 +30,8 @@ pub struct Service {
     pub socket_names: Vec<String>,
 
     pub status_msgs: Vec<String>,
+
+    pub runtime_info: ServiceRuntimeInfo,
 }
 
 pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Unit>) {
@@ -101,7 +109,10 @@ pub fn service_exit_handler(
                     srvc_id,
                     service_table.clone(),
                 );
-                pid_table.insert(srvc.pid.unwrap(), unit.id);
+                if let Some(pid) = srvc.pid {
+                    srvc.runtime_info.restarted += 1;
+                    pid_table.insert(pid, unit.id);
+                }
             } else {
                 trace!(
                     "Killing all services requiring service with id {}: {:?}",
@@ -155,7 +166,7 @@ fn run_services_recursive(
                                 let mut pids = pids_copy.lock().unwrap();
                                 pids.insert(new_pid, unit.id);
                             }
-                        }else{
+                        } else {
                             // TODO dont event start services that require this one
                         }
                     }

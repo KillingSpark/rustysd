@@ -354,5 +354,6 @@ pub fn start_service(
                 Err(e) => panic!(e.description().to_owned()),
             }
         }
+        srvc.runtime_info.up_since = Some(std::time::Instant::now());
     }
 }

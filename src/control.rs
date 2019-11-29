@@ -12,7 +12,12 @@ pub fn parse_command(cmd: Value) -> Result<Command, String> {
             let cmd_str = map.get("cmd");
             match cmd_str {
                 Some(Value::String(cmd_str)) => match cmd_str.as_str() {
-                    "status" => Command::Status(None),
+                    "status" => {
+                        match map.get("name") {
+                            Some(Value::String(name)) => Command::Status(Some(name.clone())),
+                            _ => Command::Status(None),
+                        }
+                    },
                     "list-units" => Command::ListUnits(None),
                     _ => return Err(format!("Unknown command: {}", cmd_str)),
                 },
@@ -23,6 +28,26 @@ pub fn parse_command(cmd: Value) -> Result<Command, String> {
     };
 
     Ok(command)
+}
+
+pub fn format_service(srvc_unit: &Unit) -> Value {
+    let mut map = serde_json::Map::new();
+    map.insert(
+        "Name".into(),
+        Value::String(format!("{}", srvc_unit.conf.name())),
+    );
+    if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+        map.insert(
+            "Sockets".into(),
+            Value::Array(
+                srvc.socket_names
+                    .iter()
+                    .map(|x| Value::String(x.clone()))
+                    .collect(),
+            ),
+        );
+    }
+    Value::Object(map)
 }
 
 pub fn execute_command(
@@ -50,7 +75,7 @@ pub fn execute_command(
                         result_vec
                             .as_array_mut()
                             .unwrap()
-                            .push(Value::String(format!("Service: {}", srvc[0].1.conf.name())));
+                            .push(format_service(&srvc[0].1));
                     } else if name.ends_with(".socket") {
                         let name = name.trim_end_matches(".socket");
                         let socket_table_locked = socket_table.lock().unwrap();
@@ -77,7 +102,7 @@ pub fn execute_command(
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
-                                .push(Value::String(format!("Service: {}", srvc[0].1.conf.name())));
+                                .push(format_service(&srvc[0].1));
                         } else {
                             let sock_name = name.trim_end_matches(".socket");
                             let socket_table_locked = socket_table.lock().unwrap();
@@ -103,7 +128,7 @@ pub fn execute_command(
                         result_vec
                             .as_array_mut()
                             .unwrap()
-                            .push(Value::String(format!("Service: {}", srvc_unit.conf.name())));
+                            .push(format_service(&srvc_unit));
                     }
                     let socket_table_locked = &*socket_table.lock().unwrap();
                     for sock_unit in socket_table_locked.values() {
@@ -124,19 +149,25 @@ pub fn execute_command(
 }
 
 use std::io::Read;
-pub fn listen_on_commands(
-    mut source: Box<Read + Send>,
+use std::io::Write;
+pub fn listen_on_commands<T: 'static + Read + Write + Send>(
+    mut source: Box<T>,
     service_table: ArcMutServiceTable,
     socket_table: ArcMutSocketTable,
 ) {
     std::thread::spawn(move || loop {
-        match serde_json::from_reader(&mut source) {
+        match serde_json::from_reader(&mut *source) {
             Ok(v) => {
                 let v: Value = v;
                 let cmd = parse_command(v).unwrap();
-                execute_command(cmd, service_table.clone(), socket_table.clone()).unwrap();
+                let response =
+                    execute_command(cmd, service_table.clone(), socket_table.clone()).unwrap();
+                source.write_all(response.as_bytes()).unwrap();
             }
-            Err(e) => error!("Error while reading from command source {}", e),
+            Err(e) => {
+                error!("Error while reading from command source {}", e);
+                return;
+            }
         }
     });
 }
