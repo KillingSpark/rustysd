@@ -2,7 +2,7 @@ use crate::services::{Service, ServiceStatus};
 use crate::units::*;
 use std::error::Error;
 use std::io::Read;
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::UnixDatagram;
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 
@@ -207,51 +207,37 @@ fn after_fork_parent(
 
     if let Some(conf) = &srvc.service_config {
         if let ServiceType::Notify = conf.srcv_type {
-            let listener = match &srvc.notify_access_socket {
-                None => {
+            let stream = {
                     if notify_socket_env_var.exists() {
                         std::fs::remove_file(notify_socket_env_var).unwrap();
                     }
-                    let new_listener = Arc::new(UnixListener::bind(notify_socket_env_var).unwrap());
+                    let stream = UnixDatagram::bind(notify_socket_env_var).unwrap();
                     // close these fd's on exec. They must not show up in child processes
-                    let new_listener_fd = new_listener.as_raw_fd();
+                    let new_listener_fd = stream.as_raw_fd();
                     nix::fcntl::fcntl(new_listener_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
-                    srvc.notify_access_socket.get_or_insert(new_listener)
-                }
-                Some(l) => l,
-            };
+                    stream
+                };
 
             trace!(
                 "[FORK_PARENT] Waiting for a notification on: {:?}",
                 &notify_socket_env_var
             );
 
-            let (mut stream, _addr) = listener.accept().unwrap();
-            trace!("[FORK_PARENT] Got notification connection");
-
+            let mut buffer = String::new();
+            let mut buf = [0u8;512];
             loop {
-                let bytes: Vec<_> = (&mut stream)
-                    .bytes()
-                    .map(std::result::Result::unwrap)
-                    .take_while(|x| *x != b'\n')
-                    .collect();
-                let note_string = String::from_utf8(bytes).unwrap();
-                trace!(
-                    "[FORK_PARENT] Notification received from service: {:?}",
-                    note_string,
-                );
-                crate::notification_handler::handle_notification_message(
-                    &note_string,
-                    srvc,
-                    name.clone(),
-                );
+                let bytes = stream.recv(&mut buf[..]).unwrap();
+                buffer.push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
+                
+                
+                buffer = crate::notification_handler::handle_notifications_from_buffer(buffer, srvc, &name);
                 if let ServiceStatus::Running = srvc.status {
                     break;
                 } else {
                     trace!("[FORK_PARENT] Service still not ready",);
                 }
             }
-            crate::notification_handler::handle_stream(stream, id, service_table);
+            crate::notification_handler::handle_stream(stream, id, service_table, buffer);
         } else {
             trace!("[FORK_PARENT] service {} doesnt notify", name);
             srvc.status = ServiceStatus::Running;

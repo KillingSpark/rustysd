@@ -39,13 +39,6 @@ fn main() {
     let pid_table = Arc::new(Mutex::new(pid_table));
     let socket_table = Arc::new(Mutex::new(socket_unit_table));
 
-    // listen on notifications pushed by the services
-    notification_handler::handle_notifications(
-        socket_table.clone(),
-        service_table.clone(),
-        pid_table.clone(),
-    );
-
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(service_table.clone(), socket_table.clone());
 

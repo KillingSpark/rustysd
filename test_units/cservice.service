@@ -1,0 +1,6 @@
+[Service]
+Exec= ./test_c_service/test_service
+Sockets= cservice
+NotifyAccess= all
+Type= notify
+keep_alive = true

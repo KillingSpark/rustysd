@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
 
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::UnixDatagram;
 
 use crate::units::*;
 
@@ -24,7 +24,6 @@ pub struct Service {
 
     pub status: ServiceStatus,
     pub socket_names: Vec<String>,
-    pub notify_access_socket: Option<Arc<UnixListener>>,
 
     pub status_msgs: Vec<String>,
 }

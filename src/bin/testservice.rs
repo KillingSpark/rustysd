@@ -177,17 +177,14 @@ fn main() {
 
     std::thread::sleep(std::time::Duration::from_secs(3));
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
-    let mut stream = UnixStream::connect(socket_path).unwrap();
-    stream.write_all(&b"STATUS=Next message that should be read before the READY message\nREADY=1\nSTATUS=Next message that should not be read directly after the fork\n"[..]).unwrap();
-    stream.shutdown(std::net::Shutdown::Both).unwrap();
-
-    let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
-    let mut stream = UnixStream::connect(socket_path).unwrap();
-
+    let stream = UnixDatagram::unbound().unwrap();
+    stream.connect(socket_path).unwrap();
+    stream.send(&b"STATUS=Next message that should be read before the READY message\nREADY=1\nSTATUS=Next message that should not be read directly after the fork\n"[..]).unwrap();
+    
     let mut counter = 0;
     loop {
         stream
-            .write_all(format!("STATUS=Looping since {} seconds\n", counter).as_bytes())
+            .send(format!("STATUS=Looping since {} seconds\n", counter).as_bytes())
             .unwrap();
         std::thread::sleep(std::time::Duration::from_secs(1));
         counter += 1;
