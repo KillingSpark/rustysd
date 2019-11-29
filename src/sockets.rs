@@ -180,6 +180,10 @@ pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
             for idx in 0..socket.sockets.len() {
                 let conf = &mut socket.sockets[idx];
                 let as_raw_fd = conf.specialized.open().unwrap();
+                // close these fd's on exec. They must not show up in child processes
+                // the ńeeded fd's will be duped which unsets the flag again
+                let new_fd = as_raw_fd.as_raw_fd();
+                nix::fcntl::fcntl(new_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
                 conf.fd = Some(as_raw_fd);
                 //need to stop the listener to drop which would close the filedescriptor
             }

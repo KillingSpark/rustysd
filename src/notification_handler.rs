@@ -3,6 +3,7 @@ use crate::units::*;
 use std::collections::HashMap;
 use std::io::Read;
 use std::os::unix::net::UnixStream;
+use std::os::unix::io::AsRawFd;
 use std::sync::{Arc, Mutex};
 
 pub fn handle_notification_message(msg: &str, srvc: &mut Service, name: String) {
@@ -105,6 +106,9 @@ pub fn handle_notifications(
                 .collect();
             let streams = crate::unix_listener_select::select(&select_vec, None).unwrap();
             for ((name, id), (stream, _addr)) in streams {
+                // close these fd's on exec. They must not show up in child processes
+                let new_fd = stream.as_raw_fd();
+                nix::fcntl::fcntl(new_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
                 trace!(
                     " [Notification-Listener] Service: {} has connected on the notification socket",
                     name

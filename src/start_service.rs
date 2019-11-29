@@ -3,6 +3,7 @@ use crate::units::*;
 use std::error::Error;
 use std::io::Read;
 use std::os::unix::net::UnixListener;
+use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 
 use std::process::{Command, Stdio};
@@ -134,9 +135,28 @@ fn after_fork_child(
                         None => panic!("No fd found for socket conf"),
                     };
                     if new_fd as i32 != old_fd {
-                        //ignore output. newfd might already be closed
+                        //ignore output. newfd might already be closed.
+                        // TODO check for actual errors other than bad_fd
                         let _ = nix::unistd::close(new_fd as i32);
                         nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                    }else{
+                        // if new==old we need to unset the FD_CLOEXEC flag or the fd wont be passed to the 
+                        // execed process
+                        let old_flags = unsafe {libc::fcntl(new_fd, libc::F_GETFD, 0)};
+                        if old_flags <= -1 {
+                            eprintln!(
+                                "[FORK_CHILD {}] failed to manually get the FD flag on fd: {}", name, new_fd
+                            )
+                        }else{
+                            let unset_cloexec_flag = std::ops::Neg::neg(libc::FD_CLOEXEC);
+                            let new_flags = old_flags & unset_cloexec_flag;
+                            let result = unsafe {libc::fcntl(new_fd, libc::F_SETFD, new_flags)};
+                            if result <= -1 {
+                                eprintln!(
+                                    "[FORK_CHILD {}] failed to manually unset the CLOEXEC flag on fd: {}", name, new_fd
+                                )
+                            }
+                        }
                     }
                     fd_idx += 1;
                 }
@@ -193,6 +213,9 @@ fn after_fork_parent(
                         std::fs::remove_file(notify_socket_env_var).unwrap();
                     }
                     let new_listener = Arc::new(UnixListener::bind(notify_socket_env_var).unwrap());
+                    // close these fd's on exec. They must not show up in child processes
+                    let new_listener_fd = new_listener.as_raw_fd();
+                    nix::fcntl::fcntl(new_listener_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
                     srvc.notify_access_socket.get_or_insert(new_listener)
                 }
                 Some(l) => l,
