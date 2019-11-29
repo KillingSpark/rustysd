@@ -1,6 +1,5 @@
 use std::env;
 use std::io::Read;
-use std::io::Write;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
 

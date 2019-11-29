@@ -1,10 +1,8 @@
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
 use std::error::Error;
-use std::io::Read;
 use std::os::unix::net::UnixDatagram;
 use std::os::unix::io::AsRawFd;
-use std::sync::Arc;
 
 use std::process::{Command, Stdio};
 

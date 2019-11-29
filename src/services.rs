@@ -5,8 +5,6 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
 
-use std::os::unix::net::UnixDatagram;
-
 use crate::units::*;
 
 #[derive(Clone)]

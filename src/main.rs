@@ -7,7 +7,6 @@ mod sockets;
 mod start_service;
 mod unit_parser;
 mod units;
-mod unix_listener_select;
 
 extern crate signal_hook;
 
