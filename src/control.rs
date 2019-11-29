@@ -1,5 +1,6 @@
 use crate::units::*;
 use serde_json::Value;
+use crate::services;
 
 pub enum Command {
     ListUnits(Option<UnitSpecialized>),
@@ -12,11 +13,9 @@ pub fn parse_command(cmd: Value) -> Result<Command, String> {
             let cmd_str = map.get("cmd");
             match cmd_str {
                 Some(Value::String(cmd_str)) => match cmd_str.as_str() {
-                    "status" => {
-                        match map.get("name") {
-                            Some(Value::String(name)) => Command::Status(Some(name.clone())),
-                            _ => Command::Status(None),
-                        }
+                    "status" => match map.get("name") {
+                        Some(Value::String(name)) => Command::Status(Some(name.clone())),
+                        _ => Command::Status(None),
                     },
                     "list-units" => Command::ListUnits(None),
                     _ => return Err(format!("Unknown command: {}", cmd_str)),
@@ -46,6 +45,17 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
                     .collect(),
             ),
         );
+        let status_str = match srvc.status {
+            services::ServiceStatus::NeverRan => "NeverRan".into(),
+            services::ServiceStatus::Running => "Running".into(),
+            services::ServiceStatus::Starting => "Starting".into(),
+            services::ServiceStatus::Stopped => "Stopped".into(),
+        };
+        map.insert("Status".into(), Value::String(status_str));
+        if let Some(instant) = srvc.runtime_info.up_since {
+        map.insert("UpSince".into(), Value::String(format!("{:?}", instant.elapsed())));
+        }
+        map.insert("Restarted".into(), Value::String(format!("{:?}", srvc.runtime_info.restarted)));
     }
     Value::Object(map)
 }
