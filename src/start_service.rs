@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 
 fn after_fork_child(
     srvc: &mut Service,
-    name: &String,
+    name: &str,
     sockets: &SocketTable,
     notify_socket_env_var: &str,
 ) {
