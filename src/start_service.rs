@@ -181,10 +181,10 @@ fn after_fork_child(
 
     match nix::unistd::execv(&cmd, &args) {
         Ok(_) => {
-            eprintln!("execv returned Ok()... This should never happen");
+            eprintln!("[FORK_CHILD {}] execv returned Ok()... This should never happen", name);
         }
         Err(e) => {
-            eprintln!("execv errored: {:?}", e);
+            eprintln!("[FORK_CHILD {}] execv errored: {:?}", name, e);
         }
     }
 }
@@ -244,6 +244,24 @@ fn start_service_with_filedescriptors(
     name: String,
     sockets: ArcMutSocketTable,
 ) {
+    // check if executable even exists
+    let split: Vec<&str> = match &srvc.service_config {
+        Some(conf) => conf.exec.split(' ').collect(),
+        None => unreachable!(),
+    };
+
+    let cmd = std::path::PathBuf::from(split[0]);
+    if !cmd.exists() {
+        error!("The service {} specified an executable that does not exist: {:?}", name, &cmd);
+        srvc.status = ServiceStatus::Stopped;
+        return;
+    }
+    if !cmd.is_file() {
+        error!("The service {} specified an executable that is not a file: {:?}", name, &cmd);
+        srvc.status = ServiceStatus::Stopped;
+        return;
+    }
+
     // 1. fork
     // 2. in fork use dup2 to map all relevant file desrciptors to 3..x
     // 3. in fork mark all other file descriptors with FD_CLOEXEC

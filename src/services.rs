@@ -148,14 +148,17 @@ fn run_services_recursive(
                             id,
                             services_copy.clone(),
                         );
-                        let new_pid = srvc.pid.unwrap();
-                        {
-                            let mut services_locked = services_copy.lock().unwrap();
-                            services_locked.insert(id, unit.clone()).unwrap().clone()
-                        };
-                        {
-                            let mut pids = pids_copy.lock().unwrap();
-                            pids.insert(new_pid, unit.id);
+                        if let Some(new_pid) = srvc.pid {
+                            {
+                                let mut services_locked = services_copy.lock().unwrap();
+                                services_locked.insert(id, unit.clone()).unwrap().clone()
+                            };
+                            {
+                                let mut pids = pids_copy.lock().unwrap();
+                                pids.insert(new_pid, unit.id);
+                            }
+                        }else{
+                            // TODO dont event start services that require this one
                         }
                     }
                     _ => unreachable!(),
