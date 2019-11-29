@@ -1,0 +1,12 @@
+[Unit]
+Description=test Socket
+
+[Socket]
+FileDescriptorName= SockeyMcSocketFace2
+
+ListenDatagram= 127.0.0.1:1082
+ListenDatagram= 127.0.0.1:1083
+Service= cservice
+
+[Install]
+WantedBy=sockets.target

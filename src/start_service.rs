@@ -196,6 +196,7 @@ fn after_fork_parent(
     name: String,
     child: i32,
     notify_socket_env_var: &std::path::Path,
+    stream: UnixDatagram,
 ) {
     srvc.pid = Some(child as u32);
 
@@ -207,16 +208,6 @@ fn after_fork_parent(
 
     if let Some(conf) = &srvc.service_config {
         if let ServiceType::Notify = conf.srcv_type {
-            let stream = {
-                    if notify_socket_env_var.exists() {
-                        std::fs::remove_file(notify_socket_env_var).unwrap();
-                    }
-                    let stream = UnixDatagram::bind(notify_socket_env_var).unwrap();
-                    // close these fd's on exec. They must not show up in child processes
-                    let new_listener_fd = stream.as_raw_fd();
-                    nix::fcntl::fcntl(new_listener_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
-                    stream
-                };
 
             trace!(
                 "[FORK_PARENT] Waiting for a notification on: {:?}",
@@ -241,6 +232,7 @@ fn after_fork_parent(
         } else {
             trace!("[FORK_PARENT] service {} doesnt notify", name);
             srvc.status = ServiceStatus::Running;
+            crate::notification_handler::handle_stream(stream, id, service_table, String::new());
         }
     }
 }
@@ -273,6 +265,17 @@ fn start_service_with_filedescriptors(
         daemon_socket_path
     };
 
+    let stream = {
+        if notify_socket_env_var.exists() {
+            std::fs::remove_file(&notify_socket_env_var).unwrap();
+        }
+        let stream = UnixDatagram::bind(&notify_socket_env_var).unwrap();
+        // close these fd's on exec. They must not show up in child processes
+        let new_listener_fd = stream.as_raw_fd();
+        nix::fcntl::fcntl(new_listener_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
+        stream
+    };
+
     // make sure we have the lock that the child will need
     let sockets_lock = sockets.lock().unwrap();
     match nix::unistd::fork() {
@@ -285,6 +288,7 @@ fn start_service_with_filedescriptors(
                 name,
                 child,
                 std::path::Path::new(notify_socket_env_var.to_str().unwrap()),
+                stream
             );
         }
         Ok(nix::unistd::ForkResult::Child) => {
