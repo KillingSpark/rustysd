@@ -9,6 +9,9 @@ pub fn setup_logging(dir: &PathBuf) -> Result<(), String> {
         log_dir: dir.clone(),
         name_template: "rustysdlog.log".to_owned(),
     };
+    if !dir.exists() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("Error creating logdir: {}", e))?;
+    }
 
     let rotating = std::sync::Mutex::new(lumberjack_rs::new(lmbrjck_conf).unwrap());
 

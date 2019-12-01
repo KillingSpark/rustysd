@@ -34,9 +34,11 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
     std::env::vars().for_each(|(key, value)| {
         let mut new_key: Vec<String> = key.split("_").map(|part| part.to_lowercase()).collect();
         //drop prefix
-        new_key.remove(0);
-        let new_key = new_key.join(".");
-        settings.insert(new_key, SettingValue::Str(value));
+        if *new_key[0] == *"rustysd" {
+            new_key.remove(0);
+            let new_key = new_key.join(".");
+            settings.insert(new_key, SettingValue::Str(value));
+        }
     });
 
     let log_dir = settings.get("logging.dir").map(|dir| match dir {
