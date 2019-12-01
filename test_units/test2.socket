@@ -5,11 +5,11 @@ PartOf=test2.service
 [Socket]
 FileDescriptorName= Test2Sock
 
-ListenStream= ./servicelog2_stream
+ListenStream= ./sockets/servicelog2_stream
 ListenStream= 127.0.0.1:9080
 ListenDatagram= 127.0.0.1:9081
-ListenDatagram= ./servicelog2_datagram
-ListenSequentialPacket= ./servicelog2_sequential
+ListenDatagram= ./sockets/servicelog2_datagram
+ListenSequentialPacket= ./sockets/servicelog2_sequential
 
 [Install]
 WantedBy=sockets.target

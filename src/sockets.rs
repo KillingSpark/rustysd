@@ -69,6 +69,12 @@ impl UnixSocketConfig {
                     std::fs::remove_file(&spath).unwrap();
                 }
 
+                if let Some(parent) = spath.parent() {
+                    if !parent.exists() {
+                        std::fs::create_dir_all(parent).map_err(|e| format!("Error creating UnixSocket directory {:?} : {}", parent, e))?;
+                    }
+                }
+
                 trace!("opening streaming unix socket: {:?}", path);
                 // Bind to socket
                 let stream = match UnixListener::bind(&spath) {
@@ -85,6 +91,12 @@ impl UnixSocketConfig {
                     std::fs::remove_file(&spath).unwrap();
                 }
 
+                if let Some(parent) = spath.parent() {
+                    if !parent.exists() {
+                        std::fs::create_dir_all(parent).map_err(|e| format!("Error creating UnixSocket directory {:?} : {}", parent, e))?;
+                    }
+                }
+
                 trace!("opening datagram unix socket: {:?}", path);
                 // Bind to socket
                 let stream = match UnixDatagram::bind(&spath) {
@@ -99,6 +111,12 @@ impl UnixSocketConfig {
                 // Delete old socket if necessary
                 if spath.exists() {
                     std::fs::remove_file(&spath).unwrap();
+                }
+
+                if let Some(parent) = spath.parent() {
+                    if !parent.exists() {
+                        std::fs::create_dir_all(parent).map_err(|e| format!("Error creating UnixSocket directory {:?} : {}", parent, e))?;
+                    }
                 }
 
                 let addr_family = nix::sys::socket::AddressFamily::Unix;

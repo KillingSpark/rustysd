@@ -5,11 +5,11 @@ PartOf=test.service
 [Socket]
 FileDescriptorName= TestSockAlt
 
-ListenStream= ./servicelog_alt_stream
+ListenStream= ./sockets/servicelog_alt_stream
 ListenStream= 127.0.0.1:8083
 ListenDatagram= 127.0.0.1:8084
-ListenDatagram= ./servicelog_alt_datagram
-ListenSequentialPacket= ./servicelog_alt_sequential
+ListenDatagram= ./sockets/servicelog_alt_datagram
+ListenSequentialPacket= ./sockets/servicelog_alt_sequential
 
 #Service= test
 
