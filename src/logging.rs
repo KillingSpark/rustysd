@@ -1,11 +1,12 @@
 use std::io::Write;
+use std::path::PathBuf;
 
-pub fn setup_logging() -> Result<(), String> {
+pub fn setup_logging(dir: &PathBuf) -> Result<(), String> {
     let lmbrjck_conf = lumberjack_rs::Conf {
         max_age: None,
         max_files: Some(10),
         max_size: 10 * 1024 * 1024,
-        log_dir: "./logs".into(),
+        log_dir: dir.clone(),
         name_template: "rustysdlog.log".to_owned(),
     };
 

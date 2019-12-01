@@ -241,6 +241,7 @@ fn start_service_with_filedescriptors(
     id: InternalId,
     name: String,
     sockets: ArcMutSocketTable,
+    notification_socket_path: std::path::PathBuf,
 ) {
     // check if executable even exists
     let split: Vec<&str> = match &srvc.service_config {
@@ -267,11 +268,10 @@ fn start_service_with_filedescriptors(
     // 4. execve the cmd with the args
 
     // setup socket for notifications from the service
-    let notify_dir_path = std::path::PathBuf::from("./notifications");
-    if !notify_dir_path.exists() {
-        std::fs::create_dir_all(&notify_dir_path).unwrap();
+    if !notification_socket_path.exists() {
+        std::fs::create_dir_all(&notification_socket_path).unwrap();
     }
-    let daemon_socket_path = notify_dir_path.join(format!("{}.notifiy_socket", &name));
+    let daemon_socket_path = notification_socket_path.join(format!("{}.notifiy_socket", &name));
 
     // NOTIFY_SOCKET
     let notify_socket_env_var = if daemon_socket_path.starts_with(".") {
@@ -325,6 +325,7 @@ pub fn start_service(
     sockets: ArcMutServiceTable,
     id: InternalId,
     service_table: ArcMutServiceTable,
+    notification_socket_path: std::path::PathBuf,
 ) {
     srvc.status = ServiceStatus::Starting;
 
@@ -335,7 +336,7 @@ pub fn start_service(
 
     if let Some(srvc_conf) = &srvc.service_config {
         if !srvc_conf.sockets.is_empty() {
-            start_service_with_filedescriptors(srvc, service_table, id, name, sockets);
+            start_service_with_filedescriptors(srvc, service_table, id, name, sockets, notification_socket_path);
         } else {
             let mut cmd = Command::new(split[0]);
             for part in &split[1..] {

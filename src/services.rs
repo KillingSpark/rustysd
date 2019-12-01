@@ -75,6 +75,7 @@ pub fn service_exit_handler(
     service_table: ArcMutServiceTable,
     pid_table: &mut HashMap<u32, InternalId>,
     sockets: ArcMutSocketTable,
+    notification_socket_path: std::path::PathBuf,
 ) {
     let srvc_id = *(match pid_table.get(&(pid as u32)) {
         Some(id) => id,
@@ -108,6 +109,7 @@ pub fn service_exit_handler(
                     sockets,
                     srvc_id,
                     service_table.clone(),
+                    notification_socket_path
                 );
                 if let Some(pid) = srvc.pid {
                     srvc.runtime_info.restarted += 1;
@@ -133,6 +135,7 @@ fn run_services_recursive(
     sockets: ArcMutSocketTable,
     tpool: Arc<Mutex<ThreadPool>>,
     waitgroup: crossbeam::sync::WaitGroup,
+    notification_socket_path: std::path::PathBuf,
 ) {
     for id in ids_to_start {
         let waitgroup_copy = waitgroup.clone();
@@ -140,6 +143,7 @@ fn run_services_recursive(
         let services_copy = Arc::clone(&services);
         let pids_copy = Arc::clone(&pids);
         let sockets_copy = Arc::clone(&sockets);
+        let notification_socket_path_copy = notification_socket_path.clone();
 
         let job = move || {
             let mut unit = {
@@ -156,6 +160,7 @@ fn run_services_recursive(
                             sockets_copy.clone(),
                             id,
                             services_copy.clone(),
+                            notification_socket_path_copy.clone()
                         );
                         if let Some(new_pid) = srvc.pid {
                             {
@@ -180,6 +185,7 @@ fn run_services_recursive(
                     Arc::clone(&sockets_copy),
                     Arc::clone(&tpool_copy),
                     waitgroup_copy,
+                    notification_socket_path_copy
                 );
             }
         };
@@ -195,6 +201,7 @@ fn run_services_recursive(
 pub fn run_services(
     services: ServiceTable,
     sockets: SocketTable,
+    notification_socket_path: std::path::PathBuf,
 ) -> (HashMap<InternalId, Unit>, HashMap<u32, InternalId>) {
     let pids = HashMap::new();
     let mut root_services = Vec::new();
@@ -218,6 +225,7 @@ pub fn run_services(
         sockets_arc,
         pool_arc,
         waitgroup.clone(),
+        notification_socket_path
     );
 
     waitgroup.wait();

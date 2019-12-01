@@ -8,6 +8,7 @@ pub fn handle_signals(
     service_table: ArcMutServiceTable,
     socket_table: ArcMutSocketTable,
     pid_table: Arc<Mutex<HashMap<u32, InternalId>>>,
+    notification_socket_path: std::path::PathBuf,
 ) {
     let signals =
         Signals::new(&[signal_hook::SIGCHLD]).expect("Couldnt setup listening to the signals");
@@ -26,6 +27,7 @@ pub fn handle_signals(
                                 service_table.clone(),
                                 &mut pid_table.lock().unwrap(),
                                 socket_table.clone(),
+                                notification_socket_path.clone()
                             ),
                             Err(e) => {
                                 error!("{}", e);

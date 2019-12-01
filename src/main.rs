@@ -1,3 +1,4 @@
+mod config;
 mod control;
 mod logging;
 mod notification_handler;
@@ -18,20 +19,32 @@ extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
 
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 fn main() {
-    logging::setup_logging().unwrap();
+    let (log_conf, conf) = config::load_config(None);
+    logging::setup_logging(&log_conf.log_dir).unwrap();
+    let conf = match conf {
+        Ok(conf) => conf,
+        Err(e) => {
+            error!("Error while loading the conf: {}", e);
+            panic!(
+                "Reading conf did not work. See stdout or log at: {:?}",
+                log_conf.log_dir
+            );
+        }
+    };
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let (service_table, socket_unit_table) =
-        unit_parser::load_all_units(&PathBuf::from("./test_units")).unwrap();
+    let (service_table, socket_unit_table) = unit_parser::load_all_units(&conf.unit_dirs).unwrap();
 
     // parallel startup of all services
-    let (service_table, pid_table) =
-        services::run_services(service_table, socket_unit_table.clone());
+    let (service_table, pid_table) = services::run_services(
+        service_table,
+        socket_unit_table.clone(),
+        conf.notification_sockets_dir.clone(),
+    );
 
     // wrapping in arc<mutex<>> to share between the various threads
     let service_table = Arc::new(Mutex::new(service_table));
@@ -46,5 +59,6 @@ fn main() {
         service_table.clone(),
         socket_table.clone(),
         pid_table.clone(),
+        conf.notification_sockets_dir.clone(),
     );
 }
