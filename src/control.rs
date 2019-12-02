@@ -1,6 +1,6 @@
+use crate::services;
 use crate::units::*;
 use serde_json::Value;
-use crate::services;
 
 pub enum Command {
     ListUnits(Option<UnitSpecialized>),
@@ -29,6 +29,29 @@ pub fn parse_command(cmd: Value) -> Result<Command, String> {
     Ok(command)
 }
 
+pub fn format_socket(socket_unit: &Unit) -> Value {
+    let mut map = serde_json::Map::new();
+    map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+
+    if let UnitSpecialized::Socket(sock) = &socket_unit.specialized {
+        map.insert(
+            "FileDescriptorname".into(),
+            Value::String(sock.name.clone()),
+        );
+        map.insert(
+            "FileDescriptors".into(),
+            Value::Array(
+                sock.sockets
+                    .iter()
+                    .map(|sock_conf| Value::String(format!("{:?}", sock_conf.specialized)))
+                    .collect(),
+            ),
+        );
+    }
+
+    Value::Object(map)
+}
+
 pub fn format_service(srvc_unit: &Unit) -> Value {
     let mut map = serde_json::Map::new();
     map.insert(
@@ -53,9 +76,15 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
         };
         map.insert("Status".into(), Value::String(status_str));
         if let Some(instant) = srvc.runtime_info.up_since {
-        map.insert("UpSince".into(), Value::String(format!("{:?}", instant.elapsed())));
+            map.insert(
+                "UpSince".into(),
+                Value::String(format!("{:?}", instant.elapsed())),
+            );
         }
-        map.insert("Restarted".into(), Value::String(format!("{:?}", srvc.runtime_info.restarted)));
+        map.insert(
+            "Restarted".into(),
+            Value::String(format!("{:?}", srvc.runtime_info.restarted)),
+        );
     }
     Value::Object(map)
 }
@@ -145,7 +174,7 @@ pub fn execute_command(
                         result_vec
                             .as_array_mut()
                             .unwrap()
-                            .push(Value::String(format!("Socket: {}", sock_unit.conf.name())));
+                            .push(format_socket(sock_unit));
                     }
                 }
             }

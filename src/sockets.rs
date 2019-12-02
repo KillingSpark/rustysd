@@ -6,14 +6,14 @@ use std::sync::Arc;
 
 use crate::units::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SocketKind {
     Stream(String),
     Sequential(String),
     Datagram(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SpecializedSocketConfig {
     UnixSocket(UnixSocketConfig),
     TcpSocket(TcpSocketConfig),
@@ -30,7 +30,7 @@ impl SpecializedSocketConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UnixSocketConfig {
     pub kind: SocketKind,
 }
@@ -145,7 +145,7 @@ impl UnixSocketConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TcpSocketConfig {
     pub addr: std::net::SocketAddr,
 }
@@ -159,7 +159,7 @@ impl TcpSocketConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UdpSocketConfig {
     pub addr: std::net::SocketAddr,
 }
