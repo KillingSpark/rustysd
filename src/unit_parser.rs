@@ -209,7 +209,10 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> 
             runtime_info: ServiceRuntimeInfo {
                 restarted: 0,
                 up_since: None,
-            }
+            },
+
+            notifications: None,
+            notifications_buffer: String::new(),
         }),
     })
 }

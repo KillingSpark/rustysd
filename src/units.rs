@@ -120,7 +120,7 @@ pub struct SocketConfig {
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
 
-    pub fd: Option<Arc<Box<AsRawFd>>>,
+    pub fd: Option<Arc<Box<dyn AsRawFd>>>,
 }
 
 unsafe impl Send for SocketConfig {}

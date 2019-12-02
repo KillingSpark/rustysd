@@ -21,7 +21,7 @@ pub enum SpecializedSocketConfig {
 }
 
 impl SpecializedSocketConfig {
-    fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
+    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
         match self {
             SpecializedSocketConfig::UnixSocket(conf) => conf.open(),
             SpecializedSocketConfig::TcpSocket(conf) => conf.open(),
@@ -60,7 +60,7 @@ impl UnixSeqPacket {
 }
 
 impl UnixSocketConfig {
-    fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
+    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
         match &self.kind {
             SocketKind::Stream(path) => {
                 let spath = std::path::Path::new(&path);
@@ -119,9 +119,9 @@ impl UnixSocketConfig {
                     }
                 }
 
-                let addr_family = nix::sys::socket::AddressFamily::Unix;
-                let sock_type = nix::sys::socket::SockType::SeqPacket;
-                let flags = nix::sys::socket::SockFlag::empty(); //flags can be set by using the fnctl calls later if necessary
+                //let addr_family = nix::sys::socket::AddressFamily::Unix;
+                //let sock_type = nix::sys::socket::SockType::SeqPacket;
+                //let flags = nix::sys::socket::SockFlag::empty(); //flags can be set by using the fnctl calls later if necessary
                 let protocol = 0; // not really important, used to choose protocol but we dont support sockets where thats relevant
 
                 let path = std::path::PathBuf::from(&path);
@@ -130,7 +130,9 @@ impl UnixSocketConfig {
 
                 trace!("opening seqpacket unix socket: {:?}", path);
                 // first create the socket
-                let fd = nix::sys::socket::socket(addr_family, sock_type, flags, protocol).unwrap();
+                // cant use nix::socket because they only allow tcp/udp as protocols
+                // TODO make pull request and get a "Auto" = 0 member
+                let fd = unsafe{libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, protocol)};
                 // then bind the socket to the path
                 nix::sys::socket::bind(fd, &sock_addr).unwrap();
                 // then make the socket an accepting one
@@ -149,7 +151,7 @@ pub struct TcpSocketConfig {
 }
 
 impl TcpSocketConfig {
-    fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
+    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
         trace!("opening tcp socket: {:?}", self.addr);
         let listener = TcpListener::bind(self.addr).unwrap();
         //need to stop the listener to drop which would close the filedescriptor
@@ -163,7 +165,7 @@ pub struct UdpSocketConfig {
 }
 
 impl UdpSocketConfig {
-    fn open(&self) -> Result<Arc<Box<AsRawFd>>, String> {
+    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
         trace!("opening udp socket: {:?}", self.addr);
         let listener = UdpSocket::bind(self.addr).unwrap();
         //need to stop the listener to drop which would close the filedescriptor
@@ -201,7 +203,7 @@ pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
                 // close these fd's on exec. They must not show up in child processes
                 // the ńeeded fd's will be duped which unsets the flag again
                 let new_fd = as_raw_fd.as_raw_fd();
-                nix::fcntl::fcntl(new_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
+                nix::fcntl::fcntl(new_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC)).unwrap();
                 conf.fd = Some(as_raw_fd);
                 //need to stop the listener to drop which would close the filedescriptor
             }

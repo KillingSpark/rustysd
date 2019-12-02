@@ -1,8 +1,78 @@
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
 use std::collections::HashMap;
-use std::os::unix::net::UnixDatagram;
+use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::{Arc, Mutex};
+
+// will be used when service starting outside of the initial starting process is supported
+#[allow(dead_code)]
+pub fn notify_event_fd(eventfd: RawFd) {
+    let zeros: *const [u8] = &[1u8; 8][..];
+
+    unsafe {
+        let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
+        libc::write(eventfd, pointer, 8)
+    };
+}
+
+pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+    loop {
+        // need to collect all again. There might be a newly started service
+        let fd_to_srvc_id: HashMap<_, _> = service_table.lock().unwrap().iter().fold(
+            HashMap::new(),
+            |mut map, (id, srvc_unit)| {
+                if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+                    if let Some(socket) = &srvc.notifications {
+                        map.insert(socket.lock().unwrap().as_raw_fd(), *id);
+                    }
+                }
+                map
+            },
+        );
+
+        let mut fdset = nix::sys::select::FdSet::new();
+        for fd in fd_to_srvc_id.keys() {
+            fdset.insert(*fd);
+        }
+        fdset.insert(eventfd);
+
+        let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
+        match result {
+            Ok(_) => {
+                if fdset.contains(eventfd) {
+                    trace!("Interrupted select because the eventfd fired");
+                    let zeros: *const [u8] = &[0u8; 8][..];
+                    unsafe {
+                        let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
+                        libc::write(eventfd, pointer, 8)
+                    };
+                    trace!("Reset eventfd value");
+                }
+                let mut buf = [0u8; 512];
+                let service_table_locked = &mut *service_table.lock().unwrap();
+                for (fd, id) in &fd_to_srvc_id {
+                    if fdset.contains(*fd) {
+                        let srvc_unit = service_table_locked.get_mut(id).unwrap();
+                        if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
+                            if let Some(socket) = &srvc.notifications {
+                                let bytes = socket.lock().unwrap().recv(&mut buf[..]).unwrap();
+                                let note_str = String::from_utf8(buf[..bytes].to_vec()).unwrap();
+                                srvc.notifications_buffer.push_str(&note_str);
+                                crate::notification_handler::handle_notifications_from_buffer(
+                                    srvc,
+                                    &srvc_unit.conf.name(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Error while selecting: {}", e);
+            }
+        }
+    }
+}
 
 pub fn handle_notification_message(msg: &str, srvc: &mut Service, name: &str) {
     // TODO process notification content
@@ -25,61 +95,14 @@ pub fn handle_notification_message(msg: &str, srvc: &mut Service, name: &str) {
     }
 }
 
-pub fn handle_notifications_from_buffer(mut buffer: String, srvc: &mut Service, name: &str) -> String {
-    while buffer.contains('\n') {
-        let (line, rest) = buffer.split_at(buffer.find('\n').unwrap());
+pub fn handle_notifications_from_buffer(srvc: &mut Service, name: &str) {
+    while srvc.notifications_buffer.contains('\n') {
+        let (line, rest) = srvc
+            .notifications_buffer
+            .split_at(srvc.notifications_buffer.find('\n').unwrap());
         let line = line.to_owned();
-        buffer = rest[1..].to_owned();
+        srvc.notifications_buffer = rest[1..].to_owned();
 
         handle_notification_message(&line, srvc, name);
     }
-    buffer
-}
-
-fn handle_stream_mut(
-    stream: &mut UnixDatagram,
-    id: InternalId,
-    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
-    buf: String,
-) {
-    let mut buffer = buf;
-    let mut buf = [0u8; 512];
-    loop {
-        {
-            let service_table: &mut HashMap<_, _> = &mut service_table.lock().unwrap();
-            let srvc_unit = service_table.get_mut(&id).unwrap();
-            let name = srvc_unit.conf.name();
-            if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
-                buffer = handle_notifications_from_buffer(buffer, srvc, &name);
-            }
-        }
-        let bytes = stream.recv(&mut buf[..]).unwrap();
-        buffer.push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
-
-        if bytes == 0 {
-            // Handle the current buffer and then exit the handler
-            let service_table: &mut HashMap<_, _> = &mut service_table.lock().unwrap();
-            let srvc_unit = service_table.get_mut(&id).unwrap();
-            let name = srvc_unit.conf.name();
-            if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
-                handle_notifications_from_buffer(buffer, srvc, &name);
-            }
-            trace!(
-                " [Notification-Listener] Service: {} closed a notification connection",
-                srvc_unit.conf.name(),
-            );
-            break;
-        }
-    }
-}
-
-pub fn handle_stream(
-    mut stream: UnixDatagram,
-    id: InternalId,
-    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
-    buf: String,
-) {
-    std::thread::spawn(move || {
-        handle_stream_mut(&mut stream, id, service_table, buf);
-    });
 }

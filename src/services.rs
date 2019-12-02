@@ -4,6 +4,7 @@ use std::error::Error;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
+use std::os::unix::net::UnixDatagram;
 
 use crate::units::*;
 
@@ -32,6 +33,9 @@ pub struct Service {
     pub status_msgs: Vec<String>,
 
     pub runtime_info: ServiceRuntimeInfo,
+
+    pub notifications: Option<Arc<Mutex<UnixDatagram>>>,
+    pub notifications_buffer: String,
 }
 
 pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Unit>) {
@@ -71,7 +75,7 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<I
 
 pub fn service_exit_handler(
     pid: i32,
-    code: i8,
+    code: i32,
     service_table: ArcMutServiceTable,
     pid_table: &mut HashMap<u32, InternalId>,
     sockets: ArcMutSocketTable,
@@ -107,8 +111,6 @@ pub fn service_exit_handler(
                     srvc,
                     unit.conf.name(),
                     sockets,
-                    srvc_id,
-                    service_table.clone(),
                     notification_socket_path
                 );
                 if let Some(pid) = srvc.pid {
@@ -158,8 +160,6 @@ fn run_services_recursive(
                             srvc,
                             name.clone(),
                             sockets_copy.clone(),
-                            id,
-                            services_copy.clone(),
                             notification_socket_path_copy.clone()
                         );
                         if let Some(new_pid) = srvc.pid {

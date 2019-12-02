@@ -22,7 +22,7 @@ pub fn handle_signals(
                         .take_while(Result::is_ok)
                         .for_each(|val| match val {
                             Ok((pid, code)) => services::service_exit_handler(
-                                pid,
+                                pid.as_raw(),
                                 code,
                                 service_table.clone(),
                                 &mut pid_table.lock().unwrap(),
@@ -41,16 +41,17 @@ pub fn handle_signals(
     }
 }
 
-fn get_next_exited_child() -> Option<Result<(i32, i8), nix::Error>> {
-    match nix::sys::wait::waitpid(-1, Some(nix::sys::wait::WNOHANG)) {
+fn get_next_exited_child() -> Option<Result<(nix::unistd::Pid, i32), nix::Error>> {
+    let wait_any_pid = nix::unistd::Pid::from_raw(-1);
+    match nix::sys::wait::waitpid(wait_any_pid, Some(nix::sys::wait::WaitPidFlag::WNOHANG)) {
         Ok(exit_status) => match exit_status {
             nix::sys::wait::WaitStatus::Exited(pid, code) => Some(Ok((pid, code))),
             nix::sys::wait::WaitStatus::Signaled(pid, signal, _dumped_core) => {
                 // signals get handed to the parent if the child got killed by it but didnt handle the
                 // signal itself
-                if signal == libc::SIGTERM {
+                if signal == nix::sys::signal::SIGTERM {
                     // we dont care if the service dumped it's core
-                    Some(Ok((pid, signal as i8)))
+                    Some(Ok((pid, 0)))
                 } else {
                     None
                 }
@@ -65,7 +66,7 @@ fn get_next_exited_child() -> Option<Result<(i32, i8), nix::Error>> {
             }
         },
         Err(e) => {
-            if let nix::Error::Sys(nix::errno::ECHILD) = e {
+            if let nix::Error::Sys(nix::errno::Errno::ECHILD) = e {
             } else {
                 trace!("Error while waiting: {}", e);
             }

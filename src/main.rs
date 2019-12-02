@@ -54,6 +54,13 @@ fn main() {
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(service_table.clone(), socket_table.clone());
 
+    let service_table_clone = service_table.clone();
+    let eventfd = nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+
+    std::thread::spawn(move || {
+        notification_handler::handle_all_streams(eventfd, service_table_clone);
+    });
+    
     // listen on signals from the child processes
     signal_handler::handle_signals(
         service_table.clone(),

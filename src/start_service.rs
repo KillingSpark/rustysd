@@ -5,6 +5,7 @@ use std::os::unix::net::UnixDatagram;
 use std::os::unix::io::AsRawFd;
 
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 
 fn after_fork_child(
     srvc: &mut Service,
@@ -189,8 +190,6 @@ fn after_fork_child(
 
 fn after_fork_parent(
     srvc: &mut Service,
-    service_table: ArcMutServiceTable,
-    id: InternalId,
     name: String,
     child: i32,
     notify_socket_env_var: &std::path::Path,
@@ -212,33 +211,28 @@ fn after_fork_parent(
                 &notify_socket_env_var
             );
 
-            let mut buffer = String::new();
             let mut buf = [0u8;512];
             loop {
                 let bytes = stream.recv(&mut buf[..]).unwrap();
-                buffer.push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
+                srvc.notifications_buffer.push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
                 
-                
-                buffer = crate::notification_handler::handle_notifications_from_buffer(buffer, srvc, &name);
+                crate::notification_handler::handle_notifications_from_buffer(srvc, &name);
                 if let ServiceStatus::Running = srvc.status {
                     break;
                 } else {
                     trace!("[FORK_PARENT] Service still not ready",);
                 }
             }
-            crate::notification_handler::handle_stream(stream, id, service_table, buffer);
         } else {
             trace!("[FORK_PARENT] service {} doesnt notify", name);
             srvc.status = ServiceStatus::Running;
-            crate::notification_handler::handle_stream(stream, id, service_table, String::new());
         }
+        srvc.notifications = Some(Arc::new(Mutex::new(stream)));
     }
 }
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
-    service_table: ArcMutServiceTable,
-    id: InternalId,
     name: String,
     sockets: ArcMutSocketTable,
     notification_socket_path: std::path::PathBuf,
@@ -288,7 +282,7 @@ fn start_service_with_filedescriptors(
         let stream = UnixDatagram::bind(&notify_socket_env_var).unwrap();
         // close these fd's on exec. They must not show up in child processes
         let new_listener_fd = stream.as_raw_fd();
-        nix::fcntl::fcntl(new_listener_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FD_CLOEXEC)).unwrap();
+        nix::fcntl::fcntl(new_listener_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC)).unwrap();
         stream
     };
 
@@ -299,10 +293,8 @@ fn start_service_with_filedescriptors(
             std::mem::drop(sockets_lock);
             after_fork_parent(
                 srvc,
-                service_table,
-                id,
                 name,
-                child,
+                child.as_raw(),
                 std::path::Path::new(notify_socket_env_var.to_str().unwrap()),
                 stream
             );
@@ -323,8 +315,6 @@ pub fn start_service(
     srvc: &mut Service,
     name: String,
     sockets: ArcMutServiceTable,
-    id: InternalId,
-    service_table: ArcMutServiceTable,
     notification_socket_path: std::path::PathBuf,
 ) {
     srvc.status = ServiceStatus::Starting;
@@ -336,7 +326,7 @@ pub fn start_service(
 
     if let Some(srvc_conf) = &srvc.service_config {
         if !srvc_conf.sockets.is_empty() {
-            start_service_with_filedescriptors(srvc, service_table, id, name, sockets, notification_socket_path);
+            start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path);
         } else {
             let mut cmd = Command::new(split[0]);
             for part in &split[1..] {

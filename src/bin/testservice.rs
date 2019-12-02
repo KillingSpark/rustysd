@@ -160,7 +160,7 @@ fn main() {
         .unwrap();
     let pid_is = nix::unistd::getpid();
 
-    assert_eq!(pid_should, pid_is);
+    assert_eq!(pid_should, pid_is.as_raw());
 
     let num_fds: u32 = String::from_utf8(env::var("LISTEN_FDS").unwrap().as_bytes().to_vec())
         .unwrap()
