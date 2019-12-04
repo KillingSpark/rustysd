@@ -4,12 +4,24 @@ use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use nix::unistd::Pid;
 
 pub type InternalId = u64;
-pub type SocketTable = HashMap<u64, Unit>;
+pub type SocketTable = HashMap<InternalId, Unit>;
 pub type ArcMutSocketTable = Arc<Mutex<SocketTable>>;
-pub type ServiceTable = HashMap<u64, Unit>;
+
+pub type ServiceTable = HashMap<InternalId, Unit>;
 pub type ArcMutServiceTable = Arc<Mutex<ServiceTable>>;
+
+pub type PidTable = HashMap<Pid, PidEntry>;
+pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
+
+#[derive(Eq, PartialEq, Hash)]
+pub enum PidEntry {
+    Service(InternalId),
+    PreExec(InternalId),
+    Stop(InternalId),
+}
 
 // TODO delete this
 // keep around while refactoring in case it is needed again

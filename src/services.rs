@@ -1,10 +1,10 @@
 use crate::start_service::*;
 use std::collections::HashMap;
 use std::error::Error;
+use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
-use std::os::unix::net::UnixDatagram;
 
 use crate::units::*;
 
@@ -24,7 +24,7 @@ pub struct ServiceRuntimeInfo {
 
 #[derive(Clone)]
 pub struct Service {
-    pub pid: Option<u32>,
+    pub pid: Option<nix::unistd::Pid>,
     pub service_config: Option<ServiceConfig>,
 
     pub status: ServiceStatus,
@@ -77,19 +77,32 @@ pub fn service_exit_handler(
     pid: i32,
     code: i32,
     service_table: ArcMutServiceTable,
-    pid_table: &mut HashMap<u32, InternalId>,
+    pid_table: ArcMutPidTable,
     sockets: ArcMutSocketTable,
     notification_socket_path: std::path::PathBuf,
 ) {
-    let srvc_id = *(match pid_table.get(&(pid as u32)) {
-        Some(id) => id,
-        None => {
-            trace!("Ignore event for pid: {}", pid);
-            // Probably a kill command
-            //TODO track kill command pid's
-            return;
-        }
-    });
+    let pid_table_locked = &mut *pid_table.lock().unwrap();
+    let srvc_id = {
+        *(match pid_table_locked.get(&nix::unistd::Pid::from_raw(pid)) {
+            Some(entry) => {
+                match entry {
+                    PidEntry::Service(id) => id,
+                    _ => {
+                        trace!("Ignore event for pid: {}", pid);
+                        // Probably a kill command
+                        //TODO track kill command pid's
+                        return;
+                    }
+                }
+            }
+            None => {
+                trace!("Ignore event for pid: {}", pid);
+                // Probably a kill command
+                //TODO track kill command pid's
+                return;
+            }
+        })
+    };
 
     trace!(
         "Service with id: {} pid: {} exited with code: {}",
@@ -102,20 +115,15 @@ pub fn service_exit_handler(
     let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
     let unit = service_table_locked.get_mut(&srvc_id).unwrap();
     if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
-        pid_table.remove(&(pid as u32));
+        pid_table_locked.remove(&(nix::unistd::Pid::from_raw(pid)));
         srvc.status = ServiceStatus::Stopped;
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
-                start_service(
-                    srvc,
-                    unit.conf.name(),
-                    sockets,
-                    notification_socket_path
-                );
+                start_service(srvc, unit.conf.name(), sockets, notification_socket_path);
                 if let Some(pid) = srvc.pid {
                     srvc.runtime_info.restarted += 1;
-                    pid_table.insert(pid, unit.id);
+                    pid_table_locked.insert(pid, PidEntry::Service(unit.id));
                 }
             } else {
                 trace!(
@@ -133,7 +141,7 @@ use std::sync::Mutex;
 fn run_services_recursive(
     ids_to_start: Vec<InternalId>,
     services: ArcMutServiceTable,
-    pids: Arc<Mutex<HashMap<u32, InternalId>>>,
+    pids: ArcMutPidTable,
     sockets: ArcMutSocketTable,
     tpool: Arc<Mutex<ThreadPool>>,
     waitgroup: crossbeam::sync::WaitGroup,
@@ -160,7 +168,7 @@ fn run_services_recursive(
                             srvc,
                             name.clone(),
                             sockets_copy.clone(),
-                            notification_socket_path_copy.clone()
+                            notification_socket_path_copy.clone(),
                         );
                         if let Some(new_pid) = srvc.pid {
                             {
@@ -169,7 +177,7 @@ fn run_services_recursive(
                             };
                             {
                                 let mut pids = pids_copy.lock().unwrap();
-                                pids.insert(new_pid, unit.id);
+                                pids.insert(new_pid, PidEntry::Service(unit.id));
                             }
                         } else {
                             // TODO dont event start services that require this one
@@ -185,7 +193,7 @@ fn run_services_recursive(
                     Arc::clone(&sockets_copy),
                     Arc::clone(&tpool_copy),
                     waitgroup_copy,
-                    notification_socket_path_copy
+                    notification_socket_path_copy,
                 );
             }
         };
@@ -202,7 +210,7 @@ pub fn run_services(
     services: ServiceTable,
     sockets: SocketTable,
     notification_socket_path: std::path::PathBuf,
-) -> (HashMap<InternalId, Unit>, HashMap<u32, InternalId>) {
+) -> (ArcMutServiceTable, ArcMutSocketTable, ArcMutPidTable) {
     let pids = HashMap::new();
     let mut root_services = Vec::new();
 
@@ -222,16 +230,13 @@ pub fn run_services(
         root_services,
         Arc::clone(&services_arc),
         Arc::clone(&pids_arc),
-        sockets_arc,
+        sockets_arc.clone(),
         pool_arc,
         waitgroup.clone(),
-        notification_socket_path
+        notification_socket_path,
     );
 
     waitgroup.wait();
 
-    let services = services_arc.as_ref().lock().unwrap().clone();
-    let pids = pids_arc.as_ref().lock().unwrap().clone();
-
-    (services, pids)
+    (services_arc, sockets_arc, pids_arc)
 }

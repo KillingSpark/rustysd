@@ -19,8 +19,6 @@ extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
 
-use std::sync::{Arc, Mutex};
-
 fn main() {
     let (log_conf, conf) = config::load_config(None);
     logging::setup_logging(&log_conf.log_dir).unwrap();
@@ -40,16 +38,11 @@ fn main() {
     let (service_table, socket_unit_table) = unit_parser::load_all_units(&conf.unit_dirs).unwrap();
 
     // parallel startup of all services
-    let (service_table, pid_table) = services::run_services(
+    let (service_table, socket_table, pid_table) = services::run_services(
         service_table,
-        socket_unit_table.clone(),
+        socket_unit_table,
         conf.notification_sockets_dir.clone(),
     );
-
-    // wrapping in arc<mutex<>> to share between the various threads
-    let service_table = Arc::new(Mutex::new(service_table));
-    let pid_table = Arc::new(Mutex::new(pid_table));
-    let socket_table = Arc::new(Mutex::new(socket_unit_table));
 
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(service_table.clone(), socket_table.clone());

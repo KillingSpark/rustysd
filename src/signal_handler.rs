@@ -1,13 +1,11 @@
 use crate::services;
 use crate::units::*;
 use signal_hook::iterator::Signals;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 pub fn handle_signals(
     service_table: ArcMutServiceTable,
     socket_table: ArcMutSocketTable,
-    pid_table: Arc<Mutex<HashMap<u32, InternalId>>>,
+    pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
 ) {
     let signals =
@@ -25,7 +23,7 @@ pub fn handle_signals(
                                 pid.as_raw(),
                                 code,
                                 service_table.clone(),
-                                &mut pid_table.lock().unwrap(),
+                                pid_table.clone(),
                                 socket_table.clone(),
                                 notification_socket_path.clone()
                             ),

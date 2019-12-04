@@ -195,7 +195,7 @@ fn after_fork_parent(
     notify_socket_env_var: &std::path::Path,
     stream: UnixDatagram,
 ) {
-    srvc.pid = Some(child as u32);
+    srvc.pid = Some(nix::unistd::Pid::from_raw(child));
 
     trace!(
         "[FORK_PARENT] Service: {} forked with pid: {}",
@@ -337,7 +337,7 @@ pub fn start_service(
 
             match cmd.spawn() {
                 Ok(child) => {
-                    srvc.pid = Some(child.id());
+                    srvc.pid = Some(nix::unistd::Pid::from_raw(child.id() as i32));
                     srvc.status = ServiceStatus::Running;
 
                     trace!("Service: {} started with pid: {}", name, srvc.pid.unwrap());
