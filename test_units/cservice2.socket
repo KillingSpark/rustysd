@@ -4,8 +4,8 @@ Description=test Socket
 [Socket]
 FileDescriptorName= SockeyMcSocketFace2
 
-ListenDatagram= 127.0.0.1:1082
-ListenDatagram= 127.0.0.1:1083
+ListenDatagram= 127.0.0.1:6082
+ListenDatagram= 127.0.0.1:6083
 Service= cservice
 
 [Install]

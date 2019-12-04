@@ -4,8 +4,8 @@ Description=test Socket
 [Socket]
 FileDescriptorName= SockeyMcSocketFace
 
-ListenStream= 127.0.0.1:1080
-ListenStream= 127.0.0.1:1081
+ListenStream= 127.0.0.1:6080
+ListenStream= 127.0.0.1:6081
 
 [Install]
 WantedBy=sockets.target

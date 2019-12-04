@@ -133,23 +133,20 @@ fn after_fork_child(
                         Some(fd) => fd.as_raw_fd(),
                         None => panic!("No fd found for socket conf"),
                     };
-                    if new_fd as i32 != old_fd {
+                    let actual_new_fd = if new_fd as i32 != old_fd {
                         //ignore output. newfd might already be closed.
                         // TODO check for actual errors other than bad_fd
                         let _ = nix::unistd::close(new_fd as i32);
                         let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
-                        eprintln!("{}: Old: {} -> Wish: {} Is: {}", sock_name, old_fd, new_fd, actual_new_fd);
                         let _ = nix::unistd::close(old_fd as i32);
+                        actual_new_fd
                     }else{
-                        // TODO TODO TODO
-                        // WHHHYYYY
-                        let tmp_fd = num_fds+3;
-                        let actual_new_tmp_fd = nix::unistd::dup2(old_fd, tmp_fd as i32).unwrap();
-                        let actual_new_fd = nix::unistd::dup2(actual_new_tmp_fd, new_fd as i32).unwrap();
-
-                        eprintln!("{}: Old: {} -> Wish: {} Is: {}", sock_name, old_fd, new_fd, actual_new_fd);
+                        new_fd
+                    };
+                    if new_fd != actual_new_fd {
+                        panic!("Could not dup2 fd {} to {} as required. Was duped to: {}!", old_fd, new_fd, actual_new_fd);
                     }
-
+                    
                     // unset the CLOEXEC flags on the relevant FDs
                     let old_flags = unsafe { libc::fcntl(new_fd, libc::F_GETFD, 0) };
                     if old_flags <= -1 {
@@ -158,8 +155,10 @@ fn after_fork_child(
                             name, new_fd
                         )
                     } else {
-                        let unset_cloexec_flag = std::ops::Neg::neg(libc::FD_CLOEXEC);
+                        // need to actually flip the u32 not just negate the i32.....
+                        let unset_cloexec_flag = (libc::FD_CLOEXEC as u32 ^ 0xFFFFFFFF) as i32;
                         let new_flags = old_flags & unset_cloexec_flag;
+
                         let result = unsafe { libc::fcntl(new_fd, libc::F_SETFD, new_flags) };
                         if result <= -1 {
                             eprintln!(
