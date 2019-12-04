@@ -38,11 +38,11 @@ pub struct Service {
     pub notifications_buffer: String,
 }
 
-pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<InternalId, Unit>) {
+pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut ServiceTable, pid_table: &mut PidTable) {
     //TODO killall services that require this service
     for id in ids_to_kill {
-        let unit = service_table.get_mut(&id).unwrap();
-        if let UnitSpecialized::Service(srvc) = &unit.specialized {
+        let srvc_unit = service_table.get_mut(&id).unwrap();
+        if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
             let split: Vec<&str> = match &srvc.service_config {
                 Some(conf) => {
                     if conf.stop.is_empty() {
@@ -60,10 +60,11 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut HashMap<I
             cmd.stdout(Stdio::null());
 
             match cmd.spawn() {
-                Ok(_) => {
+                Ok(child) => {
+                    pid_table.insert(nix::unistd::Pid::from_raw(child.id() as i32), PidEntry::Stop(srvc_unit.id));
                     trace!(
                         "Stopped Service: {} with pid: {:?}",
-                        unit.conf.name(),
+                        srvc_unit.conf.name(),
                         srvc.pid
                     );
                 }
@@ -131,7 +132,7 @@ pub fn service_exit_handler(
                     srvc_id,
                     unit.install.required_by
                 );
-                kill_services(unit.install.required_by.clone(), service_table_locked);
+                kill_services(unit.install.required_by.clone(), service_table_locked, pid_table_locked);
             }
         }
     }

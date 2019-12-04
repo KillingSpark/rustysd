@@ -19,7 +19,6 @@ pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
 #[derive(Eq, PartialEq, Hash)]
 pub enum PidEntry {
     Service(InternalId),
-    PreExec(InternalId),
     Stop(InternalId),
 }
 
