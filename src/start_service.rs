@@ -1,8 +1,8 @@
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
 use std::error::Error;
-use std::os::unix::net::UnixDatagram;
 use std::os::unix::io::AsRawFd;
+use std::os::unix::net::UnixDatagram;
 
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -137,24 +137,34 @@ fn after_fork_child(
                         //ignore output. newfd might already be closed.
                         // TODO check for actual errors other than bad_fd
                         let _ = nix::unistd::close(new_fd as i32);
-                        nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                        let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                        eprintln!("{}: Old: {} -> Wish: {} Is: {}", sock_name, old_fd, new_fd, actual_new_fd);
+                        let _ = nix::unistd::close(old_fd as i32);
                     }else{
-                        // if new==old we need to unset the FD_CLOEXEC flag or the fd wont be passed to the 
-                        // execed process
-                        let old_flags = unsafe {libc::fcntl(new_fd, libc::F_GETFD, 0)};
-                        if old_flags <= -1 {
+                        // TODO TODO TODO
+                        // WHHHYYYY
+                        let tmp_fd = num_fds+3;
+                        let actual_new_tmp_fd = nix::unistd::dup2(old_fd, tmp_fd as i32).unwrap();
+                        let actual_new_fd = nix::unistd::dup2(actual_new_tmp_fd, new_fd as i32).unwrap();
+
+                        eprintln!("{}: Old: {} -> Wish: {} Is: {}", sock_name, old_fd, new_fd, actual_new_fd);
+                    }
+
+                    // unset the CLOEXEC flags on the relevant FDs
+                    let old_flags = unsafe { libc::fcntl(new_fd, libc::F_GETFD, 0) };
+                    if old_flags <= -1 {
+                        eprintln!(
+                            "[FORK_CHILD {}] failed to manually get the FD flag on fd: {}",
+                            name, new_fd
+                        )
+                    } else {
+                        let unset_cloexec_flag = std::ops::Neg::neg(libc::FD_CLOEXEC);
+                        let new_flags = old_flags & unset_cloexec_flag;
+                        let result = unsafe { libc::fcntl(new_fd, libc::F_SETFD, new_flags) };
+                        if result <= -1 {
                             eprintln!(
-                                "[FORK_CHILD {}] failed to manually get the FD flag on fd: {}", name, new_fd
-                            )
-                        }else{
-                            let unset_cloexec_flag = std::ops::Neg::neg(libc::FD_CLOEXEC);
-                            let new_flags = old_flags & unset_cloexec_flag;
-                            let result = unsafe {libc::fcntl(new_fd, libc::F_SETFD, new_flags)};
-                            if result <= -1 {
-                                eprintln!(
                                     "[FORK_CHILD {}] failed to manually unset the CLOEXEC flag on fd: {}", name, new_fd
                                 )
-                            }
                         }
                     }
                     fd_idx += 1;
@@ -180,7 +190,10 @@ fn after_fork_child(
 
     match nix::unistd::execv(&cmd, &args) {
         Ok(_) => {
-            eprintln!("[FORK_CHILD {}] execv returned Ok()... This should never happen", name);
+            eprintln!(
+                "[FORK_CHILD {}] execv returned Ok()... This should never happen",
+                name
+            );
         }
         Err(e) => {
             eprintln!("[FORK_CHILD {}] execv errored: {:?}", name, e);
@@ -193,7 +206,7 @@ fn after_fork_parent(
     name: String,
     child: i32,
     notify_socket_env_var: &std::path::Path,
-    stream: UnixDatagram,
+    stream: &UnixDatagram,
 ) {
     srvc.pid = Some(nix::unistd::Pid::from_raw(child));
 
@@ -205,17 +218,16 @@ fn after_fork_parent(
 
     if let Some(conf) = &srvc.service_config {
         if let ServiceType::Notify = conf.srcv_type {
-
             trace!(
                 "[FORK_PARENT] Waiting for a notification on: {:?}",
                 &notify_socket_env_var
             );
 
-            let mut buf = [0u8;512];
+            let mut buf = [0u8; 512];
             loop {
                 let bytes = stream.recv(&mut buf[..]).unwrap();
-                srvc.notifications_buffer.push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
-                
+                srvc.notifications_buffer
+                    .push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
                 crate::notification_handler::handle_notifications_from_buffer(srvc, &name);
                 if let ServiceStatus::Running = srvc.status {
                     break;
@@ -227,7 +239,6 @@ fn after_fork_parent(
             trace!("[FORK_PARENT] service {} doesnt notify", name);
             srvc.status = ServiceStatus::Running;
         }
-        srvc.notifications = Some(Arc::new(Mutex::new(stream)));
     }
 }
 
@@ -245,12 +256,18 @@ fn start_service_with_filedescriptors(
 
     let cmd = std::path::PathBuf::from(split[0]);
     if !cmd.exists() {
-        error!("The service {} specified an executable that does not exist: {:?}", name, &cmd);
+        error!(
+            "The service {} specified an executable that does not exist: {:?}",
+            name, &cmd
+        );
         srvc.status = ServiceStatus::Stopped;
         return;
     }
     if !cmd.is_file() {
-        error!("The service {} specified an executable that is not a file: {:?}", name, &cmd);
+        error!(
+            "The service {} specified an executable that is not a file: {:?}",
+            name, &cmd
+        );
         srvc.status = ServiceStatus::Stopped;
         return;
     }
@@ -276,18 +293,29 @@ fn start_service_with_filedescriptors(
     };
 
     let stream = {
-        if notify_socket_env_var.exists() {
-            std::fs::remove_file(&notify_socket_env_var).unwrap();
+        if let Some(stream) = &srvc.notifications {
+            stream.clone()
+        } else {
+            if notify_socket_env_var.exists() {
+                std::fs::remove_file(&notify_socket_env_var).unwrap();
+            }
+            let stream = UnixDatagram::bind(&notify_socket_env_var).unwrap();
+            // close these fd's on exec. They must not show up in child processes
+            let new_listener_fd = stream.as_raw_fd();
+            nix::fcntl::fcntl(
+                new_listener_fd,
+                nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
+            )
+            .unwrap();
+            let new_stream = Arc::new(Mutex::new(stream));
+            srvc.notifications = Some(new_stream.clone());
+            new_stream
         }
-        let stream = UnixDatagram::bind(&notify_socket_env_var).unwrap();
-        // close these fd's on exec. They must not show up in child processes
-        let new_listener_fd = stream.as_raw_fd();
-        nix::fcntl::fcntl(new_listener_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC)).unwrap();
-        stream
     };
 
     // make sure we have the lock that the child will need
     let sockets_lock = sockets.lock().unwrap();
+    let stream_locked = &*stream.lock().unwrap();
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             std::mem::drop(sockets_lock);
@@ -296,7 +324,7 @@ fn start_service_with_filedescriptors(
                 name,
                 child.as_raw(),
                 std::path::Path::new(notify_socket_env_var.to_str().unwrap()),
-                stream
+                stream_locked,
             );
         }
         Ok(nix::unistd::ForkResult::Child) => {

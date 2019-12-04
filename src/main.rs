@@ -44,6 +44,7 @@ fn main() {
         conf.notification_sockets_dir.clone(),
     );
 
+
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(service_table.clone(), socket_table.clone());
 

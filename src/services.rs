@@ -231,7 +231,7 @@ pub fn run_services(
         }
     }
 
-    let pool_arc = Arc::new(Mutex::new(ThreadPool::new(6)));
+    let pool_arc = Arc::new(Mutex::new(ThreadPool::new(1)));
     let services_arc = Arc::new(Mutex::new(services));
     let pids_arc = Arc::new(Mutex::new(pids));
     let sockets_arc = Arc::new(Mutex::new(sockets));
