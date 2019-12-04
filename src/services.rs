@@ -38,7 +38,11 @@ pub struct Service {
     pub notifications_buffer: String,
 }
 
-pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut ServiceTable, pid_table: &mut PidTable) {
+pub fn kill_services(
+    ids_to_kill: Vec<InternalId>,
+    service_table: &mut ServiceTable,
+    pid_table: &mut PidTable,
+) {
     //TODO killall services that require this service
     for id in ids_to_kill {
         let srvc_unit = service_table.get_mut(&id).unwrap();
@@ -61,7 +65,10 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, service_table: &mut ServiceTa
 
             match cmd.spawn() {
                 Ok(child) => {
-                    pid_table.insert(nix::unistd::Pid::from_raw(child.id() as i32), PidEntry::Stop(srvc_unit.id));
+                    pid_table.insert(
+                        nix::unistd::Pid::from_raw(child.id() as i32),
+                        PidEntry::Stop(srvc_unit.id),
+                    );
                     trace!(
                         "Stopped Service: {} with pid: {:?}",
                         srvc_unit.conf.name(),
@@ -85,22 +92,20 @@ pub fn service_exit_handler(
     let pid_table_locked = &mut *pid_table.lock().unwrap();
     let srvc_id = {
         *(match pid_table_locked.get(&nix::unistd::Pid::from_raw(pid)) {
-            Some(entry) => {
-                match entry {
-                    PidEntry::Service(id) => id,
-                    _ => {
-                        trace!("Ignore event for pid: {}", pid);
-                        // Probably a kill command
-                        //TODO track kill command pid's
-                        return;
-                    }
+            Some(entry) => match entry {
+                PidEntry::Service(id) => id,
+                PidEntry::Stop(id) => {
+                    trace!(
+                        "Stop process for service: {} exited with code: {}",
+                        service_table.lock().unwrap().get(id).unwrap().conf.name(),
+                        code
+                    );
+                    pid_table_locked.remove(&nix::unistd::Pid::from_raw(pid));
+                    return;
                 }
-            }
+            },
             None => {
-                trace!("Ignore event for pid: {}", pid);
-                // Probably a kill command
-                //TODO track kill command pid's
-                return;
+                unreachable!("All spawned processes should have a pid entry");
             }
         })
     };
@@ -132,7 +137,11 @@ pub fn service_exit_handler(
                     srvc_id,
                     unit.install.required_by
                 );
-                kill_services(unit.install.required_by.clone(), service_table_locked, pid_table_locked);
+                kill_services(
+                    unit.install.required_by.clone(),
+                    service_table_locked,
+                    pid_table_locked,
+                );
             }
         }
     }
