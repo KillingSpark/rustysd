@@ -12,6 +12,7 @@ fn after_fork_child(
     sockets: &SocketTable,
     notify_socket_env_var: &str,
     new_stdout: RawFd,
+    new_stderr: RawFd,
 ) {
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
@@ -123,7 +124,12 @@ fn after_fork_child(
     // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
     let actual_new_fd = nix::unistd::dup2(new_stdout, 1).unwrap();
     if actual_new_fd != 1 {
-        panic!("Could not dup the pip to stdout. Got duped to: {}", actual_new_fd);
+        panic!("Could not dup the pipe to stdout. Got duped to: {}", actual_new_fd);
+    }
+    // dup new stderr to fd 2. The other end of the pipe will be read from the service daemon
+    let actual_new_fd = nix::unistd::dup2(new_stderr, 2).unwrap();
+    if actual_new_fd != 2 {
+        panic!("Could not dup the pipe to stderr. Got duped to: {}", actual_new_fd);
     }
 
     // start at 3. 0,1,2 are stdin,stdout,stderr
@@ -336,6 +342,13 @@ fn start_service_with_filedescriptors(
         srvc.stdout_dup = Some((r,w));
         w
     };
+    let child_stderr = if let Some(fd) = &srvc.stderr_dup {
+        fd.1
+    }else{
+        let (r,w) = nix::unistd::pipe().unwrap();
+        srvc.stderr_dup = Some((r,w));
+        w
+    };
 
     // make sure we have the lock that the child will need
     let sockets_lock = sockets.lock().unwrap();
@@ -358,6 +371,7 @@ fn start_service_with_filedescriptors(
                 &*sockets_lock,
                 notify_socket_env_var.to_str().unwrap(),
                 child_stdout,
+                child_stderr,
             );
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),

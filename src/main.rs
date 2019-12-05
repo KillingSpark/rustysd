@@ -50,8 +50,11 @@ fn main() {
 
     let service_table_clone = service_table.clone();
     let service_table_clone2 = service_table.clone();
+    let service_table_clone3 = service_table.clone();
+    
     let notification_eventfd = nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
     let stdout_eventfd = nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+    let stderr_eventfd = nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
 
     std::thread::spawn(move || {
         notification_handler::handle_all_streams(notification_eventfd, service_table_clone);
@@ -59,6 +62,9 @@ fn main() {
     
     std::thread::spawn(move || {
         notification_handler::handle_all_std_out(stdout_eventfd, service_table_clone2);
+    });
+    std::thread::spawn(move || {
+        notification_handler::handle_all_std_err(stderr_eventfd, service_table_clone3);
     });
     
     // listen on signals from the child processes
