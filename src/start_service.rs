@@ -1,10 +1,9 @@
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
-use std::error::Error;
 use std::os::unix::io::AsRawFd;
+use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 
-use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 
 fn after_fork_child(
@@ -12,6 +11,7 @@ fn after_fork_child(
     name: &str,
     sockets: &SocketTable,
     notify_socket_env_var: &str,
+    new_stdout: RawFd,
 ) {
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
@@ -120,6 +120,12 @@ fn after_fork_child(
     // one and logging into that one would be.... bad
     // Hopefully the close() means that no old logs will get written to that filedescriptor
 
+    // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
+    let actual_new_fd = nix::unistd::dup2(new_stdout, 1).unwrap();
+    if actual_new_fd != 1 {
+        panic!("Could not dup the pip to stdout. Got duped to: {}", actual_new_fd);
+    }
+
     // start at 3. 0,1,2 are stdin,stdout,stderr
     let file_desc_offset = 3;
     let mut fd_idx = 0;
@@ -140,13 +146,15 @@ fn after_fork_child(
                         let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
                         let _ = nix::unistd::close(old_fd as i32);
                         actual_new_fd
-                    }else{
+                    } else {
                         new_fd
                     };
                     if new_fd != actual_new_fd {
-                        panic!("Could not dup2 fd {} to {} as required. Was duped to: {}!", old_fd, new_fd, actual_new_fd);
+                        panic!(
+                            "Could not dup2 fd {} to {} as required. Was duped to: {}!",
+                            old_fd, new_fd, actual_new_fd
+                        );
                     }
-                    
                     // unset the CLOEXEC flags on the relevant FDs
                     let old_flags = unsafe { libc::fcntl(new_fd, libc::F_GETFD, 0) };
                     if old_flags <= -1 {
@@ -203,11 +211,11 @@ fn after_fork_child(
 fn after_fork_parent(
     srvc: &mut Service,
     name: String,
-    child: i32,
+    new_pid: nix::unistd::Pid,
     notify_socket_env_var: &std::path::Path,
     stream: &UnixDatagram,
 ) {
-    srvc.pid = Some(nix::unistd::Pid::from_raw(child));
+    srvc.pid = Some(new_pid);
 
     trace!(
         "[FORK_PARENT] Service: {} forked with pid: {}",
@@ -312,6 +320,14 @@ fn start_service_with_filedescriptors(
         }
     };
 
+    let child_stdout = if let Some(fd) = &srvc.stdout_dup {
+        fd.1
+    }else{
+        let (r,w) = nix::unistd::pipe().unwrap();
+        srvc.stdout_dup = Some((r,w));
+        w
+    };
+
     // make sure we have the lock that the child will need
     let sockets_lock = sockets.lock().unwrap();
     let stream_locked = &*stream.lock().unwrap();
@@ -321,7 +337,7 @@ fn start_service_with_filedescriptors(
             after_fork_parent(
                 srvc,
                 name,
-                child.as_raw(),
+                child,
                 std::path::Path::new(notify_socket_env_var.to_str().unwrap()),
                 stream_locked,
             );
@@ -332,6 +348,7 @@ fn start_service_with_filedescriptors(
                 &name,
                 &*sockets_lock,
                 notify_socket_env_var.to_str().unwrap(),
+                child_stdout,
             );
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),
@@ -345,33 +362,6 @@ pub fn start_service(
     notification_socket_path: std::path::PathBuf,
 ) {
     srvc.status = ServiceStatus::Starting;
-
-    let split: Vec<&str> = match &srvc.service_config {
-        Some(conf) => conf.exec.split(' ').collect(),
-        None => return,
-    };
-
-    if let Some(srvc_conf) = &srvc.service_config {
-        if !srvc_conf.sockets.is_empty() {
-            start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path);
-        } else {
-            let mut cmd = Command::new(split[0]);
-            for part in &split[1..] {
-                cmd.arg(part);
-            }
-
-            cmd.stdout(Stdio::null());
-
-            match cmd.spawn() {
-                Ok(child) => {
-                    srvc.pid = Some(nix::unistd::Pid::from_raw(child.id() as i32));
-                    srvc.status = ServiceStatus::Running;
-
-                    trace!("Service: {} started with pid: {}", name, srvc.pid.unwrap());
-                }
-                Err(e) => panic!(e.description().to_owned()),
-            }
-        }
-        srvc.runtime_info.up_since = Some(std::time::Instant::now());
-    }
+    start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path);
+    srvc.runtime_info.up_since = Some(std::time::Instant::now());
 }

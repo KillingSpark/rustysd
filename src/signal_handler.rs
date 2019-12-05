@@ -20,7 +20,7 @@ pub fn handle_signals(
                         .take_while(Result::is_ok)
                         .for_each(|val| match val {
                             Ok((pid, code)) => services::service_exit_handler(
-                                pid.as_raw(),
+                                pid,
                                 code,
                                 service_table.clone(),
                                 pid_table.clone(),

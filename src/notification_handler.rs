@@ -3,16 +3,24 @@ use crate::units::*;
 use std::collections::HashMap;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::{Arc, Mutex};
+use std::io::Write;
 
 // will be used when service starting outside of the initial starting process is supported
 #[allow(dead_code)]
 pub fn notify_event_fd(eventfd: RawFd) {
+    //something other than 0 so all waiting select() wake up
     let zeros: *const [u8] = &[1u8; 8][..];
-
+    
     unsafe {
         let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
         libc::write(eventfd, pointer, 8)
     };
+}
+#[allow(dead_code)]
+pub fn notify_event_fds(eventfds: Vec<&RawFd>) {
+    for fd in eventfds {
+        notify_event_fd(*fd);
+    }
 }
 
 pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
@@ -64,6 +72,80 @@ pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                                 );
                             }
                         }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Error while selecting: {}", e);
+            }
+        }
+    }
+}
+
+pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+    loop {
+        // need to collect all again. There might be a newly started service
+        let fd_to_srvc_id: HashMap<_, _> = service_table.lock().unwrap().iter().fold(
+            HashMap::new(),
+            |mut map, (id, srvc_unit)| {
+                if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+                    if let Some(fd) = &srvc.stdout_dup {
+                        map.insert(fd.0, *id);
+                    }
+                }
+                map
+            },
+        );
+
+        let mut fdset = nix::sys::select::FdSet::new();
+        for fd in fd_to_srvc_id.keys() {
+            fdset.insert(*fd);
+        }
+        fdset.insert(eventfd);
+
+        let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
+        match result {
+            Ok(_) => {
+                if fdset.contains(eventfd) {
+                    trace!("Interrupted select because the eventfd fired");
+                    let zeros: *const [u8] = &[0u8; 8][..];
+                    unsafe {
+                        let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
+                        libc::write(eventfd, pointer, 8)
+                    };
+                    trace!("Reset eventfd value");
+                }
+                let mut buf = [0u8; 512];
+                let service_table_locked = &mut *service_table.lock().unwrap();
+                for (fd, id) in &fd_to_srvc_id {
+                    if fdset.contains(*fd) {
+                        let srvc_unit = service_table_locked.get_mut(id).unwrap();
+                        let name= srvc_unit.conf.name();
+                        
+                        // build the service-unique prefix
+                        let mut prefix = String::new();
+                        prefix.push('[');
+                        prefix.push_str(&name);
+                        prefix.push(']');
+                        prefix.push(' ');
+                        buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
+                        
+                        let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
+                        let lines = buf[..bytes].split(|x| *x == b'\n');
+                        let mut outbuf: Vec<u8> = Vec::new();
+                        
+                        let stdout = std::io::stdout();
+                        let mut locked_stdout = stdout.lock();
+                        for line in lines {
+                            if line.len() == 0 {
+                                continue;
+                            }
+                            outbuf.clear();
+                            outbuf.extend(prefix.as_bytes());
+                            outbuf.extend(line);
+                            outbuf.push(b'\n');
+                            locked_stdout.write_all(&outbuf).unwrap();
+                        } 
                     }
                 }
             }

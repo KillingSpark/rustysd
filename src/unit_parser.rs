@@ -212,6 +212,8 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> 
             },
 
             notifications: None,
+            stdout_dup: None,
+            stderr_dup: None,
             notifications_buffer: String::new(),
         }),
     })

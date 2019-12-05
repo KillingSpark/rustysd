@@ -2,6 +2,7 @@ use crate::start_service::*;
 use std::collections::HashMap;
 use std::error::Error;
 use std::os::unix::net::UnixDatagram;
+use std::os::unix::io::RawFd;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
@@ -35,6 +36,8 @@ pub struct Service {
     pub runtime_info: ServiceRuntimeInfo,
 
     pub notifications: Option<Arc<Mutex<UnixDatagram>>>,
+    pub stdout_dup: Option<(RawFd,RawFd)>,
+    pub stderr_dup: Option<(RawFd,RawFd)>,
     pub notifications_buffer: String,
 }
 
@@ -82,7 +85,7 @@ pub fn kill_services(
 }
 
 pub fn service_exit_handler(
-    pid: i32,
+    pid: nix::unistd::Pid,
     code: i32,
     service_table: ArcMutServiceTable,
     pid_table: ArcMutPidTable,
@@ -91,7 +94,7 @@ pub fn service_exit_handler(
 ) {
     let pid_table_locked = &mut *pid_table.lock().unwrap();
     let srvc_id = {
-        *(match pid_table_locked.get(&nix::unistd::Pid::from_raw(pid)) {
+        *(match pid_table_locked.get(&pid) {
             Some(entry) => match entry {
                 PidEntry::Service(id) => id,
                 PidEntry::Stop(id) => {
@@ -100,7 +103,7 @@ pub fn service_exit_handler(
                         service_table.lock().unwrap().get(id).unwrap().conf.name(),
                         code
                     );
-                    pid_table_locked.remove(&nix::unistd::Pid::from_raw(pid));
+                    pid_table_locked.remove(&pid);
                     return;
                 }
             },
@@ -121,7 +124,7 @@ pub fn service_exit_handler(
     let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
     let unit = service_table_locked.get_mut(&srvc_id).unwrap();
     if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
-        pid_table_locked.remove(&(nix::unistd::Pid::from_raw(pid)));
+        pid_table_locked.remove(&pid);
         srvc.status = ServiceStatus::Stopped;
 
         if let Some(conf) = &srvc.service_config {
