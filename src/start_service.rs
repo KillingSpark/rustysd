@@ -191,10 +191,19 @@ fn after_fork_child(
 
     let cmd = std::ffi::CString::new(split[0]).unwrap();
     let mut args = Vec::new();
+    
+    let exec_name = std::path::PathBuf::from(split[0]);
+    let exec_name = exec_name.file_name().unwrap();
+    let exec_name: Vec<u8>= exec_name.to_str().unwrap().bytes().collect();
+    let exec_name = std::ffi::CString::new(exec_name).unwrap();
+    args.push(exec_name);
     for arg in &split[1..] {
-        args.push(std::ffi::CString::new(*arg).unwrap());
+        if arg.len() > 0 {
+            args.push(std::ffi::CString::new(*arg).unwrap());
+        }
     }
 
+    eprintln!("EXECV: {:?} {:?}", &cmd, &args);
     match nix::unistd::execv(&cmd, &args) {
         Ok(_) => {
             eprintln!(

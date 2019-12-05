@@ -154,6 +154,8 @@ fn main() {
         env::var("LISTEN_FDS").unwrap(),
     );
 
+    println!("Args: {:?}", std::env::args().collect::<Vec<_>>());
+
     let pid_should: i32 = String::from_utf8(env::var("LISTEN_PID").unwrap().as_bytes().to_vec())
         .unwrap()
         .parse()

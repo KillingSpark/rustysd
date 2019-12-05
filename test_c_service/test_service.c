@@ -6,7 +6,8 @@
 // build and run with: clang -o test_service test_service.c $(pkg-config
 // libsystemd --libs) && ./test_service
 
-int main() {
+int main(int argc, char **argv) {
+  printf("Amount of args: %d\n", argc);
   printf("Result of sd_booted: %d\n", sd_booted());
   printf("Result of sd_listen_fds: %d\n", sd_listen_fds(0));
   char **names;
