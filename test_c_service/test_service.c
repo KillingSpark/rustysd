@@ -27,7 +27,8 @@ int main() {
   printf("Result of sd_notify: %d\n", sd_notify(0, "READY=1\n"));
   printf("Result of sd_notify: %d\n",
          sd_notify(0, "STATUS=New status from C service\n"));
-
+         
+  fflush(stdout);
   while (1) {
     sd_notify(0, "STATUS=still looping\n");
     sleep(1);
