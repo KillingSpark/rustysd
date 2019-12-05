@@ -1,6 +1,6 @@
 use crate::units::*;
 
-use crate::services::{Service, ServiceStatus, ServiceRuntimeInfo};
+use crate::services::{Service, ServiceRuntimeInfo, ServiceStatus};
 use crate::sockets::*;
 
 use std::collections::HashMap;
@@ -18,7 +18,6 @@ pub fn load_all_units(paths: &Vec<PathBuf>) -> Result<(ServiceTable, SocketTable
         parse_all_services(&mut service_table, path, &mut base_id)?;
         parse_all_sockets(&mut socket_unit_table, path, &mut base_id)?;
     }
-
 
     fill_dependencies(&mut service_table);
     let service_table = apply_sockets_to_services(service_table, &socket_unit_table).unwrap();

@@ -124,12 +124,18 @@ fn after_fork_child(
     // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
     let actual_new_fd = nix::unistd::dup2(new_stdout, 1).unwrap();
     if actual_new_fd != 1 {
-        panic!("Could not dup the pipe to stdout. Got duped to: {}", actual_new_fd);
+        panic!(
+            "Could not dup the pipe to stdout. Got duped to: {}",
+            actual_new_fd
+        );
     }
     // dup new stderr to fd 2. The other end of the pipe will be read from the service daemon
     let actual_new_fd = nix::unistd::dup2(new_stderr, 2).unwrap();
     if actual_new_fd != 2 {
-        panic!("Could not dup the pipe to stderr. Got duped to: {}", actual_new_fd);
+        panic!(
+            "Could not dup the pipe to stderr. Got duped to: {}",
+            actual_new_fd
+        );
     }
 
     // start at 3. 0,1,2 are stdin,stdout,stderr
@@ -197,10 +203,10 @@ fn after_fork_child(
 
     let cmd = std::ffi::CString::new(split[0]).unwrap();
     let mut args = Vec::new();
-    
+
     let exec_name = std::path::PathBuf::from(split[0]);
     let exec_name = exec_name.file_name().unwrap();
-    let exec_name: Vec<u8>= exec_name.to_str().unwrap().bytes().collect();
+    let exec_name: Vec<u8> = exec_name.to_str().unwrap().bytes().collect();
     let exec_name = std::ffi::CString::new(exec_name).unwrap();
     args.push(exec_name);
     for arg in &split[1..] {
@@ -337,16 +343,16 @@ fn start_service_with_filedescriptors(
 
     let child_stdout = if let Some(fd) = &srvc.stdout_dup {
         fd.1
-    }else{
-        let (r,w) = nix::unistd::pipe().unwrap();
-        srvc.stdout_dup = Some((r,w));
+    } else {
+        let (r, w) = nix::unistd::pipe().unwrap();
+        srvc.stdout_dup = Some((r, w));
         w
     };
     let child_stderr = if let Some(fd) = &srvc.stderr_dup {
         fd.1
-    }else{
-        let (r,w) = nix::unistd::pipe().unwrap();
-        srvc.stderr_dup = Some((r,w));
+    } else {
+        let (r, w) = nix::unistd::pipe().unwrap();
+        srvc.stderr_dup = Some((r, w));
         w
     };
 

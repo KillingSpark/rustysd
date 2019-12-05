@@ -25,7 +25,7 @@ pub fn handle_signals(
                                 service_table.clone(),
                                 pid_table.clone(),
                                 socket_table.clone(),
-                                notification_socket_path.clone()
+                                notification_socket_path.clone(),
                             ),
                             Err(e) => {
                                 error!("{}", e);

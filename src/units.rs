@@ -1,10 +1,10 @@
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 
+use nix::unistd::Pid;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use nix::unistd::Pid;
 
 pub type InternalId = u64;
 pub type SocketTable = HashMap<InternalId, Unit>;

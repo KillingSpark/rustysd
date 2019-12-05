@@ -1,8 +1,8 @@
 use crate::start_service::*;
 use std::collections::HashMap;
 use std::error::Error;
-use std::os::unix::net::UnixDatagram;
 use std::os::unix::io::RawFd;
+use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use threadpool::ThreadPool;
@@ -36,8 +36,8 @@ pub struct Service {
     pub runtime_info: ServiceRuntimeInfo,
 
     pub notifications: Option<Arc<Mutex<UnixDatagram>>>,
-    pub stdout_dup: Option<(RawFd,RawFd)>,
-    pub stderr_dup: Option<(RawFd,RawFd)>,
+    pub stdout_dup: Option<(RawFd, RawFd)>,
+    pub stderr_dup: Option<(RawFd, RawFd)>,
     pub notifications_buffer: String,
 }
 

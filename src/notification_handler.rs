@@ -1,16 +1,16 @@
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
 use std::collections::HashMap;
+use std::io::Write;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::{Arc, Mutex};
-use std::io::Write;
 
 // will be used when service starting outside of the initial starting process is supported
 #[allow(dead_code)]
 pub fn notify_event_fd(eventfd: RawFd) {
     //something other than 0 so all waiting select() wake up
     let zeros: *const [u8] = &[1u8; 8][..];
-    
+
     unsafe {
         let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
         libc::write(eventfd, pointer, 8)
@@ -120,8 +120,8 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         let srvc_unit = service_table_locked.get_mut(id).unwrap();
-                        let name= srvc_unit.conf.name();
-                        
+                        let name = srvc_unit.conf.name();
+
                         // build the service-unique prefix
                         let mut prefix = String::new();
                         prefix.push('[');
@@ -129,11 +129,11 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                         prefix.push(']');
                         prefix.push(' ');
                         buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
-                        
+
                         let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
                         let lines = buf[..bytes].split(|x| *x == b'\n');
                         let mut outbuf: Vec<u8> = Vec::new();
-                        
+
                         for line in lines {
                             if line.len() == 0 {
                                 continue;
@@ -143,7 +143,7 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                             outbuf.extend(line);
                             outbuf.push(b'\n');
                             std::io::stdout().write_all(&outbuf).unwrap();
-                        } 
+                        }
                     }
                 }
             }
@@ -192,8 +192,8 @@ pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         let srvc_unit = service_table_locked.get_mut(id).unwrap();
-                        let name= srvc_unit.conf.name();
-                        
+                        let name = srvc_unit.conf.name();
+
                         // build the service-unique prefix
                         let mut prefix = String::new();
                         prefix.push('[');
@@ -202,11 +202,11 @@ pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                         prefix.push_str("[STDERR]");
                         prefix.push(' ');
                         buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
-                        
+
                         let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
                         let lines = buf[..bytes].split(|x| *x == b'\n');
                         let mut outbuf: Vec<u8> = Vec::new();
-                        
+
                         for line in lines {
                             if line.len() == 0 {
                                 continue;
@@ -216,7 +216,7 @@ pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                             outbuf.extend(line);
                             outbuf.push(b'\n');
                             std::io::stderr().write_all(&outbuf).unwrap();
-                        } 
+                        }
                     }
                 }
             }

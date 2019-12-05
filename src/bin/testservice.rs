@@ -183,7 +183,7 @@ fn main() {
     let stream = UnixDatagram::unbound().unwrap();
     stream.connect(socket_path).unwrap();
     stream.send(&b"STATUS=Next message that should be read before the READY message\nREADY=1\nSTATUS=Next message that should not be read directly after the fork\n"[..]).unwrap();
-    
+
     let mut counter = 0;
     loop {
         stream

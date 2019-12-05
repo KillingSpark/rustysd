@@ -71,7 +71,9 @@ impl UnixSocketConfig {
 
                 if let Some(parent) = spath.parent() {
                     if !parent.exists() {
-                        std::fs::create_dir_all(parent).map_err(|e| format!("Error creating UnixSocket directory {:?} : {}", parent, e))?;
+                        std::fs::create_dir_all(parent).map_err(|e| {
+                            format!("Error creating UnixSocket directory {:?} : {}", parent, e)
+                        })?;
                     }
                 }
 
@@ -93,7 +95,9 @@ impl UnixSocketConfig {
 
                 if let Some(parent) = spath.parent() {
                     if !parent.exists() {
-                        std::fs::create_dir_all(parent).map_err(|e| format!("Error creating UnixSocket directory {:?} : {}", parent, e))?;
+                        std::fs::create_dir_all(parent).map_err(|e| {
+                            format!("Error creating UnixSocket directory {:?} : {}", parent, e)
+                        })?;
                     }
                 }
 
@@ -115,7 +119,9 @@ impl UnixSocketConfig {
 
                 if let Some(parent) = spath.parent() {
                     if !parent.exists() {
-                        std::fs::create_dir_all(parent).map_err(|e| format!("Error creating UnixSocket directory {:?} : {}", parent, e))?;
+                        std::fs::create_dir_all(parent).map_err(|e| {
+                            format!("Error creating UnixSocket directory {:?} : {}", parent, e)
+                        })?;
                     }
                 }
 
@@ -132,7 +138,7 @@ impl UnixSocketConfig {
                 // first create the socket
                 // cant use nix::socket because they only allow tcp/udp as protocols
                 // TODO make pull request and get a "Auto" = 0 member
-                let fd = unsafe{libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, protocol)};
+                let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, protocol) };
                 // then bind the socket to the path
                 nix::sys::socket::bind(fd, &sock_addr).unwrap();
                 // then make the socket an accepting one
@@ -203,7 +209,11 @@ pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
                 // close these fd's on exec. They must not show up in child processes
                 // the ńeeded fd's will be duped which unsets the flag again
                 let new_fd = as_raw_fd.as_raw_fd();
-                nix::fcntl::fcntl(new_fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC)).unwrap();
+                nix::fcntl::fcntl(
+                    new_fd,
+                    nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
+                )
+                .unwrap();
                 conf.fd = Some(as_raw_fd);
                 //need to stop the listener to drop which would close the filedescriptor
             }

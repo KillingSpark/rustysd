@@ -44,29 +44,31 @@ fn main() {
         conf.notification_sockets_dir.clone(),
     );
 
-
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(service_table.clone(), socket_table.clone());
 
     let service_table_clone = service_table.clone();
     let service_table_clone2 = service_table.clone();
     let service_table_clone3 = service_table.clone();
-    
-    let notification_eventfd = nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
-    let stdout_eventfd = nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
-    let stderr_eventfd = nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+
+    let notification_eventfd =
+        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+    let stdout_eventfd =
+        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+    let stderr_eventfd =
+        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
 
     std::thread::spawn(move || {
         notification_handler::handle_all_streams(notification_eventfd, service_table_clone);
     });
-    
+
     std::thread::spawn(move || {
         notification_handler::handle_all_std_out(stdout_eventfd, service_table_clone2);
     });
     std::thread::spawn(move || {
         notification_handler::handle_all_std_err(stderr_eventfd, service_table_clone3);
     });
-    
+
     // listen on signals from the child processes
     signal_handler::handle_signals(
         service_table.clone(),
