@@ -3,6 +3,6 @@ requires= ls4
 Before= ls4
 
 [Service]
-Exec= sleep 100
+Exec= /usr/bin/sleep 100
 Stop= killall sleep
 keep_alive = false

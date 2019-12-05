@@ -1,5 +1,5 @@
 [Service]
-Exec= ./test_c_service/test_service
+Exec= ./test_c_service/test_service  arg1 arg2
 Sockets= cservice
 NotifyAccess= all
 Type= notify

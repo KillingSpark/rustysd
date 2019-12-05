@@ -1,5 +1,5 @@
 [Service]
-Exec= ls /usr
+Exec= /usr/bin/ls /etc
 keep_alive = false
 
 [Install]

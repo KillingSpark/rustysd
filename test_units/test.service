@@ -1,5 +1,5 @@
 [Service]
-Exec= ./target/debug/testservice
+Exec= ./target/debug/testservice arg1 arg2
 Sockets= test_second
 NotifyAccess= all
 Type= notify

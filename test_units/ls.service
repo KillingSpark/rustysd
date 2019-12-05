@@ -3,5 +3,5 @@ requires= ls2
 Before= ls2
 
 [Service]
-Exec= ls /etc
+Exec= /usr/bin/ls /etc
 keep_alive = false
