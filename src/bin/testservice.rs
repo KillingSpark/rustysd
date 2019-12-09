@@ -30,9 +30,9 @@ fn handle_unix_client(mut stream: UnixStream) {
 }
 
 use std::net::UdpSocket;
-fn handle_upd() {
+fn handle_upd(fd: i32) {
     std::thread::spawn(move || {
-        let stream: UdpSocket = unsafe { UdpSocket::from_raw_fd(5) };
+        let stream: UdpSocket = unsafe { UdpSocket::from_raw_fd(fd) };
         let mut data = [0u8; 512];
         loop {
             match stream.recv(&mut data[..]) {
@@ -49,9 +49,9 @@ fn handle_upd() {
     });
 }
 
-fn handle_unix_datagram() {
+fn handle_unix_datagram(fd: i32) {
     std::thread::spawn(move || {
-        let stream = unsafe { UnixDatagram::from_raw_fd(6) };
+        let stream = unsafe { UnixDatagram::from_raw_fd(fd) };
         let mut data = [0u8; 512];
         loop {
             match stream.recv(&mut data[..]) {
@@ -68,9 +68,9 @@ fn handle_unix_datagram() {
     });
 }
 
-fn unix_accept() {
+fn unix_accept(fd: i32) {
     std::thread::spawn(move || {
-        let unix_listen: UnixListener = unsafe { UnixListener::from_raw_fd(3) };
+        let unix_listen: UnixListener = unsafe { UnixListener::from_raw_fd(fd) };
         for stream in unix_listen.incoming() {
             match stream {
                 Ok(stream) => {
@@ -102,10 +102,8 @@ fn handle_unix_seq_pack(fd: i32) {
     }
 }
 
-fn unix_seq_pack_accept() {
+fn unix_seq_pack_accept(fd: i32) {
     std::thread::spawn(move || {
-        let listen_fd = 7;
-
         loop {
             let mut new_con_sock_addr = libc::sockaddr {
                 sa_data: [0i8; 14],
@@ -113,7 +111,7 @@ fn unix_seq_pack_accept() {
             };
             let mut addr_len = 0;
             let new_con_fd =
-                unsafe { libc::accept(listen_fd, &mut new_con_sock_addr, &mut addr_len) };
+                unsafe { libc::accept(fd, &mut new_con_sock_addr, &mut addr_len) };
             if new_con_fd < 0 {
                 println!("Error while accepting unix seqpack fd: {}", new_con_fd);
                 return;
@@ -135,9 +133,9 @@ fn handle_tcp_client(mut stream: TcpStream) {
         }
     }
 }
-fn tcp_accept() -> std::thread::JoinHandle<()> {
+fn tcp_accept(fd: i32) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
-        let listen = unsafe { TcpListener::from_raw_fd(4) };
+        let listen = unsafe { TcpListener::from_raw_fd(fd) };
         for stream in listen.incoming() {
             match stream {
                 Ok(stream) => {
@@ -179,11 +177,16 @@ fn main() {
         .unwrap();
     assert!(num_fds >= 1);
 
-    unix_accept();
-    unix_seq_pack_accept();
-    handle_upd();
-    handle_unix_datagram();
-    let _handle = tcp_accept();
+    unix_accept(3);
+    unix_accept(8);
+    tcp_accept(4);
+    tcp_accept(9);
+    handle_upd(5);
+    handle_upd(10);
+    handle_unix_datagram(6);
+    handle_unix_datagram(11);
+    unix_seq_pack_accept(7);
+    unix_seq_pack_accept(12);
 
     std::thread::sleep(std::time::Duration::from_secs(3));
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
@@ -199,6 +202,4 @@ fn main() {
         std::thread::sleep(std::time::Duration::from_secs(1));
         counter += 1;
     }
-
-    //_handle.join().unwrap();
 }
