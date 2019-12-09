@@ -54,10 +54,7 @@ pub fn format_socket(socket_unit: &Unit) -> Value {
 
 pub fn format_service(srvc_unit: &Unit) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert(
-        "Name".into(),
-        Value::String(srvc_unit.conf.name()),
-    );
+    map.insert("Name".into(), Value::String(srvc_unit.conf.name()));
     if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
         map.insert(
             "Sockets".into(),

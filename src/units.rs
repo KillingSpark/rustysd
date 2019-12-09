@@ -1,6 +1,6 @@
-use std::os::unix::io::AsRawFd;
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
+use std::os::unix::io::AsRawFd;
 
 use nix::unistd::Pid;
 use std::collections::HashMap;

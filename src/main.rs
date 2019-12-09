@@ -35,7 +35,7 @@ fn main() {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let (service_table, socket_table) = unit_parser::load_all_units(&conf.unit_dirs).unwrap();
-    
+
     use std::sync::{Arc, Mutex};
     let service_table = Arc::new(Mutex::new(service_table));
     let socket_table = Arc::new(Mutex::new(socket_table));

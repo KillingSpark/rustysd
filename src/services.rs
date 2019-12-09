@@ -155,7 +155,7 @@ fn run_services_recursive(
     sockets: ArcMutSocketTable,
     tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
-    eventfds: Arc<Vec<RawFd>>
+    eventfds: Arc<Vec<RawFd>>,
 ) {
     for id in ids_to_start {
         let tpool_copy = ThreadPool::clone(&tpool);
@@ -232,7 +232,7 @@ fn run_services_recursive(
                 Arc::clone(&sockets_copy_next_jobs),
                 ThreadPool::clone(&tpool_copy),
                 notification_socket_path_copy_next_jobs,
-                eventfds_next_jobs
+                eventfds_next_jobs,
             );
         };
 
@@ -266,7 +266,7 @@ pub fn run_services(
         Arc::clone(&sockets),
         tpool.clone(),
         notification_socket_path,
-        eventfds_arc
+        eventfds_arc,
     );
 
     tpool.join();
