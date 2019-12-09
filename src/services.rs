@@ -155,6 +155,7 @@ fn run_services_recursive(
     sockets: ArcMutSocketTable,
     tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
+    eventfds: Arc<Vec<RawFd>>
 ) {
     for id in ids_to_start {
         let tpool_copy = ThreadPool::clone(&tpool);
@@ -162,11 +163,13 @@ fn run_services_recursive(
         let services_copy_next_jobs = Arc::clone(&services);
         let pids_copy_next_jobs = Arc::clone(&pids);
         let notification_socket_path_copy_next_jobs = notification_socket_path.clone();
+        let eventfds_next_jobs = eventfds.clone();
 
         let pids_copy_this_job = Arc::clone(&pids);
         let services_copy_this_job = Arc::clone(&services);
         let sockets_copy_this_job = Arc::clone(&sockets);
         let notification_socket_path_copy_this_job = notification_socket_path.clone();
+        let eventfds_this_job = eventfds.clone();
 
         let mut unit = {
             let mut services_locked = services.lock().unwrap();
@@ -205,8 +208,9 @@ fn run_services_recursive(
                                 let mut pids = pids_copy_this_job.lock().unwrap();
                                 pids.insert(new_pid, PidEntry::Service(id));
                             }
+                            crate::notification_handler::notify_event_fds(&eventfds_this_job)
                         } else {
-                            // TODO dont event start services that require this one
+                            // TODO dont even start services that require this one
                         }
                     }
                     _ => unreachable!(),
@@ -228,6 +232,7 @@ fn run_services_recursive(
                 Arc::clone(&sockets_copy_next_jobs),
                 ThreadPool::clone(&tpool_copy),
                 notification_socket_path_copy_next_jobs,
+                eventfds_next_jobs
             );
         };
 
@@ -236,14 +241,15 @@ fn run_services_recursive(
 }
 
 pub fn run_services(
-    services: ServiceTable,
-    sockets: SocketTable,
+    services: ArcMutServiceTable,
+    sockets: ArcMutSocketTable,
     notification_socket_path: std::path::PathBuf,
-) -> (ArcMutServiceTable, ArcMutSocketTable, ArcMutPidTable) {
+    eventfds: Vec<RawFd>,
+) -> ArcMutPidTable {
     let pids = HashMap::new();
     let mut root_services = Vec::new();
 
-    for (id, unit) in &services {
+    for (id, unit) in &*services.lock().unwrap() {
         if unit.install.after.is_empty() {
             root_services.push(*id);
             trace!("Root service: {}", unit.conf.name());
@@ -251,19 +257,19 @@ pub fn run_services(
     }
 
     let tpool = ThreadPool::new(6);
-    let services_arc = Arc::new(Mutex::new(services));
     let pids_arc = Arc::new(Mutex::new(pids));
-    let sockets_arc = Arc::new(Mutex::new(sockets));
+    let eventfds_arc = Arc::new(eventfds);
     run_services_recursive(
         root_services,
-        Arc::clone(&services_arc),
+        Arc::clone(&services),
         Arc::clone(&pids_arc),
-        sockets_arc.clone(),
+        Arc::clone(&sockets),
         tpool.clone(),
         notification_socket_path,
+        eventfds_arc
     );
 
     tpool.join();
 
-    (services_arc, sockets_arc, pids_arc)
+    pids_arc
 }

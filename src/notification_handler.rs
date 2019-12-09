@@ -16,8 +16,23 @@ pub fn notify_event_fd(eventfd: RawFd) {
         libc::write(eventfd, pointer, 8)
     };
 }
+
+pub fn reset_event_fd(eventfd: RawFd) {
+    //something other than 0 so all waiting select() wake up
+    let buf: *mut [u8] = &mut [0u8; 8][..];
+    unsafe {
+        let pointer: *mut std::ffi::c_void = buf as *mut std::ffi::c_void;
+        libc::read(eventfd, pointer, 8)
+    };
+    let zeros: *const [u8] = &[0u8; 8][..];
+    unsafe {
+        let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
+        libc::write(eventfd, pointer, 8)
+    };
+}
+
 #[allow(dead_code)]
-pub fn notify_event_fds(eventfds: Vec<&RawFd>) {
+pub fn notify_event_fds(eventfds: &Vec<RawFd>) {
     for fd in eventfds {
         notify_event_fd(*fd);
     }
@@ -49,11 +64,7 @@ pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
             Ok(_) => {
                 if fdset.contains(eventfd) {
                     trace!("Interrupted notification select because the eventfd fired");
-                    let zeros: *const [u8] = &[0u8; 8][..];
-                    unsafe {
-                        let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
-                        libc::write(eventfd, pointer, 8)
-                    };
+                    reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
@@ -108,11 +119,7 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
             Ok(_) => {
                 if fdset.contains(eventfd) {
                     trace!("Interrupted stdout select because the eventfd fired");
-                    let zeros: *const [u8] = &[0u8; 8][..];
-                    unsafe {
-                        let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
-                        libc::write(eventfd, pointer, 8)
-                    };
+                    reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
@@ -180,11 +187,7 @@ pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
             Ok(_) => {
                 if fdset.contains(eventfd) {
                     trace!("Interrupted stderr select because the eventfd fired");
-                    let zeros: *const [u8] = &[0u8; 8][..];
-                    unsafe {
-                        let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
-                        libc::write(eventfd, pointer, 8)
-                    };
+                    reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];

@@ -34,21 +34,14 @@ fn main() {
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let (service_table, socket_unit_table) = unit_parser::load_all_units(&conf.unit_dirs).unwrap();
-
-    // parallel startup of all services
-    let (service_table, socket_table, pid_table) = services::run_services(
-        service_table,
-        socket_unit_table,
-        conf.notification_sockets_dir.clone(),
-    );
+    let (service_table, socket_table) = unit_parser::load_all_units(&conf.unit_dirs).unwrap();
+    
+    use std::sync::{Arc, Mutex};
+    let service_table = Arc::new(Mutex::new(service_table));
+    let socket_table = Arc::new(Mutex::new(socket_table));
 
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(service_table.clone(), socket_table.clone());
-
-    let service_table_clone = service_table.clone();
-    let service_table_clone2 = service_table.clone();
-    let service_table_clone3 = service_table.clone();
 
     let notification_eventfd =
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
@@ -56,6 +49,10 @@ fn main() {
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
     let stderr_eventfd =
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+
+    let service_table_clone = service_table.clone();
+    let service_table_clone2 = service_table.clone();
+    let service_table_clone3 = service_table.clone();
 
     std::thread::spawn(move || {
         notification_handler::handle_all_streams(notification_eventfd, service_table_clone);
@@ -67,6 +64,16 @@ fn main() {
     std::thread::spawn(move || {
         notification_handler::handle_all_std_err(stderr_eventfd, service_table_clone3);
     });
+
+    let eventfds = vec![notification_eventfd, stdout_eventfd, stderr_eventfd];
+
+    // parallel startup of all services
+    let pid_table = services::run_services(
+        service_table.clone(),
+        socket_table.clone(),
+        conf.notification_sockets_dir.clone(),
+        eventfds,
+    );
 
     // listen on signals from the child processes
     signal_handler::handle_signals(
