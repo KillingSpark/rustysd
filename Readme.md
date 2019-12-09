@@ -23,7 +23,7 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 
 
 ### See for yourself
-Running `cargo build && cargo run --bin rustysd` will build the test service and run rustysd which will start that testservice
+Running `./build_all.sh && cargo run --bin rustysd` will build the test service and run rustysd which will start that testservice
 
 ## What does not work
 Just some stuff I know does not work but would be cool to have
