@@ -279,7 +279,7 @@ fn parse_socket_section(
 
     // we need to preserve the original ordering
     socket_kinds.sort_by(|l, r| u32::cmp(&l.0, &r.0));
-    let socket_kinds: Vec<SocketKind> = socket_kinds.iter().map(|(_, kind)| kind.clone()).collect();
+    let socket_kinds: Vec<SocketKind> = socket_kinds.drain(..).map(|(_, kind)| kind).collect();
 
     let mut socket_configs = Vec::new();
 

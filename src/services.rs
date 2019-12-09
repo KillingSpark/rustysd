@@ -9,7 +9,6 @@ use threadpool::ThreadPool;
 
 use crate::units::*;
 
-#[derive(Clone)]
 pub enum ServiceStatus {
     NeverRan,
     Starting,
@@ -17,13 +16,11 @@ pub enum ServiceStatus {
     Stopped,
 }
 
-#[derive(Clone)]
 pub struct ServiceRuntimeInfo {
     pub restarted: u64,
     pub up_since: Option<std::time::Instant>,
 }
 
-#[derive(Clone)]
 pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
     pub service_config: Option<ServiceConfig>,
@@ -161,16 +158,34 @@ fn run_services_recursive(
 ) {
     for id in ids_to_start {
         let tpool_copy = ThreadPool::clone(&tpool);
-        let services_copy = Arc::clone(&services);
-        let pids_copy = Arc::clone(&pids);
-        let sockets_copy = Arc::clone(&sockets);
-        let notification_socket_path_copy = notification_socket_path.clone();
+        let sockets_copy_next_jobs = Arc::clone(&sockets);
+        let services_copy_next_jobs = Arc::clone(&services);
+        let pids_copy_next_jobs = Arc::clone(&pids);
+        let notification_socket_path_copy_next_jobs = notification_socket_path.clone();
 
-        let job = move || {
-            let mut unit = {
-                let mut services_locked = services_copy.lock().unwrap();
-                services_locked.get_mut(&id).unwrap().clone()
-            };
+        let pids_copy_this_job = Arc::clone(&pids);
+        let services_copy_this_job = Arc::clone(&services);
+        let sockets_copy_this_job = Arc::clone(&sockets);
+        let notification_socket_path_copy_this_job = notification_socket_path.clone();
+
+        let mut unit = {
+            let mut services_locked = services.lock().unwrap();
+            services_locked.remove(&id).unwrap()
+        };
+        let next_services_ids = unit.install.before.clone();
+        let start_synchron = if let UnitSpecialized::Service(srvc) = &unit.specialized {
+            srvc.socket_names.is_empty()
+        } else {
+            false
+        };
+
+        trace!(
+            "Start service {} synchron: {}",
+            unit.conf.name(),
+            start_synchron
+        );
+
+        let this_service_job = move || {
             let name = unit.conf.name();
             if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
                 match srvc.status {
@@ -178,17 +193,17 @@ fn run_services_recursive(
                         start_service(
                             srvc,
                             name.clone(),
-                            sockets_copy.clone(),
-                            notification_socket_path_copy.clone(),
+                            sockets_copy_this_job,
+                            notification_socket_path_copy_this_job,
                         );
                         if let Some(new_pid) = srvc.pid {
                             {
-                                let mut services_locked = services_copy.lock().unwrap();
-                                services_locked.insert(id, unit.clone()).unwrap().clone()
+                                let mut services_locked = services_copy_this_job.lock().unwrap();
+                                services_locked.insert(id, unit)
                             };
                             {
-                                let mut pids = pids_copy.lock().unwrap();
-                                pids.insert(new_pid, PidEntry::Service(unit.id));
+                                let mut pids = pids_copy_this_job.lock().unwrap();
+                                pids.insert(new_pid, PidEntry::Service(id));
                             }
                         } else {
                             // TODO dont event start services that require this one
@@ -196,19 +211,27 @@ fn run_services_recursive(
                     }
                     _ => unreachable!(),
                 }
-
-                run_services_recursive(
-                    unit.install.before.clone(),
-                    Arc::clone(&services_copy),
-                    Arc::clone(&pids_copy),
-                    Arc::clone(&sockets_copy),
-                    ThreadPool::clone(&tpool_copy),
-                    notification_socket_path_copy,
-                );
             }
         };
 
-        tpool.execute(job);
+        if start_synchron {
+            this_service_job();
+        } else {
+            tpool.execute(this_service_job);
+        }
+
+        let next_services_job = move || {
+            run_services_recursive(
+                next_services_ids,
+                Arc::clone(&services_copy_next_jobs),
+                Arc::clone(&pids_copy_next_jobs),
+                Arc::clone(&sockets_copy_next_jobs),
+                ThreadPool::clone(&tpool_copy),
+                notification_socket_path_copy_next_jobs,
+            );
+        };
+
+        tpool.execute(next_services_job);
     }
 }
 
@@ -227,7 +250,7 @@ pub fn run_services(
         }
     }
 
-    let tpool = ThreadPool::new(1);
+    let tpool = ThreadPool::new(6);
     let services_arc = Arc::new(Mutex::new(services));
     let pids_arc = Arc::new(Mutex::new(pids));
     let sockets_arc = Arc::new(Mutex::new(sockets));

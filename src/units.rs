@@ -1,3 +1,4 @@
+use std::os::unix::io::AsRawFd;
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 
@@ -60,13 +61,12 @@ pub fn get_sockets_by_name<'b>(socket_units: &'b SocketTable) -> HashMap<String,
     sockets
 }
 
-#[derive(Clone)]
 pub enum UnitSpecialized {
     Socket(Socket),
     Service(Service),
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct Install {
     pub wants: Vec<InternalId>,
     pub requires: Vec<InternalId>,
@@ -80,7 +80,6 @@ pub struct Install {
     pub install_config: Option<InstallConfig>,
 }
 
-#[derive(Clone)]
 pub struct Unit {
     pub id: InternalId,
     pub conf: UnitConfig,
@@ -100,7 +99,6 @@ impl Unit {
     }
 }
 
-#[derive(Clone)]
 pub struct UnitConfig {
     pub filepath: PathBuf,
 
@@ -125,8 +123,6 @@ impl UnitConfig {
     }
 }
 
-use std::os::unix::io::AsRawFd;
-#[derive(Clone)]
 pub struct SocketConfig {
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
@@ -136,19 +132,16 @@ pub struct SocketConfig {
 
 unsafe impl Send for SocketConfig {}
 
-#[derive(Clone)]
 pub struct InstallConfig {
     pub wanted_by: Vec<String>,
     pub required_by: Vec<String>,
 }
 
-#[derive(Clone)]
 pub enum ServiceType {
     Simple,
     Notify,
 }
 
-#[derive(Clone)]
 pub enum NotifyKind {
     Main,
     Exec,
@@ -156,7 +149,6 @@ pub enum NotifyKind {
     None,
 }
 
-#[derive(Clone)]
 pub struct ServiceConfig {
     pub keep_alive: bool,
     pub notifyaccess: NotifyKind,
