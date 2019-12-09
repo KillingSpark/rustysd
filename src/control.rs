@@ -56,7 +56,7 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
     let mut map = serde_json::Map::new();
     map.insert(
         "Name".into(),
-        Value::String(format!("{}", srvc_unit.conf.name())),
+        Value::String(srvc_unit.conf.name()),
     );
     if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
         map.insert(

@@ -32,7 +32,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
     }
 
     std::env::vars().for_each(|(key, value)| {
-        let mut new_key: Vec<String> = key.split("_").map(|part| part.to_lowercase()).collect();
+        let mut new_key: Vec<String> = key.split('_').map(|part| part.to_lowercase()).collect();
         //drop prefix
         if *new_key[0] == *"rustysd" {
             new_key.remove(0);
@@ -71,11 +71,11 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
     });
 
     let config = Config {
-        unit_dirs: unit_dirs.unwrap_or(vec![PathBuf::from("./test_units")]),
+        unit_dirs: unit_dirs.unwrap_or_else(|| vec![PathBuf::from("./test_units")]),
 
         notification_sockets_dir: notification_sockets_dir
-            .unwrap_or(Some(PathBuf::from("./notifications")))
-            .unwrap_or(PathBuf::from("./notifications")),
+            .unwrap_or_else(|| Some(PathBuf::from("./notifications")))
+            .unwrap_or_else(|| PathBuf::from("./notifications")),
     };
 
     let conf = match json_conf {
@@ -85,7 +85,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
             if *config_path == default_config_path {
                 Ok(config)
             } else {
-                Err(format!("Json config file "))
+                Err("Json config file not loaded".into())
             }
         }
     };
@@ -93,8 +93,8 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
     (
         LoggingConfig {
             log_dir: log_dir
-                .unwrap_or(Some(PathBuf::from("./logs")))
-                .unwrap_or(PathBuf::from("./logs")),
+                .unwrap_or_else(|| Some(PathBuf::from("./logs")))
+                .unwrap_or_else(|| PathBuf::from("./logs")),
         },
         conf,
     )
@@ -150,7 +150,7 @@ fn parse_all_settings_json(
         }
         serde_json::Value::Bool(value) => {
             if !existing_settings.contains_key(prefix) || override_existing {
-                existing_settings.insert(prefix.to_owned(), SettingValue::Bool(value.clone()));
+                existing_settings.insert(prefix.to_owned(), SettingValue::Bool(*value));
             }
         }
         serde_json::Value::Null => {

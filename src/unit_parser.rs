@@ -10,7 +10,7 @@ use std::path::PathBuf;
 type ParsedSection = HashMap<String, Vec<(u32, String)>>;
 type ParsedFile = HashMap<String, ParsedSection>;
 
-pub fn load_all_units(paths: &Vec<PathBuf>) -> Result<(ServiceTable, SocketTable), String> {
+pub fn load_all_units(paths: &[PathBuf]) -> Result<(ServiceTable, SocketTable), String> {
     let mut base_id = 0;
     let mut service_table = HashMap::new();
     let mut socket_unit_table = HashMap::new();

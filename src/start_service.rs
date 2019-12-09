@@ -176,7 +176,7 @@ fn after_fork_child(
                         )
                     } else {
                         // need to actually flip the u32 not just negate the i32.....
-                        let unset_cloexec_flag = (libc::FD_CLOEXEC as u32 ^ 0xFFFFFFFF) as i32;
+                        let unset_cloexec_flag = (libc::FD_CLOEXEC as u32 ^ 0xFFFF_FFFF) as i32;
                         let new_flags = old_flags & unset_cloexec_flag;
 
                         let result = unsafe { libc::fcntl(new_fd, libc::F_SETFD, new_flags) };
@@ -210,7 +210,7 @@ fn after_fork_child(
     let exec_name = std::ffi::CString::new(exec_name).unwrap();
     args.push(exec_name);
     for arg in &split[1..] {
-        if arg.len() > 0 {
+        if !arg.is_empty() {
             args.push(std::ffi::CString::new(*arg).unwrap());
         }
     }

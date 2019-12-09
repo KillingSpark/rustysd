@@ -32,7 +32,7 @@ pub fn reset_event_fd(eventfd: RawFd) {
 }
 
 #[allow(dead_code)]
-pub fn notify_event_fds(eventfds: &Vec<RawFd>) {
+pub fn notify_event_fds(eventfds: &[RawFd]) {
     for fd in eventfds {
         notify_event_fd(*fd);
     }
@@ -142,7 +142,7 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                         let mut outbuf: Vec<u8> = Vec::new();
 
                         for line in lines {
-                            if line.len() == 0 {
+                            if line.is_empty() {
                                 continue;
                             }
                             outbuf.clear();
@@ -211,7 +211,7 @@ pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                         let mut outbuf: Vec<u8> = Vec::new();
 
                         for line in lines {
-                            if line.len() == 0 {
+                            if line.is_empty() {
                                 continue;
                             }
                             outbuf.clear();
