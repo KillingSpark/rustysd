@@ -72,8 +72,10 @@ fn main() {
         service_table.clone(),
         socket_table.clone(),
         conf.notification_sockets_dir.clone(),
-        eventfds,
+        eventfds.clone(),
     );
+
+    notification_handler::notify_event_fds(&eventfds);
 
     // listen on signals from the child processes
     signal_handler::handle_signals(

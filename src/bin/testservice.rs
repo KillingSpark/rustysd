@@ -16,7 +16,14 @@ fn handle_unix_client(mut stream: UnixStream) {
     let mut data = [0u8; 512];
     loop {
         match stream.read(&mut data[..]) {
-            Ok(bytes) => print!("{}", String::from_utf8(data[0..bytes].to_vec()).unwrap()),
+            Ok(bytes) => {
+                if bytes == 0 {
+                    println!("\nUnix stream finished");
+                    break;
+                } else {
+                    print!("{}", String::from_utf8(data[0..bytes].to_vec()).unwrap())
+                }
+            }
             Err(e) => println!("\n Got error from unix stream: {}", e),
         }
     }

@@ -1,9 +1,8 @@
 [Service]
-Exec= ./target/debug/testservice arg1 arg2
-Sockets= test2
+Exec= ./target/debug/testserviceclient
 NotifyAccess= all
-Type= notify
+Type= simple
 keep_alive = true
 
 [Install]
-Before= test
+After= test
