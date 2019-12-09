@@ -156,13 +156,11 @@ fn run_services_recursive(
     services: ArcMutServiceTable,
     pids: ArcMutPidTable,
     sockets: ArcMutSocketTable,
-    tpool: Arc<Mutex<ThreadPool>>,
-    waitgroup: crossbeam::sync::WaitGroup,
+    tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
 ) {
     for id in ids_to_start {
-        let waitgroup_copy = waitgroup.clone();
-        let tpool_copy = Arc::clone(&tpool);
+        let tpool_copy = ThreadPool::clone(&tpool);
         let services_copy = Arc::clone(&services);
         let pids_copy = Arc::clone(&pids);
         let sockets_copy = Arc::clone(&sockets);
@@ -204,19 +202,14 @@ fn run_services_recursive(
                     Arc::clone(&services_copy),
                     Arc::clone(&pids_copy),
                     Arc::clone(&sockets_copy),
-                    Arc::clone(&tpool_copy),
-                    waitgroup_copy,
+                    ThreadPool::clone(&tpool_copy),
                     notification_socket_path_copy,
                 );
             }
         };
 
-        {
-            let tpool_locked = tpool.lock().unwrap();
-            tpool_locked.execute(job);
-        }
+        tpool.execute(job);
     }
-    drop(waitgroup);
 }
 
 pub fn run_services(
@@ -234,22 +227,20 @@ pub fn run_services(
         }
     }
 
-    let pool_arc = Arc::new(Mutex::new(ThreadPool::new(1)));
+    let tpool = ThreadPool::new(1);
     let services_arc = Arc::new(Mutex::new(services));
     let pids_arc = Arc::new(Mutex::new(pids));
     let sockets_arc = Arc::new(Mutex::new(sockets));
-    let waitgroup = crossbeam::sync::WaitGroup::new();
     run_services_recursive(
         root_services,
         Arc::clone(&services_arc),
         Arc::clone(&pids_arc),
         sockets_arc.clone(),
-        pool_arc,
-        waitgroup.clone(),
+        tpool.clone(),
         notification_socket_path,
     );
 
-    waitgroup.wait();
+    tpool.join();
 
     (services_arc, sockets_arc, pids_arc)
 }
