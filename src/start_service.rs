@@ -390,7 +390,16 @@ pub fn start_service(
     sockets: ArcMutServiceTable,
     notification_socket_path: std::path::PathBuf,
 ) {
-    srvc.status = ServiceStatus::Starting;
-    start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path);
-    srvc.runtime_info.up_since = Some(std::time::Instant::now());
+    if let Some(conf) = &srvc.service_config {
+        if conf.accept {
+            warn!("Inetd style accepting is not supported");
+            srvc.status = ServiceStatus::Stopped;
+        } else {
+            srvc.status = ServiceStatus::Starting;
+            start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path);
+            srvc.runtime_info.up_since = Some(std::time::Instant::now());
+        }
+    } else {
+        unreachable!();
+    }
 }

@@ -352,6 +352,14 @@ fn map_tupels_to_second<X, Y: Clone>(v: Vec<(X, Y)>) -> Vec<Y> {
     v.iter().map(|(_, scnd)| scnd.clone()).collect()
 }
 
+fn string_to_bool(s: &str) -> bool {
+    let s_upper = &s.to_uppercase();
+    let c: char = s_upper.chars().nth(0).unwrap();
+
+    let is_num_and_zero = s.len() == 1 && c == '0';
+    s == "YES" || s == "TRUE" || is_num_and_zero
+}
+
 fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig {
     let wants = section.remove("WANTS");
     let requires = section.remove("REQUIRES");
@@ -384,6 +392,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let sockets = section.remove("SOCKETS");
     let notify_access = section.remove("NOTIFYACCESS");
     let srcv_type = section.remove("TYPE");
+    let accept = section.remove("ACCEPT");
 
     let exec = match exec {
         Some(mut vec) => {
@@ -442,9 +451,19 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let keep_alive = match keep_alive {
         Some(vec) => {
             if vec.len() == 1 {
-                vec[0].1 == "true"
+                string_to_bool(&vec[0].1)
             } else {
                 panic!("Keepalive had to many entries: {:?}", vec);
+            }
+        }
+        None => false,
+    };
+    let accept = match accept {
+        Some(vec) => {
+            if vec.len() == 1 {
+                string_to_bool(&vec[0].1)
+            } else {
+                panic!("Accept had to many entries: {:?}", vec);
             }
         }
         None => false,
@@ -454,6 +473,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
         srcv_type,
         notifyaccess,
         keep_alive,
+        accept,
         exec,
         stop,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),

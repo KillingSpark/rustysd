@@ -151,6 +151,7 @@ pub enum NotifyKind {
 
 pub struct ServiceConfig {
     pub keep_alive: bool,
+    pub accept: bool,
     pub notifyaccess: NotifyKind,
     pub exec: String,
     pub stop: String,
