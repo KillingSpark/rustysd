@@ -25,10 +25,6 @@ int main(int argc, char **argv) {
       }
       if (!strcmp("SockeyMcSocketFace3", names[i])) {
           printf("\tFD #%d  Fifo socket test (should be 1): %d\n", i, sd_is_fifo(i+3, "./sockets/cservice.fifo"));
-          char buf[512];
-          int bytes = read(i+3, (void *)buf, 511);
-          buf[bytes] = '\0';
-          printf("Read %d bytes from fifo: %s\n", bytes, buf);
       }
   }
 
