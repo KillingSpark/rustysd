@@ -17,13 +17,21 @@ int main(int argc, char **argv) {
   printf("FD names:\n");
   for( int i = 0; i < fds; i++) {
       printf("\t%s\n", names[i]);
-      if (!strcmp("SockeyMcSocketFace2", names[i])) {
-          printf("\tFD #%d  UDP socket test (should be 1): %d\n", i, sd_is_socket_inet(i+3,  AF_INET,  SOCK_DGRAM, -1, 0));
-      }
       if (!strcmp("SockeyMcSocketFace", names[i])) {
           printf("\tFD #%d  TCP socket test (should be 1): %d\n", i, sd_is_socket_inet(i+3,  AF_INET,  SOCK_STREAM, -1, 0));
       }
+      if (!strcmp("SockeyMcSocketFace2", names[i])) {
+          printf("\tFD #%d  UDP socket test (should be 1): %d\n", i, sd_is_socket_inet(i+3,  AF_INET,  SOCK_DGRAM, -1, 0));
+      }
+      if (!strcmp("SockeyMcSocketFace3", names[i])) {
+          printf("\tFD #%d  Fifo socket test (should be 1): %d\n", i, sd_is_fifo(i+3, "./sockets/cservice.fifo"));
+          char buf[512];
+          int bytes = read(i+3, (void *)buf, 511);
+          buf[bytes] = '\0';
+          printf("Read %d bytes from fifo: %s\n", bytes, buf);
+      }
   }
+
 
   printf("Result of sd_notify: %d\n", sd_notify(0, "READY=1\n"));
   printf("Result of sd_notify: %d\n",

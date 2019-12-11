@@ -269,6 +269,12 @@ fn parse_socket_section(
                     socket_kinds.push((entry_num, SocketKind::Sequential(value)));
                 }
             }
+            "LISTENFIFO" => {
+                for _ in 0..values.len() {
+                    let (entry_num, value) = values.remove(0);
+                    socket_kinds.push((entry_num, SocketKind::Fifo(value)));
+                }
+            }
             "SERVICE" => {
                 for _ in 0..values.len() {
                     let (_, value) = values.remove(0);
@@ -287,9 +293,21 @@ fn parse_socket_section(
 
     for kind in socket_kinds {
         let specialized: SpecializedSocketConfig = match &kind {
+            SocketKind::Fifo(addr) => {
+                if parse_unix_addr(addr).is_ok() {
+                    SpecializedSocketConfig::Fifo(FifoConfig {
+                        path: std::path::PathBuf::from(addr),
+                    })
+                } else {
+                    return Err(format!(
+                        "No specialized config for fifo found for fifo addr: {}",
+                        addr
+                    ));
+                }
+            }
             SocketKind::Sequential(addr) => {
                 if parse_unix_addr(addr).is_ok() {
-                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
+                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig::Sequential(addr.clone()))
                 } else {
                     return Err(format!(
                         "No specialized config for socket found for socket addr: {}",
@@ -299,7 +317,7 @@ fn parse_socket_section(
             }
             SocketKind::Stream(addr) => {
                 if parse_unix_addr(addr).is_ok() {
-                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
+                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig::Stream(addr.clone()))
                 } else if let Ok(addr) = parse_ipv4_addr(addr) {
                     SpecializedSocketConfig::TcpSocket(TcpSocketConfig {
                         addr: std::net::SocketAddr::V4(addr),
@@ -317,7 +335,7 @@ fn parse_socket_section(
             }
             SocketKind::Datagram(addr) => {
                 if parse_unix_addr(addr).is_ok() {
-                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig { kind: kind.clone() })
+                    SpecializedSocketConfig::UnixSocket(UnixSocketConfig::Datagram(addr.clone()))
                 } else if let Ok(addr) = parse_ipv4_addr(addr) {
                     SpecializedSocketConfig::UdpSocket(UdpSocketConfig {
                         addr: std::net::SocketAddr::V4(addr),
@@ -370,7 +388,10 @@ fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig 
     let description = section.remove("DESCRIPTION");
 
     if !section.is_empty() {
-        panic!("Unit section has unrecognized/unimplemented options: {:?}", section);
+        panic!(
+            "Unit section has unrecognized/unimplemented options: {:?}",
+            section
+        );
     }
 
     UnitConfig {
@@ -388,7 +409,10 @@ fn parse_install_section(mut section: ParsedSection) -> InstallConfig {
     let requiredby = section.remove("REQUIREDBY");
 
     if !section.is_empty() {
-        panic!("Install section has unrecognized/unimplemented options: {:?}", section);
+        panic!(
+            "Install section has unrecognized/unimplemented options: {:?}",
+            section
+        );
     }
 
     InstallConfig {
@@ -407,7 +431,10 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let accept = section.remove("ACCEPT");
 
     if !section.is_empty() {
-        panic!("Service section has unrecognized/unimplemented options: {:?}", section);
+        panic!(
+            "Service section has unrecognized/unimplemented options: {:?}",
+            section
+        );
     }
 
     let exec = match exec {

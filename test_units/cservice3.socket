@@ -1,0 +1,11 @@
+[Unit]
+Description=test Socket
+
+[Socket]
+FileDescriptorName= SockeyMcSocketFace3
+Service = cservice 
+
+ListenFifo= ./sockets/cservice.fifo
+
+[Install]
+WantedBy=sockets.target

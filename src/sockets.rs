@@ -1,6 +1,7 @@
 use std::net::TcpListener;
 use std::net::UdpSocket;
 use std::os::unix::io::AsRawFd;
+use std::os::unix::io::FromRawFd;
 use std::os::unix::net::{UnixDatagram, UnixListener};
 use std::sync::Arc;
 
@@ -11,11 +12,13 @@ pub enum SocketKind {
     Stream(String),
     Sequential(String),
     Datagram(String),
+    Fifo(String),
 }
 
 #[derive(Clone, Debug)]
 pub enum SpecializedSocketConfig {
     UnixSocket(UnixSocketConfig),
+    Fifo(FifoConfig),
     TcpSocket(TcpSocketConfig),
     UdpSocket(UdpSocketConfig),
 }
@@ -26,13 +29,42 @@ impl SpecializedSocketConfig {
             SpecializedSocketConfig::UnixSocket(conf) => conf.open(),
             SpecializedSocketConfig::TcpSocket(conf) => conf.open(),
             SpecializedSocketConfig::UdpSocket(conf) => conf.open(),
+            SpecializedSocketConfig::Fifo(conf) => conf.open(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct UnixSocketConfig {
-    pub kind: SocketKind,
+pub enum UnixSocketConfig {
+    Stream(String),
+    Sequential(String),
+    Datagram(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct FifoConfig {
+    pub path: std::path::PathBuf,
+}
+
+impl FifoConfig {
+    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
+        if self.path.exists() {
+            std::fs::remove_file(&self.path).unwrap();
+        }
+        let mode = nix::sys::stat::Mode::S_IRWXU;
+        nix::unistd::mkfifo(&self.path, mode)
+            .map_err(|e| format!("Error while creating fifo {:?}: {}", &self.path, e))?;
+
+        // open NON_BLOCK so we dont wait for the other end of the fifo
+        let mut open_flags = nix::fcntl::OFlag::empty();
+        open_flags.insert(nix::fcntl::OFlag::O_RDWR);
+        //open_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+        let fifo_fd = nix::fcntl::open(&self.path, open_flags, mode).unwrap();
+        
+        // need to make a file out of that so AsRawFd is implemented (it's not implmeneted for RawFd itself...)
+        let fifo = unsafe { std::fs::File::from_raw_fd(fifo_fd) };
+        Ok(Arc::new(Box::new(fifo)))
+    }
 }
 
 struct UnixSeqPacket(Option<i32>);
@@ -61,8 +93,8 @@ impl UnixSeqPacket {
 
 impl UnixSocketConfig {
     fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
-        match &self.kind {
-            SocketKind::Stream(path) => {
+        match self {
+            UnixSocketConfig::Stream(path) => {
                 let spath = std::path::Path::new(&path);
                 // Delete old socket if necessary
                 if spath.exists() {
@@ -86,7 +118,7 @@ impl UnixSocketConfig {
                 //need to stop the listener to drop which would close the filedescriptor
                 Ok(Arc::new(Box::new(stream)))
             }
-            SocketKind::Datagram(path) => {
+            UnixSocketConfig::Datagram(path) => {
                 let spath = std::path::Path::new(&path);
                 // Delete old socket if necessary
                 if spath.exists() {
@@ -110,7 +142,7 @@ impl UnixSocketConfig {
                 //need to stop the listener to drop which would close the filedescriptor
                 Ok(Arc::new(Box::new(stream)))
             }
-            SocketKind::Sequential(path) => {
+            UnixSocketConfig::Sequential(path) => {
                 let spath = std::path::Path::new(&path);
                 // Delete old socket if necessary
                 if spath.exists() {
