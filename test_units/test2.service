@@ -4,5 +4,5 @@ NotifyAccess= all
 Type= simple
 keep_alive = true
 
-[Install]
+[Unit]
 After= test

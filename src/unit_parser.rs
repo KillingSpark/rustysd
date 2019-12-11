@@ -182,6 +182,8 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> 
         conf: unit_config.unwrap_or(UnitConfig {
             filepath: path.clone(),
 
+            description: "".into(),
+
             wants: Vec::new(),
             requires: Vec::new(),
             before: Vec::new(),
@@ -365,9 +367,15 @@ fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig 
     let requires = section.remove("REQUIRES");
     let after = section.remove("AFTER");
     let before = section.remove("BEFORE");
+    let description = section.remove("DESCRIPTION");
+
+    if !section.is_empty() {
+        panic!("Unit section has unrecognized/unimplemented options: {:?}", section);
+    }
 
     UnitConfig {
         filepath: path.clone(),
+        description: description.map(|x| (x[0]).1.clone()).unwrap_or_default(),
         wants: map_tupels_to_second(wants.unwrap_or_default()),
         requires: map_tupels_to_second(requires.unwrap_or_default()),
         after: map_tupels_to_second(after.unwrap_or_default()),
@@ -378,6 +386,10 @@ fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig 
 fn parse_install_section(mut section: ParsedSection) -> InstallConfig {
     let wantedby = section.remove("WANTEDBY");
     let requiredby = section.remove("REQUIREDBY");
+
+    if !section.is_empty() {
+        panic!("Install section has unrecognized/unimplemented options: {:?}", section);
+    }
 
     InstallConfig {
         wanted_by: map_tupels_to_second(wantedby.unwrap_or_default()),
@@ -393,6 +405,10 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let notify_access = section.remove("NOTIFYACCESS");
     let srcv_type = section.remove("TYPE");
     let accept = section.remove("ACCEPT");
+
+    if !section.is_empty() {
+        panic!("Service section has unrecognized/unimplemented options: {:?}", section);
+    }
 
     let exec = match exec {
         Some(mut vec) => {

@@ -102,6 +102,8 @@ impl Unit {
 pub struct UnitConfig {
     pub filepath: PathBuf,
 
+    pub description: String,
+
     pub wants: Vec<String>,
     pub requires: Vec<String>,
     pub before: Vec<String>,
