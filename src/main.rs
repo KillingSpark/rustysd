@@ -8,6 +8,7 @@ mod sockets;
 mod start_service;
 mod unit_parser;
 mod units;
+mod dbus_wait;
 
 extern crate signal_hook;
 
@@ -17,6 +18,7 @@ extern crate fern;
 extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
+extern crate dbus;
 
 fn main() {
     let (log_conf, conf) = config::load_config(None);
