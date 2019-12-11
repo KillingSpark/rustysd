@@ -142,6 +142,7 @@ pub struct InstallConfig {
 pub enum ServiceType {
     Simple,
     Notify,
+    Dbus,
 }
 
 pub enum NotifyKind {
@@ -158,6 +159,8 @@ pub struct ServiceConfig {
     pub exec: String,
     pub stop: String,
     pub srcv_type: ServiceType,
+
+    pub dbus_name: Option<String>,
 
     pub sockets: Vec<String>,
 }

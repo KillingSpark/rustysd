@@ -429,6 +429,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
     let notify_access = section.remove("NOTIFYACCESS");
     let srcv_type = section.remove("TYPE");
     let accept = section.remove("ACCEPT");
+    let dbus_name = section.remove("BUSNAME");
 
     if !section.is_empty() {
         panic!(
@@ -454,6 +455,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
                 match vec[0].1.as_str() {
                     "simple" => ServiceType::Simple,
                     "notify" => ServiceType::Notify,
+                    "dbus" => ServiceType::Dbus,
                     _ => panic!("Unknown service type: {}", vec[0].1),
                 }
             } else {
@@ -511,12 +513,29 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
         }
         None => false,
     };
+    let dbus_name = match dbus_name {
+        Some(vec) => {
+            if vec.len() == 1 {
+                Some(vec[0].1.to_owned())
+            } else {
+                panic!("BusName had to many entries: {:?}", vec);
+            }
+        }
+        None => None,
+    };
+
+    if let ServiceType::Dbus = srcv_type {
+        if dbus_name.is_none() {
+            panic!("BusName not specified but service type is dbus");
+        }
+    }
 
     ServiceConfig {
         srcv_type,
         notifyaccess,
         keep_alive,
         accept,
+        dbus_name,
         exec,
         stop,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),

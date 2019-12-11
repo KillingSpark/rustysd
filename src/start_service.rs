@@ -245,27 +245,39 @@ fn after_fork_parent(
     );
 
     if let Some(conf) = &srvc.service_config {
-        if let ServiceType::Notify = conf.srcv_type {
-            trace!(
-                "[FORK_PARENT] Waiting for a notification on: {:?}",
-                &notify_socket_env_var
-            );
+        match conf.srcv_type {
+            ServiceType::Notify => {
+                trace!(
+                    "[FORK_PARENT] Waiting for a notification on: {:?}",
+                    &notify_socket_env_var
+                );
 
-            let mut buf = [0u8; 512];
-            loop {
-                let bytes = stream.recv(&mut buf[..]).unwrap();
-                srvc.notifications_buffer
-                    .push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
-                crate::notification_handler::handle_notifications_from_buffer(srvc, &name);
-                if let ServiceStatus::Running = srvc.status {
-                    break;
-                } else {
-                    trace!("[FORK_PARENT] Service still not ready",);
+                let mut buf = [0u8; 512];
+                loop {
+                    let bytes = stream.recv(&mut buf[..]).unwrap();
+                    srvc.notifications_buffer
+                        .push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
+                    crate::notification_handler::handle_notifications_from_buffer(srvc, &name);
+                    if let ServiceStatus::Running = srvc.status {
+                        break;
+                    } else {
+                        trace!("[FORK_PARENT] Service still not ready",);
+                    }
                 }
             }
-        } else {
-            trace!("[FORK_PARENT] service {} doesnt notify", name);
-            srvc.status = ServiceStatus::Running;
+            ServiceType::Simple => {
+                trace!("[FORK_PARENT] service {} doesnt notify", name);
+                srvc.status = ServiceStatus::Running;
+            }
+            ServiceType::Dbus => {
+                if let Some(dbus_name) = &conf.dbus_name {
+                    trace!("[FORK_PARENT] Waiting for dbus name: {}", dbus_name);
+                    crate::dbus_wait::wait_for_name(&name).unwrap();
+                    trace!("[FORK_PARENT] Found dbus name on bus: {}", dbus_name);
+                } else {
+                    error!("[FORK_PARENT] No busname given for service: {:?}", name);
+                }
+            }
         }
     }
 }

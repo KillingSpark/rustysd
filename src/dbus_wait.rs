@@ -21,4 +21,5 @@ fn name_exists(name: &str, obj: &Proxy<&Connection>) -> Result<bool, Box<dyn std
 #[test]
 fn test_dbus_wait() {
     wait_for_name("org.freedesktop.DBus").unwrap();
+    println!("Found dbus name");
 }
