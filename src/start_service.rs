@@ -272,6 +272,7 @@ fn after_fork_parent(
             ServiceType::Dbus => {
                 if let Some(dbus_name) = &conf.dbus_name {
                     trace!("[FORK_PARENT] Waiting for dbus name: {}", dbus_name);
+                    // TODO blocks forever right now for some reason
                     crate::dbus_wait::wait_for_name(&name).unwrap();
                     trace!("[FORK_PARENT] Found dbus name on bus: {}", dbus_name);
                 } else {
