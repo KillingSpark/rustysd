@@ -84,7 +84,8 @@ fn wait_for_name(
 
     let start = std::time::Instant::now();
     while !(*stoparc.lock().unwrap()) && start.elapsed() < timeout {
-        conn.process(std::time::Duration::from_millis(500))?;
+        let max_wait = timeout - start.elapsed();
+        conn.process(max_wait)?;
     }
     if start.elapsed() >= timeout {
         Ok(WaitResult::Timedout)
@@ -105,7 +106,7 @@ fn test_dbus_wait() {
 
     std::thread::spawn(move || {
         // wait so the other thread has time to start waiting for the signal
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(3));
 
         // request name
         let conn = Connection::new_session().unwrap();
@@ -113,7 +114,7 @@ fn test_dbus_wait() {
     });
 
     // wait for the name to be requested
-    match wait_for_name_session_bus(&name, std::time::Duration::from_millis(3000)).unwrap() {
+    match wait_for_name_session_bus(&name, std::time::Duration::from_millis(10_000)).unwrap() {
         WaitResult::Ok => {
             println!("SUCCESS!!");
         }
