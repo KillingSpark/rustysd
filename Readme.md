@@ -27,6 +27,7 @@ Running `./build_all.sh && cargo run --bin rustysd` will build the test service 
 ## What does not work
 Just some stuff I know does not work but would be cool to have
 
+1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
 1. The whole dbus shenanigans
 1. More socket types 
     1. Netlink is missing for example
