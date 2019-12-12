@@ -272,8 +272,20 @@ fn after_fork_parent(
             ServiceType::Dbus => {
                 if let Some(dbus_name) = &conf.dbus_name {
                     trace!("[FORK_PARENT] Waiting for dbus name: {}", dbus_name);
-                    crate::dbus_wait::wait_for_name(&dbus_name).unwrap();
-                    trace!("[FORK_PARENT] Found dbus name on bus: {}", dbus_name);
+                    match crate::dbus_wait::wait_for_name_system_bus(
+                        &dbus_name,
+                        std::time::Duration::from_millis(10_000),
+                    )
+                    .unwrap()
+                    {
+                        crate::dbus_wait::WaitResult::Ok => {
+                            trace!("[FORK_PARENT] Found dbus name on bus: {}", dbus_name);
+                        }
+                        crate::dbus_wait::WaitResult::Timedout => {
+                            warn!("[FORK_PARENT] Did not find dbus name on bus: {}", dbus_name);
+                            // TODO do something about that
+                        }
+                    }
                 } else {
                     error!("[FORK_PARENT] No busname given for service: {:?}", name);
                 }
