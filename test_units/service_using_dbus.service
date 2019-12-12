@@ -1,5 +1,5 @@
 [Service]
 Exec= /bin/true
 Type= dbus
-BusName= "org.freedesktop.DBus"
+BusName= org.freedesktop.DBus
 keep_alive = false
