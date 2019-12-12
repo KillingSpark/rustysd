@@ -10,16 +10,15 @@ where error handling should be done properly.
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented
 
-1. Parsing of very simple service files
+1. Parsing of service files (a subset of the settings are recognized)
+1. Parsing of socket files (a subset of the settings are recognized)
 1. Ordering of services according to the before/after relations
-1. Killing services that require dead services 
-1. Parsing of very simple socket files that use streaming unix sockets
-1. Matching services and sockets by name. Just dbus.service to dbus.socket nothing else yet (but that should not be too difficult)
-1. Passing filedescriptors to the daemons
-1. Naming file descriptors in the env variables with the name from the *.socket file
-1. Waiting for the READY=1 notification
+1. Killing services that require services that have died 
 1. Matching services and sockets either by name or dynamically by parsing the appropiate settings in the .service/.socket files
-1. The parts of the sd_notify API
+1. Passing filedescriptors to the daemons as systemd clients expect them (names and all that good stuff)
+1. Pretty much all parts of the sd_notify API
+1. Waiting for the READY=1 notification for services of type notify
+1. Waiting for services of type dbus
 
 
 ### See for yourself
@@ -30,6 +29,6 @@ Just some stuff I know does not work but would be cool to have
 
 1. The whole dbus shenanigans
 1. More socket types 
-    1. fifos are missing
-1. The whole sd_notify API (with storing filedescriptors and such)
-1. A systemctl equivalent to control/query rustysd 
+    1. Netlink is missing for example
+1. The rest of the sd_notify API (with storing filedescriptors and such)
+1. A systemctl equivalent to control/query rustysd (some querying has been implemented using serde-json but its just a concept right now)
