@@ -39,7 +39,7 @@ fn main() {
     println!("Config: {:?}", conf);
     println!("LogConfig: {:?}", log_conf);
 
-    logging::setup_logging(&log_conf.log_dir).unwrap();
+    logging::setup_logging(&log_conf).unwrap();
     let conf = match conf {
         Ok(conf) => conf,
         Err(e) => {

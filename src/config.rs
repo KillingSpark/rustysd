@@ -5,6 +5,8 @@ use toml;
 
 #[derive(Debug)]
 pub struct LoggingConfig {
+    pub log_to_stdout: bool,
+    pub log_to_disk: bool,
     pub log_dir: PathBuf,
 }
 
@@ -18,6 +20,7 @@ pub struct Config {
 enum SettingValue {
     Str(String),
     Array(Vec<SettingValue>),
+    Boolean(bool),
 }
 
 fn load_toml(
@@ -56,6 +59,12 @@ fn load_toml(
 
         if let Some(toml::Value::String(val)) = map.get("logging_dir") {
             settings.insert("logging.dir".to_owned(), SettingValue::Str(val.clone()));
+        }
+        if let Some(toml::Value::Boolean(val)) = map.get("log_to_disk") {
+            settings.insert("logging.to_disk".to_owned(), SettingValue::Boolean(*val));
+        }
+        if let Some(toml::Value::Boolean(val)) = map.get("log_to_stdout") {
+            settings.insert("logging.to_stdout".to_owned(), SettingValue::Boolean(*val));
         }
         if let Some(toml::Value::String(val)) = map.get("notifications_dir") {
             settings.insert(
@@ -98,6 +107,12 @@ fn load_json(
 
         if let Some(serde_json::Value::String(val)) = map.get("logging_dir") {
             settings.insert("logging.dir".to_owned(), SettingValue::Str(val.clone()));
+        }
+        if let Some(serde_json::Value::Bool(val)) = map.get("log_to_disk") {
+            settings.insert("logging.to_disk".to_owned(), SettingValue::Boolean(*val));
+        }
+        if let Some(serde_json::Value::Bool(val)) = map.get("log_to_stdout") {
+            settings.insert("logging.to_stdout".to_owned(), SettingValue::Boolean(*val));
         }
         if let Some(serde_json::Value::String(val)) = map.get("notifications_dir") {
             settings.insert(
@@ -154,6 +169,15 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
         _ => None,
     });
 
+    let log_to_stdout = settings.get("logging.to_stdout").map(|val| match val {
+        SettingValue::Boolean(b) => *b,
+        _ => false,
+    });
+    let log_to_disk = settings.get("logging.to_disk").map(|val| match val {
+        SettingValue::Boolean(b) => *b,
+        _ => false,
+    });
+
     let notification_sockets_dir = settings.get("notifications.dir").map(|dir| match dir {
         SettingValue::Str(s) => Some(PathBuf::from(s)),
         _ => None,
@@ -179,6 +203,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
                 }
                 acc
             }),
+        _ => Vec::new(),
     });
 
     println!("Settings: {:?}", unit_dirs);
@@ -219,6 +244,8 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
             log_dir: log_dir
                 .unwrap_or_else(|| Some(PathBuf::from("./logs")))
                 .unwrap_or_else(|| PathBuf::from("./logs")),
+            log_to_disk: log_to_disk.unwrap_or(false),
+            log_to_stdout: log_to_stdout.unwrap_or(true),
         },
         conf,
     )
