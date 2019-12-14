@@ -1,25 +1,9 @@
-use crate::services::{Service};
+use crate::services::Service;
 use crate::units::*;
 use std::os::unix::io::RawFd;
 
-pub fn after_fork_child(
-    srvc: &mut Service,
-    name: &str,
-    sockets: &SocketTable,
-    notify_socket_env_var: &str,
-    new_stdout: RawFd,
-    new_stderr: RawFd,
-) {
-    // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
-    // But since this is the only thread that is in the child process the lock will never be released!
-
-    //here we are in the child process. We need to close every file descriptor we dont need anymore after the exec
-
-    // TODO maybe all fd's should be marked with FD_CLOEXEC when openend
-    // and here we only unflag those that we want to keep?
-    //trace!("[FORK_CHILD {}] CLOSING FDS", name);
-
-    let pid = nix::unistd::getpid();
+fn close_all_unneeded_fds(srvc: &mut Service, sockets: &SocketTable) {
+    // This is not really necessary since we mark all fds with FD_CLOEXEC but just to be safe...
     for sock_unit in sockets.values() {
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
             if !srvc.socket_names.contains(&sock.name) {
@@ -41,7 +25,14 @@ pub fn after_fork_child(
             }
         }
     }
+}
 
+fn setup_env_vars(
+    srvc: &mut Service,
+    name: &str,
+    sockets: &SocketTable,
+    notify_socket_env_var: &str,
+) {
     // The following two lines do deadlock after fork and before exec... I would have loved to just use these
     // This has probably something to do with the global env_lock() that is being used in the std
     // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
@@ -80,6 +71,7 @@ pub fn after_fork_child(
         }
     }
 
+    let pid = nix::unistd::getpid();
     let pid_str = &format!("{}", pid);
     let fds_str = &format!("{}", num_fds);
 
@@ -111,12 +103,15 @@ pub fn after_fork_child(
     //    fds_str,
     //    full_name_list
     //);
+}
 
-    // no more logging after this point!
-    // The filedescriptor used by the logger might have been duped to another
-    // one and logging into that one would be.... bad
-    // Hopefully the close() means that no old logs will get written to that filedescriptor
-
+fn dup_fds(
+    srvc: &mut Service,
+    name: &str,
+    sockets: &SocketTable,
+    new_stdout: RawFd,
+    new_stderr: RawFd,
+) {
     // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
     let actual_new_fd = nix::unistd::dup2(new_stdout, 1).unwrap();
     if actual_new_fd != 1 {
@@ -138,6 +133,7 @@ pub fn after_fork_child(
     let file_desc_offset = 3;
     let mut fd_idx = 0;
 
+    let sockets_by_name = get_sockets_by_name(sockets);
     for sock_name in &srvc.socket_names {
         match sockets_by_name.get(sock_name) {
             Some(socket) => {
@@ -191,7 +187,9 @@ pub fn after_fork_child(
             ),
         }
     }
+}
 
+fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CString>) {
     let split: Vec<&str> = match &srvc.service_config {
         Some(conf) => conf.exec.split(' ').collect(),
         None => unreachable!(),
@@ -210,6 +208,32 @@ pub fn after_fork_child(
             args.push(std::ffi::CString::new(*arg).unwrap());
         }
     }
+
+    (cmd, args)
+}
+
+pub fn after_fork_child(
+    srvc: &mut Service,
+    name: &str,
+    sockets: &SocketTable,
+    notify_socket_env_var: &str,
+    new_stdout: RawFd,
+    new_stderr: RawFd,
+) {
+    // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
+    // But since this is the only thread that is in the child process the lock will never be released!
+
+    close_all_unneeded_fds(srvc, sockets);
+    setup_env_vars(srvc, name, sockets, notify_socket_env_var);
+
+    // no more logging after this point!
+    // The filedescriptor used by the logger might have been duped to another
+    // one and logging into that one would be.... bad
+    // Hopefully the close() means that no old logs will get written to that filedescriptor
+
+    dup_fds(srvc, name, sockets, new_stdout, new_stderr);
+
+    let (cmd, args) = prepare_exec_args(srvc);
 
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
     match nix::unistd::execv(&cmd, &args) {
