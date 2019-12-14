@@ -6,7 +6,6 @@ in anything that is important.
 It does look somewhat promising, the really ugly parts are "working". There is a lot of cleanup to be done. There is a whole lot of unwrap() calling
 where error handling should be done properly.
 
-
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented
 
@@ -27,6 +26,7 @@ Running `./build_all.sh && cargo run --bin rustysd` will build the test service 
 ## What does not work
 Just some stuff I know does not work but would be cool to have
 
+1. Socket activation. Right now services with a socket will be started right away in parallel with all others. They could just not be spawned and waited on with a select until they are ready. This will be needed anyways for inetd style socket activation
 1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
 1. The whole dbus shenanigans
 1. More socket types 

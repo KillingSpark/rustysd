@@ -18,6 +18,7 @@ extern crate fern;
 extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
+extern crate toml;
 
 fn move_to_new_session() -> bool {
     match nix::unistd::fork() {
@@ -35,6 +36,9 @@ fn move_to_new_session() -> bool {
 
 fn main() {
     let (log_conf, conf) = config::load_config(None);
+    println!("Config: {:?}", conf);
+    println!("LogConfig: {:?}", log_conf);
+
     logging::setup_logging(&log_conf.log_dir).unwrap();
     let conf = match conf {
         Ok(conf) => conf,

@@ -1,0 +1,3 @@
+logging_dir = "./logs"
+notifications_dir = "./notifications"
+unit_dirs = [ "./test_units" ]
