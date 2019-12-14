@@ -5,7 +5,6 @@ mod notification_handler;
 mod services;
 mod signal_handler;
 mod sockets;
-mod start_service;
 mod unit_parser;
 mod units;
 mod dbus_wait;
