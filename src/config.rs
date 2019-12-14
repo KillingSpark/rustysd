@@ -189,14 +189,12 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
             .iter()
             .map(|el| match el {
                 SettingValue::Str(s) => {
-                    println!("s: {}", s);
                     Some(PathBuf::from(s))
                 }
                 _ => None,
             })
             .fold(Vec::new(), |mut acc, el| {
                 if let Some(path) = el {
-                    println!("Got none");
                     if path.exists() {
                         acc.push(path)
                     }
@@ -205,8 +203,6 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
             }),
         _ => Vec::new(),
     });
-
-    println!("Settings: {:?}", unit_dirs);
 
     let config = Config {
         unit_dirs: unit_dirs.unwrap_or_else(|| vec![PathBuf::from("./test_units")]),
