@@ -8,8 +8,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
     - uses: actions/checkout@v1
+
+    - name: Prepare
+      run: sudo apt-get install -y libdbus-1-dev pkg-config
+
     - name: Build
       run: cargo build --verbose
+
     - name: Run tests
       run: cargo test --verbose
