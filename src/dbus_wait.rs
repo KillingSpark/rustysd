@@ -100,6 +100,7 @@ fn name_exists(name: &str, obj: &Proxy<&Connection>) -> Result<bool, Box<dyn std
 }
 
 #[test]
+#[ignore]
 fn test_dbus_wait() {
     let name = "This.Is.A.Test.Name".to_owned();
     let name2 = name.clone();
