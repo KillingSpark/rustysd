@@ -1,5 +1,6 @@
 mod config;
 mod control;
+mod dbus_wait;
 mod logging;
 mod notification_handler;
 mod services;
@@ -7,17 +8,30 @@ mod signal_handler;
 mod sockets;
 mod unit_parser;
 mod units;
-mod dbus_wait;
 
 extern crate signal_hook;
 
 #[macro_use]
 extern crate log;
+extern crate dbus;
 extern crate fern;
 extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
-extern crate dbus;
+
+fn move_to_new_session() -> bool {
+    match nix::unistd::fork() {
+        Ok(nix::unistd::ForkResult::Child) => {
+            nix::unistd::setsid().unwrap();
+            true
+        }
+        Ok(nix::unistd::ForkResult::Parent { .. }) => false,
+        Err(e) => {
+            error!("Fork before setsid failed: {}", e);
+            false
+        }
+    }
+}
 
 fn main() {
     let (log_conf, conf) = config::load_config(None);
@@ -32,6 +46,13 @@ fn main() {
             );
         }
     };
+
+    let should_go_to_new_session = false;
+    if should_go_to_new_session {
+        if !move_to_new_session() {
+            return;
+        }
+    }
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files

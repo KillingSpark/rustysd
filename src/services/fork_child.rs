@@ -212,6 +212,11 @@ fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CStrin
     (cmd, args)
 }
 
+fn move_into_new_process_group() {
+    //make this process the process group leader
+    nix::unistd::setpgid(nix::unistd::getpid(), nix::unistd::Pid::from_raw(0)).unwrap();
+}
+
 pub fn after_fork_child(
     srvc: &mut Service,
     name: &str,
@@ -222,17 +227,18 @@ pub fn after_fork_child(
 ) {
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
+    move_into_new_process_group();
 
-    close_all_unneeded_fds(srvc, sockets);
-    setup_env_vars(srvc, name, sockets, notify_socket_env_var);
 
     // no more logging after this point!
     // The filedescriptor used by the logger might have been duped to another
     // one and logging into that one would be.... bad
     // Hopefully the close() means that no old logs will get written to that filedescriptor
 
+    close_all_unneeded_fds(srvc, sockets);
     dup_fds(srvc, name, sockets, new_stdout, new_stderr);
 
+    setup_env_vars(srvc, name, sockets, notify_socket_env_var);
     let (cmd, args) = prepare_exec_args(srvc);
 
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
