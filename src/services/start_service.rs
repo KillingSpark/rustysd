@@ -1,12 +1,9 @@
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::net::UnixDatagram;
 
 use super::fork_parent;
 use super::fork_child;
-
-use std::sync::{Arc, Mutex};
+use super::pre_fork;
 
 
 fn start_service_with_filedescriptors(
@@ -45,59 +42,11 @@ fn start_service_with_filedescriptors(
     // 4. set relevant env varibales $LISTEN_FDS $LISTEN_PID
     // 4. execve the cmd with the args
 
-    // setup socket for notifications from the service
-    if !notification_socket_path.exists() {
-        std::fs::create_dir_all(&notification_socket_path).unwrap();
-    }
-    let daemon_socket_path = notification_socket_path.join(format!("{}.notifiy_socket", &name));
-
-    // NOTIFY_SOCKET
-    let notify_socket_env_var = if daemon_socket_path.starts_with(".") {
-        let cur_dir = std::env::current_dir().unwrap();
-        cur_dir.join(&daemon_socket_path)
-    } else {
-        daemon_socket_path
-    };
-
-    let stream = {
-        if let Some(stream) = &srvc.notifications {
-            stream.clone()
-        } else {
-            if notify_socket_env_var.exists() {
-                std::fs::remove_file(&notify_socket_env_var).unwrap();
-            }
-            let stream = UnixDatagram::bind(&notify_socket_env_var).unwrap();
-            // close these fd's on exec. They must not show up in child processes
-            let new_listener_fd = stream.as_raw_fd();
-            nix::fcntl::fcntl(
-                new_listener_fd,
-                nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
-            )
-            .unwrap();
-            let new_stream = Arc::new(Mutex::new(stream));
-            srvc.notifications = Some(new_stream.clone());
-            new_stream
-        }
-    };
-
-    let child_stdout = if let Some(fd) = &srvc.stdout_dup {
-        fd.1
-    } else {
-        let (r, w) = nix::unistd::pipe().unwrap();
-        srvc.stdout_dup = Some((r, w));
-        w
-    };
-    let child_stderr = if let Some(fd) = &srvc.stderr_dup {
-        fd.1
-    } else {
-        let (r, w) = nix::unistd::pipe().unwrap();
-        srvc.stderr_dup = Some((r, w));
-        w
-    };
+    let prefork_res = pre_fork::pre_fork(srvc, &name, &notification_socket_path);
 
     // make sure we have the lock that the child will need
     let sockets_lock = sockets.lock().unwrap();
-    let stream_locked = &*stream.lock().unwrap();
+    let stream_locked = &*prefork_res.notification_socket.lock().unwrap();
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             std::mem::drop(sockets_lock);
@@ -105,7 +54,7 @@ fn start_service_with_filedescriptors(
                 srvc,
                 name,
                 child,
-                std::path::Path::new(notify_socket_env_var.to_str().unwrap()),
+                std::path::Path::new(prefork_res.notify_socket_env_var.to_str().unwrap()),
                 stream_locked,
             );
         }
@@ -114,9 +63,9 @@ fn start_service_with_filedescriptors(
                 srvc,
                 &name,
                 &*sockets_lock,
-                notify_socket_env_var.to_str().unwrap(),
-                child_stdout,
-                child_stderr,
+                prefork_res.notify_socket_env_var.to_str().unwrap(),
+                prefork_res.stdout,
+                prefork_res.stderr,
             );
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),
