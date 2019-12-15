@@ -9,16 +9,8 @@ mod sockets;
 mod unit_parser;
 mod units;
 
-extern crate signal_hook;
-
 #[macro_use]
 extern crate log;
-extern crate dbus;
-extern crate fern;
-extern crate lumberjack_rs;
-extern crate serde_json;
-extern crate threadpool;
-extern crate toml;
 
 fn move_to_new_session() -> bool {
     match nix::unistd::fork() {
@@ -103,9 +95,9 @@ fn main() {
 
     // listen on signals from the child processes
     signal_handler::handle_signals(
-        service_table.clone(),
-        socket_table.clone(),
-        pid_table.clone(),
-        conf.notification_sockets_dir.clone(),
+        service_table,
+        socket_table,
+        pid_table,
+        conf.notification_sockets_dir,
     );
 }

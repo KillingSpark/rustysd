@@ -1,9 +1,11 @@
-use std::net::TcpListener;
-use std::net::UdpSocket;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
-use std::os::unix::net::{UnixDatagram, UnixListener};
-use std::sync::Arc;
+use std::{
+    net::TcpListener,
+    net::UdpSocket,
+    os::unix::io::AsRawFd,
+    os::unix::io::FromRawFd,
+    os::unix::net::{UnixDatagram, UnixListener},
+    sync::Arc,
+};
 
 use crate::units::*;
 
@@ -60,14 +62,15 @@ impl FifoConfig {
         open_flags.insert(nix::fcntl::OFlag::O_RDWR);
         //open_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
         let fifo_fd = nix::fcntl::open(&self.path, open_flags, mode).unwrap();
-        
         // need to make a file out of that so AsRawFd is implemented (it's not implmeneted for RawFd itself...)
         let fifo = unsafe { std::fs::File::from_raw_fd(fifo_fd) };
         Ok(Arc::new(Box::new(fifo)))
     }
 }
 
+#[derive(Debug)]
 struct UnixSeqPacket(Option<i32>);
+
 impl AsRawFd for UnixSeqPacket {
     fn as_raw_fd(&self) -> i32 {
         self.0.unwrap()
@@ -211,6 +214,7 @@ impl UdpSocketConfig {
     }
 }
 
+#[derive(Debug)]
 pub struct Socket {
     pub name: String,
     pub sockets: Vec<SocketConfig>,

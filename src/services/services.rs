@@ -9,6 +9,7 @@ use threadpool::ThreadPool;
 
 use crate::units::*;
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ServiceStatus {
     NeverRan,
     Starting,
@@ -16,11 +17,24 @@ pub enum ServiceStatus {
     Stopped,
 }
 
+impl ToString for ServiceStatus {
+    fn to_string(&self) -> String {
+        match *self {
+            ServiceStatus::NeverRan => "NeverRan".into(),
+            ServiceStatus::Running => "Running".into(),
+            ServiceStatus::Starting => "Starting".into(),
+            ServiceStatus::Stopped => "Stopped".into(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ServiceRuntimeInfo {
     pub restarted: u64,
     pub up_since: Option<std::time::Instant>,
 }
 
+#[derive(Debug)]
 pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
     pub service_config: Option<ServiceConfig>,
@@ -195,7 +209,7 @@ fn run_services_recursive(
                     ServiceStatus::NeverRan => {
                         start_service(
                             srvc,
-                            name.clone(),
+                            name,
                             sockets_copy_this_job,
                             notification_socket_path_copy_this_job,
                         );

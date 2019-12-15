@@ -1,7 +1,10 @@
-use dbus::arg;
-use dbus::blocking::Connection;
-use dbus::blocking::Proxy;
+use dbus::{arg, blocking::Connection, blocking::Proxy};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum WaitResult {
     Ok,
     Timedout,
@@ -21,11 +24,8 @@ impl arg::AppendAll for NameOwnerChangedHappend {
 impl arg::ReadAll for NameOwnerChangedHappend {
     fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
         let mut vec: Vec<String> = Vec::new();
-        loop {
-            match i.read() {
-                Ok(s) => vec.push(s),
-                Err(_) => break,
-            }
+        while let Ok(s) = i.read() {
+            vec.push(s);
         }
         Ok(NameOwnerChangedHappend { sender: vec })
     }
@@ -36,7 +36,6 @@ impl dbus::message::SignalArgs for NameOwnerChangedHappend {
     const INTERFACE: &'static str = "org.freedesktop.DBus";
 }
 
-use std::sync::{Arc, Mutex};
 pub fn wait_for_name_system_bus(
     name: &str,
     timeout: std::time::Duration,
@@ -71,25 +70,25 @@ fn wait_for_name(
         return Ok(WaitResult::Ok);
     }
 
-    let stoparc = Arc::new(Mutex::new(false));
+    let stoparc = Arc::new(AtomicBool::new(false));
     let stoparc_cb = stoparc.clone();
 
     let name = name.to_owned();
     let _id = obj.match_signal(move |h: NameOwnerChangedHappend, _: &Connection| {
         if h.sender[0] == name {
-            (*stoparc_cb.lock().unwrap()) = true;
+            stoparc_cb.store(true, Ordering::SeqCst);
         }
         true
     });
 
     let start = std::time::Instant::now();
-    while !(*stoparc.lock().unwrap()) && start.elapsed() < timeout {
+    while !(stoparc.load(Ordering::SeqCst)) && start.elapsed() < timeout {
         let max_wait = timeout - start.elapsed();
         conn.process(max_wait)?;
     }
     if start.elapsed() >= timeout {
         Ok(WaitResult::Timedout)
-    }else{
+    } else {
         Ok(WaitResult::Ok)
     }
 }

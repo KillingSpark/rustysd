@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::path::PathBuf;
+use std::{collections::HashMap, fs::File, io::Read, path::PathBuf};
 use toml;
 
 #[derive(Debug)]
@@ -27,16 +25,13 @@ fn load_toml(
     config_path: &PathBuf,
     settings: &mut HashMap<String, SettingValue>,
 ) -> Result<(), String> {
-    let toml_conf: toml::Value = match File::open(&config_path) {
-        Ok(mut file) => {
-            let mut config = String::new();
-            use std::io::Read;
-            file.read_to_string(&mut config).unwrap();
+    let mut file =
+        File::open(config_path).map_err(|e| format!("Error while opening config file: {}", e))?;
+    let mut config = String::new();
+    file.read_to_string(&mut config).unwrap();
 
-            toml::from_str(&config).map_err(|e| format!("Error while decoding config json: {}", e))
-        }
-        Err(e) => Err(format!("Error while opening config file: {}", e)),
-    }?;
+    let toml_conf =
+        toml::from_str(&config).map_err(|e| format!("Error while decoding config json: {}", e))?;
 
     if let toml::Value::Table(map) = &toml_conf {
         if let Some(toml::Value::Array(elems)) = map.get("unit_dirs") {
@@ -44,7 +39,7 @@ fn load_toml(
                 "unit.dirs".to_owned(),
                 SettingValue::Array(
                     elems
-                        .into_iter()
+                        .iter()
                         .map(|e| {
                             if let toml::Value::String(s) = e {
                                 SettingValue::Str(s.clone())
@@ -80,11 +75,10 @@ fn load_json(
     config_path: &PathBuf,
     settings: &mut HashMap<String, SettingValue>,
 ) -> Result<(), String> {
-    let json_conf: serde_json::Value = match File::open(config_path) {
-        Ok(mut file) => serde_json::from_reader(&mut file)
-            .map_err(|e| format!("Error while decoding config json: {}", e)),
-        Err(e) => Err(format!("Error while opening config file: {}", e)),
-    }?;
+    let mut file =
+        File::open(config_path).map_err(|e| format!("Error while decoding config json: {}", e))?;
+    let json_conf = serde_json::from_reader(&mut file)
+        .map_err(|e| format!("Error while decoding config json: {}", e))?;
 
     if let serde_json::Value::Object(map) = &json_conf {
         if let Some(serde_json::Value::Array(elems)) = map.get("unit_dirs") {
@@ -92,7 +86,7 @@ fn load_json(
                 "unit.dirs".to_owned(),
                 SettingValue::Array(
                     elems
-                        .into_iter()
+                        .iter()
                         .map(|e| {
                             if let serde_json::Value::String(s) = e {
                                 SettingValue::Str(s.clone())
@@ -133,7 +127,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
     let config_path_json = if let Some(config_path) = config_path {
         config_path.join("rustysd_config.json")
     } else {
-        default_config_path_json.clone()
+        default_config_path_json
     };
 
     let config_path_toml = if let Some(config_path) = config_path {
@@ -160,7 +154,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
         if *new_key[0] == *"rustysd" {
             new_key.remove(0);
             let new_key = new_key.join(".");
-            settings.insert(new_key, SettingValue::Str(value.into()));
+            settings.insert(new_key, SettingValue::Str(value));
         }
     });
 
@@ -188,9 +182,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
         SettingValue::Array(arr) => arr
             .iter()
             .map(|el| match el {
-                SettingValue::Str(s) => {
-                    Some(PathBuf::from(s))
-                }
+                SettingValue::Str(s) => Some(PathBuf::from(s)),
                 _ => None,
             })
             .fold(Vec::new(), |mut acc, el| {
