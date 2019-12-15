@@ -248,16 +248,6 @@ impl Socket {
     }
 }
 
-pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
-    for socket_unit in sockets.values_mut() {
-        if let UnitSpecialized::Socket(socket) = &mut socket_unit.specialized {
-            socket.open_all()?;
-        }
-    }
-
-    Ok(())
-}
-
 pub fn apply_sockets_to_services(
     service_table: &mut ServiceTable,
     socket_table: &mut SocketTable,
