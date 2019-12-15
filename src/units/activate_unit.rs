@@ -45,6 +45,7 @@ fn activate_unit(
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<RawFd>>,
 ) {
+    trace!("Activate id: {}", id_to_start);
     let mut unit = {
         let mut services_locked = unit_table.lock().unwrap();
         let unit = services_locked.remove(&id_to_start).unwrap();
@@ -58,6 +59,10 @@ fn activate_unit(
             .iter()
             .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
         if !all_deps_ready {
+            trace!(
+                "Unit: {} ignores activation. Not all dependencies have been started",
+                unit.conf.name()
+            );
             services_locked.insert(id_to_start, unit);
             return;
         }
