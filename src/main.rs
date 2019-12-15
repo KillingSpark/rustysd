@@ -6,7 +6,6 @@ mod notification_handler;
 mod services;
 mod signal_handler;
 mod sockets;
-mod unit_parser;
 mod units;
 
 extern crate signal_hook;
@@ -58,7 +57,7 @@ fn main() {
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let (service_table, socket_table) = unit_parser::load_all_units(&conf.unit_dirs).unwrap();
+    let (service_table, socket_table) = units::unit_parser::load_all_units(&conf.unit_dirs).unwrap();
 
     let mut unit_table = std::collections::HashMap::new();
     unit_table.extend(service_table);
@@ -97,7 +96,7 @@ fn main() {
     let eventfds = vec![notification_eventfd, stdout_eventfd, stderr_eventfd];
 
     // parallel startup of all services
-    let pid_table = services::run_services(
+    let pid_table = units::activate_unit::activate_units(
         unit_table.clone(),
         conf.notification_sockets_dir.clone(),
         eventfds.clone(),
