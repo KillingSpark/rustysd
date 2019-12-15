@@ -375,8 +375,8 @@ fn string_to_bool(s: &str) -> bool {
     let s_upper = &s.to_uppercase();
     let c: char = s_upper.chars().nth(0).unwrap();
 
-    let is_num_and_zero = s.len() == 1 && c == '0';
-    s == "YES" || s == "TRUE" || is_num_and_zero
+    let is_num_and_one = s.len() == 1 && c == '1';
+    *s_upper == *"YES" || *s_upper == *"TRUE" || is_num_and_one
 }
 
 fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig {

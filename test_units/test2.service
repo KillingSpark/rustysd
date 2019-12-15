@@ -6,3 +6,4 @@ keep_alive = true
 
 [Unit]
 After= test
+Requires= test

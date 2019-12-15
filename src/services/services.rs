@@ -6,7 +6,6 @@ use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
-use threadpool::ThreadPool;
 
 use crate::units::*;
 
@@ -140,16 +139,18 @@ pub fn service_exit_handler(
         })
     };
 
+    let mut service_table_locked = unit_table.lock().unwrap();
+    let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
+    let unit = service_table_locked.get_mut(&srvc_id).unwrap();
+
     trace!(
-        "Service with id: {} pid: {} exited with code: {}",
+        "Service with id: {}, name: {} pid: {} exited with code: {}",
         srvc_id,
+        unit.conf.name(),
         pid,
         code
     );
 
-    let mut service_table_locked = unit_table.lock().unwrap();
-    let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
-    let unit = service_table_locked.get_mut(&srvc_id).unwrap();
     if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
         pid_table_locked.remove(&pid);
         srvc.status = ServiceStatus::Stopped;
