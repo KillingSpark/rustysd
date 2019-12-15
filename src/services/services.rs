@@ -139,9 +139,11 @@ pub fn service_exit_handler(
         })
     };
 
-    let mut service_table_locked = unit_table.lock().unwrap();
-    let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
-    let unit = service_table_locked.get_mut(&srvc_id).unwrap();
+    let mut unit = {
+        let mut service_table_locked = unit_table.lock().unwrap();
+        let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
+        service_table_locked.remove(&srvc_id).unwrap()
+    };
 
     trace!(
         "Service with id: {}, name: {} pid: {} exited with code: {}",
@@ -157,12 +159,40 @@ pub fn service_exit_handler(
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
-                start_service(
-                    srvc,
-                    unit.conf.name(),
-                    unit_table.clone(),
-                    notification_socket_path,
-                );
+                let mut sockets = HashMap::new();
+                {
+                    // keep this locked while the service is beeing restarted so noone can see that we remove abunch of stuff and return it again in the end
+                    let unit_table_locked: &mut HashMap<_, _> = &mut *unit_table.lock().unwrap();
+
+                    let mut socket_ids = Vec::new();
+                    for sock_name in &srvc.socket_names {
+                        for (id, unit) in unit_table_locked.iter() {
+                            if let UnitSpecialized::Socket(sock) = &unit.specialized {
+                                if sock.name.eq(sock_name) {
+                                    socket_ids.push(*id);
+                                }
+                            }
+                        }
+                    }
+
+                    for id in socket_ids {
+                        sockets.insert(id, unit_table_locked.remove(&id).unwrap());
+                    }
+                    let sockets = Arc::new(Mutex::new(sockets));
+                    start_service(
+                        srvc,
+                        unit.conf.name(),
+                        sockets.clone(),
+                        notification_socket_path,
+                    );
+
+                    let sockets_locked = &mut *sockets.lock().unwrap();
+                    let socket_ids: Vec<_> = sockets_locked.keys().map(|x| *x).collect();
+                    for id in socket_ids {
+                        unit_table_locked.insert(id, sockets_locked.remove(&id).unwrap());
+                    }
+                }
+
                 if let Some(pid) = srvc.pid {
                     srvc.runtime_info.restarted += 1;
                     pid_table_locked.insert(pid, PidEntry::Service(unit.id));
@@ -175,10 +205,16 @@ pub fn service_exit_handler(
                 );
                 kill_services(
                     unit.install.required_by.clone(),
-                    service_table_locked,
+                    &mut *unit_table.lock().unwrap(),
                     pid_table_locked,
                 );
             }
         }
+    }
+
+    {
+        let mut service_table_locked = unit_table.lock().unwrap();
+        let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
+        service_table_locked.insert(srvc_id, unit);
     }
 }
