@@ -20,9 +20,8 @@ pub fn load_all_units(paths: &[PathBuf]) -> Result<(ServiceTable, SocketTable), 
     }
 
     fill_dependencies(&mut service_table);
-    let service_table = apply_sockets_to_services(service_table, &socket_unit_table).unwrap();
+    apply_sockets_to_services(&mut service_table, &mut socket_unit_table)?;
 
-    open_all_sockets(&mut socket_unit_table).unwrap();
     Ok((service_table, socket_unit_table))
 }
 

@@ -5,8 +5,8 @@ Description=test Socket
 FileDescriptorName= TestSock
 
 ListenStream= ./sockets/servicelog_stream
-ListenStream= 127.0.0.1:8080
-ListenDatagram= 127.0.0.1:8081
+# ListenStream= 127.0.0.1:8080
+# ListenDatagram= 127.0.0.1:8081
 ListenDatagram= ./sockets/servicelog_datagram
 ListenSequentialPacket= ./sockets/servicelog_sequential
 

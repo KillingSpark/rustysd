@@ -3,8 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 
-// build and run with: clang -o test_service test_service.c $(pkg-config
-// libsystemd --libs) && ./test_service
+// build and run with: clang -o test_service test_service.c $(pkg-config libsystemd --libs) && ./test_service
 
 int main(int argc, char **argv) {
   printf("Amount of args: %d\n", argc);
@@ -28,14 +27,14 @@ int main(int argc, char **argv) {
       }
   }
 
-
-  printf("Result of sd_notify: %d\n", sd_notify(0, "READY=1\n"));
+  int res = sd_notify(0, "READY=1\n");
+  printf("Result of sd_notify: %d\n", res);
   printf("Result of sd_notify: %d\n",
          sd_notify(0, "STATUS=New status from C service\n"));
          
   fflush(stdout);
   while (1) {
-    sd_notify(0, "STATUS=still looping\n");
+    sd_notify(0, "READY=1\nSTATUS=still looping\n");
     sleep(1);
   }
 }

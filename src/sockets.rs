@@ -60,7 +60,6 @@ impl FifoConfig {
         open_flags.insert(nix::fcntl::OFlag::O_RDWR);
         //open_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
         let fifo_fd = nix::fcntl::open(&self.path, open_flags, mode).unwrap();
-        
         // need to make a file out of that so AsRawFd is implemented (it's not implmeneted for RawFd itself...)
         let fifo = unsafe { std::fs::File::from_raw_fd(fifo_fd) };
         Ok(Arc::new(Box::new(fifo)))
@@ -229,25 +228,30 @@ impl Socket {
         }
         name_list
     }
+
+    pub fn open_all(&mut self) -> std::io::Result<()> {
+        for idx in 0..self.sockets.len() {
+            let conf = &mut self.sockets[idx];
+            let as_raw_fd = conf.specialized.open().unwrap();
+            // close these fd's on exec. They must not show up in child processes
+            // the ńeeded fd's will be duped which unsets the flag again
+            let new_fd = as_raw_fd.as_raw_fd();
+            nix::fcntl::fcntl(
+                new_fd,
+                nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
+            )
+            .unwrap();
+            conf.fd = Some(as_raw_fd);
+            //need to stop the listener to drop which would close the filedescriptor
+        }
+        Ok(())
+    }
 }
 
 pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
     for socket_unit in sockets.values_mut() {
         if let UnitSpecialized::Socket(socket) = &mut socket_unit.specialized {
-            for idx in 0..socket.sockets.len() {
-                let conf = &mut socket.sockets[idx];
-                let as_raw_fd = conf.specialized.open().unwrap();
-                // close these fd's on exec. They must not show up in child processes
-                // the ńeeded fd's will be duped which unsets the flag again
-                let new_fd = as_raw_fd.as_raw_fd();
-                nix::fcntl::fcntl(
-                    new_fd,
-                    nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
-                )
-                .unwrap();
-                conf.fd = Some(as_raw_fd);
-                //need to stop the listener to drop which would close the filedescriptor
-            }
+            socket.open_all()?;
         }
     }
 
@@ -255,10 +259,10 @@ pub fn open_all_sockets(sockets: &mut SocketTable) -> std::io::Result<()> {
 }
 
 pub fn apply_sockets_to_services(
-    mut service_table: ServiceTable,
-    socket_table: &SocketTable,
-) -> Result<ServiceTable, String> {
-    for sock_unit in socket_table.values() {
+    service_table: &mut ServiceTable,
+    socket_table: &mut SocketTable,
+) -> Result<(), String> {
+    for sock_unit in socket_table.values_mut() {
         let mut counter = 0;
 
         if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
@@ -277,6 +281,8 @@ pub fn apply_sockets_to_services(
                         );
 
                         srvc.socket_names.push(sock.name.clone());
+                        srvc_unit.install.after.push(sock_unit.id);
+                        sock_unit.install.before.push(srvc_unit.id);
                         counter += 1;
                     }
 
@@ -291,6 +297,8 @@ pub fn apply_sockets_to_services(
                                 srvc_unit.conf.name()
                             );
                             srvc.socket_names.push(sock.name.clone());
+                            srvc_unit.install.after.push(sock_unit.id);
+                            sock_unit.install.before.push(srvc_unit.id);
                             counter += 1;
                         }
                     }
@@ -312,6 +320,8 @@ pub fn apply_sockets_to_services(
                             );
 
                             srvc.socket_names.push(sock.name.clone());
+                            srvc_unit.install.after.push(sock_unit.id);
+                            sock_unit.install.before.push(srvc_unit.id);
                             counter += 1;
                         }
                     }
@@ -330,5 +340,5 @@ pub fn apply_sockets_to_services(
         }
     }
 
-    Ok(service_table)
+    Ok(())
 }

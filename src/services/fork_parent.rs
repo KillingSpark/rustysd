@@ -32,9 +32,10 @@ pub fn after_fork_parent(
                         .push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
                     crate::notification_handler::handle_notifications_from_buffer(srvc, &name);
                     if let ServiceStatus::Running = srvc.status {
+                        trace!("[FORK_PARENT] Service {} sent READY=1 notification", name);
                         break;
                     } else {
-                        trace!("[FORK_PARENT] Service still not ready",);
+                        trace!("[FORK_PARENT] Service {} still not ready", name);
                     }
                 }
             }

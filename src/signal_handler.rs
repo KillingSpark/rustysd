@@ -3,8 +3,7 @@ use crate::units::*;
 use signal_hook::iterator::Signals;
 
 pub fn handle_signals(
-    service_table: ArcMutServiceTable,
-    socket_table: ArcMutSocketTable,
+    unit_table: ArcMutUnitTable,
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
 ) {
@@ -22,9 +21,8 @@ pub fn handle_signals(
                             Ok((pid, code)) => services::service_exit_handler(
                                 pid,
                                 code,
-                                service_table.clone(),
+                                unit_table.clone(),
                                 pid_table.clone(),
-                                socket_table.clone(),
                                 notification_socket_path.clone(),
                             ),
                             Err(e) => {

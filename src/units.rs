@@ -1,6 +1,7 @@
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use std::os::unix::io::AsRawFd;
+use std::os::unix::io::RawFd;
 
 use nix::unistd::Pid;
 use std::collections::HashMap;
@@ -13,6 +14,9 @@ pub type ArcMutSocketTable = Arc<Mutex<SocketTable>>;
 
 pub type ServiceTable = HashMap<InternalId, Unit>;
 pub type ArcMutServiceTable = Arc<Mutex<ServiceTable>>;
+
+pub type UnitTable = HashMap<InternalId, Unit>;
+pub type ArcMutUnitTable = Arc<Mutex<UnitTable>>;
 
 pub type PidTable = HashMap<Pid, PidEntry>;
 pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
@@ -96,6 +100,31 @@ impl Unit {
         self.install.required_by.dedup();
         self.install.before.dedup();
         self.install.after.dedup();
+    }
+
+    pub fn activate(
+        &mut self,
+        sockets: ArcMutSocketTable,
+        pids: ArcMutPidTable,
+        notification_socket_path: std::path::PathBuf,
+        eventfds: &[RawFd],
+    ) -> Result<(), String> {
+        match &mut self.specialized {
+            UnitSpecialized::Socket(sock) => {
+                sock.open_all().map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
+            }
+            UnitSpecialized::Service(srvc) => {
+                srvc.start(
+                    self.id,
+                    &self.conf.name(),
+                    sockets,
+                    pids,
+                    notification_socket_path,
+                    eventfds,
+                );
+            }
+        }
+        Ok(())
     }
 }
 
