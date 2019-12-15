@@ -118,6 +118,9 @@ pub fn service_exit_handler(
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
 ) {
+    // keep this locked while the service is beeing restarted so noone can see that we remove abunch of stuff and return it again in the end
+    let mut unit_table_locked = unit_table.lock().unwrap();
+
     let pid_table_locked = &mut *pid_table.lock().unwrap();
     let srvc_id = {
         *(match pid_table_locked.get(&pid) {
@@ -126,7 +129,7 @@ pub fn service_exit_handler(
                 PidEntry::Stop(id) => {
                     trace!(
                         "Stop process for service: {} exited with code: {}",
-                        unit_table.lock().unwrap().get(id).unwrap().conf.name(),
+                        unit_table_locked.get(id).unwrap().conf.name(),
                         code
                     );
                     pid_table_locked.remove(&pid);
@@ -139,11 +142,9 @@ pub fn service_exit_handler(
         })
     };
 
-    let mut unit = {
-        let mut service_table_locked = unit_table.lock().unwrap();
-        let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
-        service_table_locked.remove(&srvc_id).unwrap()
-    };
+    
+    let unit_table_locked: &mut HashMap<_, _> = &mut unit_table_locked;
+    let mut unit = unit_table_locked.remove(&srvc_id).unwrap();
 
     trace!(
         "Service with id: {}, name: {} pid: {} exited with code: {}",
@@ -160,37 +161,33 @@ pub fn service_exit_handler(
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
                 let mut sockets = HashMap::new();
-                {
-                    // keep this locked while the service is beeing restarted so noone can see that we remove abunch of stuff and return it again in the end
-                    let unit_table_locked: &mut HashMap<_, _> = &mut *unit_table.lock().unwrap();
 
-                    let mut socket_ids = Vec::new();
-                    for sock_name in &srvc.socket_names {
-                        for (id, unit) in unit_table_locked.iter() {
-                            if let UnitSpecialized::Socket(sock) = &unit.specialized {
-                                if sock.name.eq(sock_name) {
-                                    socket_ids.push(*id);
-                                }
+                let mut socket_ids = Vec::new();
+                for sock_name in &srvc.socket_names {
+                    for (id, unit) in unit_table_locked.iter() {
+                        if let UnitSpecialized::Socket(sock) = &unit.specialized {
+                            if sock.name.eq(sock_name) {
+                                socket_ids.push(*id);
                             }
                         }
                     }
+                }
 
-                    for id in socket_ids {
-                        sockets.insert(id, unit_table_locked.remove(&id).unwrap());
-                    }
-                    let sockets = Arc::new(Mutex::new(sockets));
-                    start_service(
-                        srvc,
-                        unit.conf.name(),
-                        sockets.clone(),
-                        notification_socket_path,
-                    );
+                for id in socket_ids {
+                    sockets.insert(id, unit_table_locked.remove(&id).unwrap());
+                }
+                let sockets = Arc::new(Mutex::new(sockets));
+                start_service(
+                    srvc,
+                    unit.conf.name(),
+                    sockets.clone(),
+                    notification_socket_path,
+                );
 
-                    let sockets_locked = &mut *sockets.lock().unwrap();
-                    let socket_ids: Vec<_> = sockets_locked.keys().map(|x| *x).collect();
-                    for id in socket_ids {
-                        unit_table_locked.insert(id, sockets_locked.remove(&id).unwrap());
-                    }
+                let sockets_locked = &mut *sockets.lock().unwrap();
+                let socket_ids: Vec<_> = sockets_locked.keys().map(|x| *x).collect();
+                for id in socket_ids {
+                    unit_table_locked.insert(id, sockets_locked.remove(&id).unwrap());
                 }
 
                 if let Some(pid) = srvc.pid {
@@ -205,16 +202,12 @@ pub fn service_exit_handler(
                 );
                 kill_services(
                     unit.install.required_by.clone(),
-                    &mut *unit_table.lock().unwrap(),
+                    unit_table_locked,
                     pid_table_locked,
                 );
             }
         }
     }
 
-    {
-        let mut service_table_locked = unit_table.lock().unwrap();
-        let service_table_locked: &mut HashMap<_, _> = &mut service_table_locked;
-        service_table_locked.insert(srvc_id, unit);
-    }
+    unit_table_locked.insert(srvc_id, unit);
 }
