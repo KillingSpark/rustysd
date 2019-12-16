@@ -18,9 +18,6 @@ extern crate serde_json;
 extern crate threadpool;
 extern crate toml;
 
-#[cfg(dbus_support)]
-extern crate dbus;
-
 fn move_to_new_session() -> bool {
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Child) => {

@@ -1,38 +1,49 @@
-use std::error::Error;
+#[cfg(feature = "dbus_support")]
+pub use dbus_support::*;
+
+#[cfg(not(feature = "dbus_support"))]
+pub use no_dbus_support::*;
+
+
 pub enum WaitResult {
     Ok,
     Timedout,
 }
 
-#[cfg(not(dbus_support))]
-pub fn wait_for_name_system_bus(
-    _name: &str,
-    _timeout: std::time::Duration,
-) -> Result<WaitResult, Box<dyn Error>> {
-    Err("Dbus is not supported in this build")?;
+#[cfg(not(feature = "dbus_support"))]
+mod no_dbus_support {
 
-    // remove warinings about unused code in the enum
-    let _ = WaitResult::Ok;
-    let _ = WaitResult::Timedout;
-    unreachable!();
+    use std::error::Error;
+    use super::WaitResult;
+
+    pub fn wait_for_name_system_bus(
+        _name: &str,
+        _timeout: std::time::Duration,
+    ) -> Result<WaitResult, Box<dyn Error>> {
+        Err("Dbus is not supported in this build")?;
+
+        // remove warinings about unused code in the enum
+        let _ = WaitResult::Ok;
+        let _ = WaitResult::Timedout;
+        unreachable!();
+    }
+
+    // just used for testing
+    #[allow(dead_code)]
+    pub fn wait_for_name_session_bus(
+        _name: &str,
+        _timeout: std::time::Duration,
+    ) -> Result<WaitResult, Box<dyn Error>> {
+        Err("Dbus is not supported in this build")?;
+        unreachable!();
+    }
 }
 
-// just used for testing
-#[allow(dead_code)]
-#[cfg(not(dbus_support))]
-pub fn wait_for_name_session_bus(
-    _name: &str,
-    _timeout: std::time::Duration,
-) -> Result<WaitResult, Box<dyn Error>> {
-    Err("Dbus is not supported in this build")?;
-    unreachable!();
-}
-
-#[cfg(dbus_support)]
-pub use dbus_support::*;
-
-#[cfg(dbus_support)]
+#[cfg(feature = "dbus_support")]
 mod dbus_support {
+
+    extern crate dbus;
+    use super::WaitResult;
     use dbus::arg;
     use dbus::blocking::Connection;
     use dbus::blocking::Proxy;
@@ -77,7 +88,6 @@ mod dbus_support {
 
     // just used for testing
     #[allow(dead_code)]
-    #[cfg(dbus_support)]
     pub fn wait_for_name_session_bus(
         name: &str,
         timeout: std::time::Duration,
@@ -86,7 +96,6 @@ mod dbus_support {
         wait_for_name(name, conn, timeout)
     }
 
-    #[cfg(dbus_support)]
     fn wait_for_name(
         name: &str,
         mut conn: Connection,

@@ -13,8 +13,10 @@ fern = "0.5.9"
 chrono = "0.4.9"
 threadpool = "1.7.1"
 serde_json = "*"
-dbus = "*"
 toml = "*"
+dbus = {version = "*", optional = true}
 
 lumberjack-rs = { git = "https://github.com/KillingSpark/lumberjack-rs" }
 
+[features]
+dbus_support = ["dbus"]
