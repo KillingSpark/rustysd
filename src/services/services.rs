@@ -57,7 +57,7 @@ impl Service {
         &mut self,
         id: InternalId,
         name: &String,
-        sockets: ArcMutSocketTable,
+        other_units: ArcMutUnitTable,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[RawFd],
@@ -66,7 +66,32 @@ impl Service {
 
         match self.status {
             ServiceStatus::NeverRan => {
-                start_service(self, name.clone(), sockets, notification_socket_path);
+                let mut socket_units = HashMap::new();
+                let mut socket_ids = Vec::new();
+                let mut other_units_locked = other_units.lock().unwrap();
+                for unit in other_units_locked.values() {
+                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
+                        socket_ids.push((unit.id, sock.name.clone()));
+                    }
+                }
+                for (id, name) in &socket_ids {
+                    let sock = other_units_locked.remove(&id).unwrap();
+                    socket_units.insert(name, sock);
+                }
+                let mut sockets = HashMap::new();
+                for (name, unit) in &socket_units {
+                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
+                        let name: String = name.to_string();
+                        sockets.insert(name, sock);
+                    }
+                }
+
+                start_service(self, name.clone(), &sockets, notification_socket_path);
+
+                for (id, name) in &socket_ids {
+                    other_units_locked.insert(*id, socket_units.remove(&name).unwrap());
+                }
+
                 if let Some(new_pid) = self.pid {
                     {
                         let mut pids = pids.lock().unwrap();
@@ -77,7 +102,7 @@ impl Service {
                     // TODO dont even start services that require this one
                 }
             }
-            _ => unreachable!(),
+            _ => error!("Tried to start service {} after it was already running", name),
         }
     }
 }
@@ -157,7 +182,6 @@ pub fn service_exit_handler(
         })
     };
 
-    
     let unit_table_locked: &mut HashMap<_, _> = &mut unit_table_locked;
     let mut unit = unit_table_locked.remove(&srvc_id).unwrap();
 
@@ -175,34 +199,30 @@ pub fn service_exit_handler(
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
-                let mut sockets = HashMap::new();
-
+                let mut socket_units = HashMap::new();
                 let mut socket_ids = Vec::new();
-                for sock_name in &srvc.socket_names {
-                    for (id, unit) in unit_table_locked.iter() {
-                        if let UnitSpecialized::Socket(sock) = &unit.specialized {
-                            if sock.name.eq(sock_name) {
-                                socket_ids.push(*id);
-                            }
-                        }
+                let mut other_units_locked = unit_table.lock().unwrap();
+                for unit in other_units_locked.values() {
+                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
+                        socket_ids.push((unit.id, sock.name.clone()));
+                    }
+                }
+                for (id, name) in &socket_ids {
+                    let sock = other_units_locked.remove(&id).unwrap();
+                    socket_units.insert(name, sock);
+                }
+                let mut sockets = HashMap::new();
+                for (name, unit) in &socket_units {
+                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
+                        let name: String = name.to_string();
+                        sockets.insert(name, sock);
                     }
                 }
 
-                for id in socket_ids {
-                    sockets.insert(id, unit_table_locked.remove(&id).unwrap());
-                }
-                let sockets = Arc::new(Mutex::new(sockets));
-                start_service(
-                    srvc,
-                    unit.conf.name(),
-                    sockets.clone(),
-                    notification_socket_path,
-                );
+                start_service(srvc, unit.conf.name(), &sockets, notification_socket_path);
 
-                let sockets_locked = &mut *sockets.lock().unwrap();
-                let socket_ids: Vec<_> = sockets_locked.keys().map(|x| *x).collect();
-                for id in socket_ids {
-                    unit_table_locked.insert(id, sockets_locked.remove(&id).unwrap());
+                for (id, name) in &socket_ids {
+                    unit_table_locked.insert(*id, socket_units.remove(&name).unwrap());
                 }
 
                 if let Some(pid) = srvc.pid {

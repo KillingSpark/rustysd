@@ -1,15 +1,16 @@
 use crate::services::{Service, ServiceStatus};
-use crate::units::*;
+use crate::sockets::Socket;
 
 use super::fork_parent;
 use super::fork_child;
 use super::pre_fork;
 
+use std::collections::HashMap;
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
     name: String,
-    sockets: ArcMutSocketTable,
+    sockets: &HashMap<String, &Socket>,
     notification_socket_path: std::path::PathBuf,
 ) {
     // check if executable even exists
@@ -45,11 +46,9 @@ fn start_service_with_filedescriptors(
     let prefork_res = pre_fork::pre_fork(srvc, &name, &notification_socket_path);
 
     // make sure we have the lock that the child will need
-    let sockets_lock = sockets.lock().unwrap();
     let stream_locked = &*prefork_res.notification_socket.lock().unwrap();
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
-            std::mem::drop(sockets_lock);
             fork_parent::after_fork_parent(
                 srvc,
                 name,
@@ -62,7 +61,7 @@ fn start_service_with_filedescriptors(
             fork_child::after_fork_child(
                 srvc,
                 &name,
-                &*sockets_lock,
+                sockets,
                 prefork_res.notify_socket_env_var.to_str().unwrap(),
                 prefork_res.stdout,
                 prefork_res.stderr,
@@ -75,7 +74,7 @@ fn start_service_with_filedescriptors(
 pub fn start_service(
     srvc: &mut Service,
     name: String,
-    sockets: ArcMutServiceTable,
+    sockets: &HashMap<String, &Socket>,
     notification_socket_path: std::path::PathBuf,
 ) {
     if let Some(conf) = &srvc.service_config {

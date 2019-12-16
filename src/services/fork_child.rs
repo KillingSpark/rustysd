@@ -1,28 +1,27 @@
 use crate::services::Service;
-use crate::units::*;
+use crate::sockets::Socket;
+use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 
-fn close_all_unneeded_fds(srvc: &mut Service, sockets: &SocketTable) {
+fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<String, &Socket>) {
     // This is not really necessary since we mark all fds with FD_CLOEXEC but just to be safe...
-    for sock_unit in sockets.values() {
-        if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
-            if !srvc.socket_names.contains(&sock.name) {
-                //trace!("[FORK_CHILD {}] CLOSE FDS FOR SOCKET: {}", name, sock.name);
-                for conf in &sock.sockets {
-                    match &conf.fd {
-                        Some(fd) => {
-                            let fd: i32 = (**fd).as_raw_fd();
-                            nix::unistd::close(fd).unwrap();
-                            //trace!("[FORK_CHILD {}] DO CLOSE FD: {}", name, fd);
-                        }
-                        None => {
-                            //this should not happen but if it does its not too bad
-                        }
+    for sock in sockets.values() {
+        if !srvc.socket_names.contains(&sock.name) {
+            //trace!("[FORK_CHILD {}] CLOSE FDS FOR SOCKET: {}", name, sock.name);
+            for conf in &sock.sockets {
+                match &conf.fd {
+                    Some(fd) => {
+                        let fd: i32 = (**fd).as_raw_fd();
+                        nix::unistd::close(fd).unwrap();
+                        //trace!("[FORK_CHILD {}] DO CLOSE FD: {}", name, fd);
+                    }
+                    None => {
+                        //this should not happen but if it does its not too bad
                     }
                 }
-            } else {
-                //trace!("[FORK_CHILD {}] DONT CLOSE FDS", name);
             }
+        } else {
+            //trace!("[FORK_CHILD {}] DONT CLOSE FDS", name);
         }
     }
 }
@@ -30,7 +29,7 @@ fn close_all_unneeded_fds(srvc: &mut Service, sockets: &SocketTable) {
 fn setup_env_vars(
     srvc: &mut Service,
     name: &str,
-    sockets: &SocketTable,
+    sockets: &HashMap<String, &Socket>,
     notify_socket_env_var: &str,
 ) {
     // The following two lines do deadlock after fork and before exec... I would have loved to just use these
@@ -56,10 +55,9 @@ fn setup_env_vars(
     let mut num_fds = 0;
     let mut name_lists = Vec::new();
 
-    let sockets_by_name = get_sockets_by_name(sockets);
     for sock_name in &srvc.socket_names {
         //trace!("[FORK_CHILD {}] Counting fds for socket: {}", name, sock_name);
-        match sockets_by_name.get(sock_name) {
+        match sockets.get(sock_name) {
             Some(sock) => {
                 num_fds += sock.sockets.len();
                 name_lists.push(sock.build_name_list());
@@ -108,7 +106,7 @@ fn setup_env_vars(
 fn dup_fds(
     srvc: &mut Service,
     name: &str,
-    sockets: &SocketTable,
+    sockets: &HashMap<String, &Socket>,
     new_stdout: RawFd,
     new_stderr: RawFd,
 ) {
@@ -133,9 +131,8 @@ fn dup_fds(
     let file_desc_offset = 3;
     let mut fd_idx = 0;
 
-    let sockets_by_name = get_sockets_by_name(sockets);
     for sock_name in &srvc.socket_names {
-        match sockets_by_name.get(sock_name) {
+        match sockets.get(sock_name) {
             Some(socket) => {
                 for sock_conf in &socket.sockets {
                     let new_fd = file_desc_offset + fd_idx;
@@ -220,7 +217,7 @@ fn move_into_new_process_group() {
 pub fn after_fork_child(
     srvc: &mut Service,
     name: &str,
-    sockets: &SocketTable,
+    sockets: &HashMap<String, &Socket>,
     notify_socket_env_var: &str,
     new_stdout: RawFd,
     new_stderr: RawFd,
@@ -228,7 +225,6 @@ pub fn after_fork_child(
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
     move_into_new_process_group();
-
 
     // no more logging after this point!
     // The filedescriptor used by the logger might have been duped to another

@@ -48,7 +48,13 @@ fn activate_unit(
     trace!("Activate id: {}", id_to_start);
     let mut unit = {
         let mut services_locked = unit_table.lock().unwrap();
-        let unit = services_locked.remove(&id_to_start).unwrap();
+        let unit = match services_locked.remove(&id_to_start) {
+            Some(unit) => unit,
+            None => {
+                error!("Tried to run a unit that has been removed from the map");
+                return;
+            }
+        };
         let started_ids_locked = started_ids.lock().unwrap();
 
         // if not all dependencies are yet started ignore this call. THis unit will be activated again when
