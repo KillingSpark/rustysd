@@ -53,18 +53,6 @@ pub fn find_sock_with_name<'b>(name: &str, sockets: &'b SocketTable) -> Option<&
     }
 }
 
-pub fn get_sockets_by_name<'b>(socket_units: &'b SocketTable) -> HashMap<String, &'b Socket> {
-    let mut sockets = HashMap::new();
-
-    for sock_unit in socket_units.values() {
-        if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
-            sockets.insert(sock.name.clone(), sock);
-        }
-    }
-
-    sockets
-}
-
 #[derive(Debug)]
 pub enum UnitSpecialized {
     Socket(Socket),

@@ -65,7 +65,7 @@ impl Service {
         trace!("Start service {}", name);
 
         match self.status {
-            ServiceStatus::NeverRan => {
+            ServiceStatus::NeverRan | ServiceStatus::Stopped => {
                 let mut socket_units = HashMap::new();
                 let mut socket_ids = Vec::new();
                 let mut other_units_locked = other_units.lock().unwrap();
@@ -102,7 +102,10 @@ impl Service {
                     // TODO dont even start services that require this one
                 }
             }
-            _ => error!("Tried to start service {} after it was already running", name),
+            _ => error!(
+                "Tried to start service {} after it was already running",
+                name
+            ),
         }
     }
 }
@@ -157,11 +160,9 @@ pub fn service_exit_handler(
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
 ) {
-    // keep this locked while the service is beeing restarted so noone can see that we remove abunch of stuff and return it again in the end
-    let mut unit_table_locked = unit_table.lock().unwrap();
-
-    let pid_table_locked = &mut *pid_table.lock().unwrap();
     let srvc_id = {
+        let unit_table_locked = unit_table.lock().unwrap();
+        let pid_table_locked = &mut *pid_table.lock().unwrap();
         *(match pid_table_locked.get(&pid) {
             Some(entry) => match entry {
                 PidEntry::Service(id) => id,
@@ -182,8 +183,10 @@ pub fn service_exit_handler(
         })
     };
 
-    let unit_table_locked: &mut HashMap<_, _> = &mut unit_table_locked;
-    let mut unit = unit_table_locked.remove(&srvc_id).unwrap();
+    let mut unit = {
+        let unit_table_locked: &mut HashMap<_, _> = &mut unit_table.lock().unwrap();
+        unit_table_locked.remove(&srvc_id).unwrap()
+    };
 
     trace!(
         "Service with id: {}, name: {} pid: {} exited with code: {}",
@@ -194,47 +197,26 @@ pub fn service_exit_handler(
     );
 
     if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
-        pid_table_locked.remove(&pid);
         srvc.status = ServiceStatus::Stopped;
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
-                let mut socket_units = HashMap::new();
-                let mut socket_ids = Vec::new();
-                let mut other_units_locked = unit_table.lock().unwrap();
-                for unit in other_units_locked.values() {
-                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
-                        socket_ids.push((unit.id, sock.name.clone()));
-                    }
-                }
-                for (id, name) in &socket_ids {
-                    let sock = other_units_locked.remove(&id).unwrap();
-                    socket_units.insert(name, sock);
-                }
-                let mut sockets = HashMap::new();
-                for (name, unit) in &socket_units {
-                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
-                        let name: String = name.to_string();
-                        sockets.insert(name, sock);
-                    }
-                }
-
-                start_service(srvc, unit.conf.name(), &sockets, notification_socket_path);
-
-                for (id, name) in &socket_ids {
-                    unit_table_locked.insert(*id, socket_units.remove(&name).unwrap());
-                }
-
-                if let Some(pid) = srvc.pid {
-                    srvc.runtime_info.restarted += 1;
-                    pid_table_locked.insert(pid, PidEntry::Service(unit.id));
-                }
+                srvc.start(
+                    srvc_id,
+                    &unit.conf.name(),
+                    unit_table.clone(),
+                    pid_table,
+                    notification_socket_path,
+                    &Vec::new(),
+                );
             } else {
                 trace!(
                     "Killing all services requiring service with id {}: {:?}",
                     srvc_id,
                     unit.install.required_by
                 );
+                let pid_table_locked = &mut *pid_table.lock().unwrap();
+                let unit_table_locked = &mut *unit_table.lock().unwrap();
                 kill_services(
                     unit.install.required_by.clone(),
                     unit_table_locked,
@@ -244,5 +226,6 @@ pub fn service_exit_handler(
         }
     }
 
+    let unit_table_locked: &mut HashMap<_, _> = &mut unit_table.lock().unwrap();
     unit_table_locked.insert(srvc_id, unit);
 }
