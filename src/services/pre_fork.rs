@@ -13,7 +13,7 @@ pub struct Preforkresult {
 
 pub fn pre_fork(
     srvc: &mut Service,
-    name: &String,
+    name: &str,
     notification_socket_path: &std::path::PathBuf,
 ) -> Preforkresult {
     // setup socket for notifications from the service
@@ -66,7 +66,7 @@ pub fn pre_fork(
         w
     };
 
-    Preforkresult{
+    Preforkresult {
         notification_socket: stream,
         notify_socket_env_var,
         stdout: child_stdout,

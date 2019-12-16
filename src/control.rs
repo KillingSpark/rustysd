@@ -1,14 +1,14 @@
-use crate::services;
 use crate::units::*;
 use serde_json::Value;
 
+#[derive(Debug)]
 pub enum Command {
     ListUnits(Option<UnitSpecialized>),
     Status(Option<String>),
 }
 
 pub fn parse_command(cmd: Value) -> Result<Command, String> {
-    let command: Command = match cmd {
+    let command = match cmd {
         Value::Object(map) => {
             let cmd_str = map.get("cmd");
             match cmd_str {
@@ -65,13 +65,7 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
                     .collect(),
             ),
         );
-        let status_str = match srvc.status {
-            services::ServiceStatus::NeverRan => "NeverRan".into(),
-            services::ServiceStatus::Running => "Running".into(),
-            services::ServiceStatus::Starting => "Starting".into(),
-            services::ServiceStatus::Stopped => "Stopped".into(),
-        };
-        map.insert("Status".into(), Value::String(status_str));
+        map.insert("Status".into(), Value::String(srvc.status.to_string()));
         if let Some(instant) = srvc.runtime_info.up_since {
             map.insert(
                 "UpSince".into(),

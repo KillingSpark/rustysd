@@ -5,6 +5,7 @@ pub use dbus_support::*;
 pub use no_dbus_support::*;
 
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum WaitResult {
     Ok,
     Timedout,

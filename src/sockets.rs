@@ -1,13 +1,15 @@
-use std::net::TcpListener;
-use std::net::UdpSocket;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
-use std::os::unix::net::{UnixDatagram, UnixListener};
-use std::sync::Arc;
+use std::{
+    net::TcpListener,
+    net::UdpSocket,
+    os::unix::io::AsRawFd,
+    os::unix::io::FromRawFd,
+    os::unix::net::{UnixDatagram, UnixListener},
+    sync::Arc,
+};
 
 use crate::units::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SocketKind {
     Stream(String),
     Sequential(String),
@@ -15,7 +17,7 @@ pub enum SocketKind {
     Fifo(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SpecializedSocketConfig {
     UnixSocket(UnixSocketConfig),
     Fifo(FifoConfig),
@@ -34,14 +36,14 @@ impl SpecializedSocketConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum UnixSocketConfig {
     Stream(String),
     Sequential(String),
     Datagram(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct FifoConfig {
     pub path: std::path::PathBuf,
 }
@@ -66,7 +68,9 @@ impl FifoConfig {
     }
 }
 
+#[derive(Debug)]
 struct UnixSeqPacket(Option<i32>);
+
 impl AsRawFd for UnixSeqPacket {
     fn as_raw_fd(&self) -> i32 {
         self.0.unwrap()
@@ -182,7 +186,7 @@ impl UnixSocketConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TcpSocketConfig {
     pub addr: std::net::SocketAddr,
 }
@@ -196,7 +200,7 @@ impl TcpSocketConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct UdpSocketConfig {
     pub addr: std::net::SocketAddr,
 }
@@ -210,6 +214,7 @@ impl UdpSocketConfig {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Socket {
     pub name: String,
     pub sockets: Vec<SocketConfig>,

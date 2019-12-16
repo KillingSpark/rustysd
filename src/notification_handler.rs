@@ -1,9 +1,11 @@
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
-use std::collections::HashMap;
-use std::io::Write;
-use std::os::unix::io::{AsRawFd, RawFd};
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    io::Write,
+    os::unix::io::{AsRawFd, RawFd},
+    sync::{Arc, Mutex},
+};
 
 // will be used when service starting outside of the initial starting process is supported
 #[allow(dead_code)]
@@ -38,20 +40,33 @@ pub fn notify_event_fds(eventfds: &[RawFd]) {
     }
 }
 
+fn collect_from_srvc<F>(
+    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
+    f: F,
+) -> HashMap<i32, u64>
+where
+    F: Fn(&mut HashMap<i32, u64>, &Service, u64),
+{
+    service_table
+        .lock()
+        .unwrap()
+        .iter()
+        .fold(HashMap::new(), |mut map, (id, srvc_unit)| {
+            if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+                f(&mut map, &srvc, *id);
+            }
+            map
+        })
+}
+
 pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id: HashMap<_, _> = service_table.lock().unwrap().iter().fold(
-            HashMap::new(),
-            |mut map, (id, srvc_unit)| {
-                if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
-                    if let Some(socket) = &srvc.notifications {
-                        map.insert(socket.lock().unwrap().as_raw_fd(), *id);
-                    }
-                }
-                map
-            },
-        );
+        let fd_to_srvc_id = collect_from_srvc(service_table.clone(), |map, srvc, id| {
+            if let Some(socket) = &srvc.notifications {
+                map.insert(socket.lock().unwrap().as_raw_fd(), id);
+            }
+        });
 
         let mut fdset = nix::sys::select::FdSet::new();
         for fd in fd_to_srvc_id.keys() {
@@ -98,17 +113,11 @@ pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
 pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id: HashMap<_, _> = service_table.lock().unwrap().iter().fold(
-            HashMap::new(),
-            |mut map, (id, srvc_unit)| {
-                if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
-                    if let Some(fd) = &srvc.stdout_dup {
-                        map.insert(fd.0, *id);
-                    }
-                }
-                map
-            },
-        );
+        let fd_to_srvc_id = collect_from_srvc(service_table.clone(), |map, srvc, id| {
+            if let Some(fd) = &srvc.stdout_dup {
+                map.insert(fd.0, id);
+            }
+        });
 
         let mut fdset = nix::sys::select::FdSet::new();
         for fd in fd_to_srvc_id.keys() {

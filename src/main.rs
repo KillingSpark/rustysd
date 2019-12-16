@@ -8,8 +8,6 @@ mod signal_handler;
 mod sockets;
 mod units;
 
-extern crate signal_hook;
-
 #[macro_use]
 extern crate log;
 extern crate fern;
@@ -105,8 +103,8 @@ fn main() {
 
     // listen on signals from the child processes
     signal_handler::handle_signals(
-        unit_table.clone(),
-        pid_table.clone(),
+        unit_table,
+        pid_table,
         conf.notification_sockets_dir.clone(),
     );
 }
