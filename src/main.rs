@@ -12,12 +12,14 @@ extern crate signal_hook;
 
 #[macro_use]
 extern crate log;
-extern crate dbus;
 extern crate fern;
 extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
 extern crate toml;
+
+#[cfg(dbus_support)]
+extern crate dbus;
 
 fn move_to_new_session() -> bool {
     match nix::unistd::fork() {

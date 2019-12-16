@@ -49,15 +49,23 @@ pub fn after_fork_parent(
                     match crate::dbus_wait::wait_for_name_system_bus(
                         &dbus_name,
                         std::time::Duration::from_millis(10_000),
-                    )
-                    .unwrap()
-                    {
-                        crate::dbus_wait::WaitResult::Ok => {
-                            trace!("[FORK_PARENT] Found dbus name on bus: {}", dbus_name);
+                    ) {
+                        Ok(res) => {
+                            match res {
+                                crate::dbus_wait::WaitResult::Ok => {
+                                    trace!("[FORK_PARENT] Found dbus name on bus: {}", dbus_name);
+                                }
+                                crate::dbus_wait::WaitResult::Timedout => {
+                                    warn!(
+                                        "[FORK_PARENT] Did not find dbus name on bus: {}",
+                                        dbus_name
+                                    );
+                                    // TODO do something about that
+                                }
+                            }
                         }
-                        crate::dbus_wait::WaitResult::Timedout => {
-                            warn!("[FORK_PARENT] Did not find dbus name on bus: {}", dbus_name);
-                            // TODO do something about that
+                        Err(e) => {
+                            error!("Error while waiting for dbus name: {}", e);
                         }
                     }
                 } else {

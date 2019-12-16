@@ -137,7 +137,8 @@ pub fn service_exit_handler(
                 }
             },
             None => {
-                unreachable!("All spawned processes should have a pid entry");
+                warn!("All spawned processes should have a pid entry");
+                return;
             }
         })
     };
