@@ -71,16 +71,18 @@ pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 let service_table_locked = &mut *service_table.lock().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
-                        let srvc_unit = service_table_locked.get_mut(id).unwrap();
-                        if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
-                            if let Some(socket) = &srvc.notifications {
-                                let bytes = socket.lock().unwrap().recv(&mut buf[..]).unwrap();
-                                let note_str = String::from_utf8(buf[..bytes].to_vec()).unwrap();
-                                srvc.notifications_buffer.push_str(&note_str);
-                                crate::notification_handler::handle_notifications_from_buffer(
-                                    srvc,
-                                    &srvc_unit.conf.name(),
-                                );
+                        if let Some(srvc_unit) = service_table_locked.get_mut(id) {
+                            if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
+                                if let Some(socket) = &srvc.notifications {
+                                    let bytes = socket.lock().unwrap().recv(&mut buf[..]).unwrap();
+                                    let note_str =
+                                        String::from_utf8(buf[..bytes].to_vec()).unwrap();
+                                    srvc.notifications_buffer.push_str(&note_str);
+                                    crate::notification_handler::handle_notifications_from_buffer(
+                                        srvc,
+                                        &srvc_unit.conf.name(),
+                                    );
+                                }
                             }
                         }
                     }
@@ -126,30 +128,31 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 let service_table_locked = &mut *service_table.lock().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
-                        let srvc_unit = service_table_locked.get_mut(id).unwrap();
-                        let name = srvc_unit.conf.name();
+                        if let Some(srvc_unit) = service_table_locked.get_mut(id) {
+                            let name = srvc_unit.conf.name();
 
-                        // build the service-unique prefix
-                        let mut prefix = String::new();
-                        prefix.push('[');
-                        prefix.push_str(&name);
-                        prefix.push(']');
-                        prefix.push(' ');
-                        buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
+                            // build the service-unique prefix
+                            let mut prefix = String::new();
+                            prefix.push('[');
+                            prefix.push_str(&name);
+                            prefix.push(']');
+                            prefix.push(' ');
+                            buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
 
-                        let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
-                        let lines = buf[..bytes].split(|x| *x == b'\n');
-                        let mut outbuf: Vec<u8> = Vec::new();
+                            let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
+                            let lines = buf[..bytes].split(|x| *x == b'\n');
+                            let mut outbuf: Vec<u8> = Vec::new();
 
-                        for line in lines {
-                            if line.is_empty() {
-                                continue;
+                            for line in lines {
+                                if line.is_empty() {
+                                    continue;
+                                }
+                                outbuf.clear();
+                                outbuf.extend(prefix.as_bytes());
+                                outbuf.extend(line);
+                                outbuf.push(b'\n');
+                                std::io::stdout().write_all(&outbuf).unwrap();
                             }
-                            outbuf.clear();
-                            outbuf.extend(prefix.as_bytes());
-                            outbuf.extend(line);
-                            outbuf.push(b'\n');
-                            std::io::stdout().write_all(&outbuf).unwrap();
                         }
                     }
                 }
@@ -194,31 +197,32 @@ pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 let service_table_locked = &mut *service_table.lock().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
-                        let srvc_unit = service_table_locked.get_mut(id).unwrap();
-                        let name = srvc_unit.conf.name();
+                        if let Some(srvc_unit) = service_table_locked.get_mut(id) {
+                            let name = srvc_unit.conf.name();
 
-                        // build the service-unique prefix
-                        let mut prefix = String::new();
-                        prefix.push('[');
-                        prefix.push_str(&name);
-                        prefix.push(']');
-                        prefix.push_str("[STDERR]");
-                        prefix.push(' ');
-                        buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
+                            // build the service-unique prefix
+                            let mut prefix = String::new();
+                            prefix.push('[');
+                            prefix.push_str(&name);
+                            prefix.push(']');
+                            prefix.push_str("[STDERR]");
+                            prefix.push(' ');
+                            buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
 
-                        let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
-                        let lines = buf[..bytes].split(|x| *x == b'\n');
-                        let mut outbuf: Vec<u8> = Vec::new();
+                            let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
+                            let lines = buf[..bytes].split(|x| *x == b'\n');
+                            let mut outbuf: Vec<u8> = Vec::new();
 
-                        for line in lines {
-                            if line.is_empty() {
-                                continue;
+                            for line in lines {
+                                if line.is_empty() {
+                                    continue;
+                                }
+                                outbuf.clear();
+                                outbuf.extend(prefix.as_bytes());
+                                outbuf.extend(line);
+                                outbuf.push(b'\n');
+                                std::io::stderr().write_all(&outbuf).unwrap();
                             }
-                            outbuf.clear();
-                            outbuf.extend(prefix.as_bytes());
-                            outbuf.extend(line);
-                            outbuf.push(b'\n');
-                            std::io::stderr().write_all(&outbuf).unwrap();
                         }
                     }
                 }
