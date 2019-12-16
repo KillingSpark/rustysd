@@ -5,8 +5,8 @@ use std::os::unix::io::RawFd;
 
 use nix::unistd::Pid;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::{fmt, path::PathBuf};
 
 pub type InternalId = u64;
 pub type SocketTable = HashMap<InternalId, Unit>;
@@ -65,12 +65,13 @@ pub fn get_sockets_by_name<'b>(socket_units: &'b SocketTable) -> HashMap<String,
     sockets
 }
 
+#[derive(Debug)]
 pub enum UnitSpecialized {
     Socket(Socket),
     Service(Service),
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Install {
     pub wants: Vec<InternalId>,
     pub requires: Vec<InternalId>,
@@ -128,6 +129,7 @@ impl Unit {
     }
 }
 
+#[derive(Debug)]
 pub struct UnitConfig {
     pub filepath: PathBuf,
 
@@ -154,6 +156,7 @@ impl UnitConfig {
     }
 }
 
+#[derive(Clone)]
 pub struct SocketConfig {
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
@@ -161,19 +164,33 @@ pub struct SocketConfig {
     pub fd: Option<Arc<Box<dyn AsRawFd>>>,
 }
 
+impl fmt::Debug for SocketConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(
+            f,
+            "SocketConfig {{ kind: {:?}, specialized: {:?} }}",
+            self.kind, self.specialized
+        )?;
+        Ok(())
+    }
+}
+
 unsafe impl Send for SocketConfig {}
 
+#[derive(Debug)]
 pub struct InstallConfig {
     pub wanted_by: Vec<String>,
     pub required_by: Vec<String>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ServiceType {
     Simple,
     Notify,
     Dbus,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum NotifyKind {
     Main,
     Exec,
@@ -181,6 +198,7 @@ pub enum NotifyKind {
     None,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {
     pub keep_alive: bool,
     pub accept: bool,

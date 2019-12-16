@@ -90,10 +90,7 @@ fn parse_file(content: &str) -> ParsedFile {
     }
 
     // insert last section
-    sections.insert(
-        current_section_name.clone(),
-        parse_section(&current_section_lines),
-    );
+    sections.insert(current_section_name, parse_section(&current_section_lines));
 
     sections
 }
