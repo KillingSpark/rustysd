@@ -89,7 +89,7 @@ pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<Stri
                     //list specific
                     if name.ends_with(".service") {
                         let name = name.trim_end_matches(".service");
-                        let unit_table_locked = unit_table.lock().unwrap();
+                        let unit_table_locked = unit_table.read().unwrap();
                         let mut srvc: Vec<_> = unit_table_locked
                             .iter()
                             .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
@@ -102,7 +102,7 @@ pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<Stri
                         result_vec.as_array_mut().unwrap().push(srvc.remove(0));
                     } else if name.ends_with(".socket") {
                         let name = name.trim_end_matches(".socket");
-                        let unit_table_locked = unit_table.lock().unwrap();
+                        let unit_table_locked = unit_table.read().unwrap();
                         let mut sock: Vec<_> = unit_table_locked
                             .iter()
                             .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
@@ -115,7 +115,7 @@ pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<Stri
                         result_vec.as_array_mut().unwrap().push(sock.remove(0));
                     } else {
                         // name was already short
-                        let unit_table_locked = unit_table.lock().unwrap();
+                        let unit_table_locked = unit_table.read().unwrap();
                         let mut unit: Vec<_> = unit_table_locked
                             .iter()
                             .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
@@ -136,7 +136,7 @@ pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<Stri
                 }
                 None => {
                     //list all
-                    let unit_table_locked = unit_table.lock().unwrap();
+                    let unit_table_locked = unit_table.read().unwrap();
                     let strings: Vec<_> = unit_table_locked
                         .iter()
                         .map(|(_id, unit)| {

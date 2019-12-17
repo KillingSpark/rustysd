@@ -92,7 +92,7 @@ pub fn activate_unit(
     let mut socket_units_locked = HashMap::new();
     let mut socket_units_refs = HashMap::new();
     let unit = {
-        let units_locked = unit_table.lock().unwrap();
+        let units_locked = unit_table.read().unwrap();
         let unit = match units_locked.get(&id_to_start) {
             Some(unit) => Arc::clone(unit),
             None => {
@@ -165,7 +165,7 @@ pub fn activate_units(
     let pids = HashMap::new();
     let mut root_units = Vec::new();
 
-    for (id, unit) in &*unit_table.lock().unwrap() {
+    for (id, unit) in &*unit_table.read().unwrap() {
         let unit_locked = unit.lock().unwrap();
         if unit_locked.install.after.is_empty() {
             root_units.push(*id);

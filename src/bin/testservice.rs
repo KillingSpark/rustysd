@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::env;
 use std::io::Read;
 use std::os::unix::io::FromRawFd;

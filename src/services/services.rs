@@ -89,12 +89,12 @@ impl Service {
 
 pub fn kill_services(
     ids_to_kill: Vec<InternalId>,
-    service_table: &mut UnitTable,
+    unit_table: &UnitTable,
     pid_table: &mut PidTable,
 ) {
     //TODO killall services that require this service
     for id in ids_to_kill {
-        let srvc_unit = service_table.get_mut(&id).unwrap();
+        let srvc_unit = unit_table.get(&id).unwrap();
         let unit_locked = srvc_unit.lock().unwrap();
         if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
             let split: Vec<&str> = match &srvc.service_config {
@@ -139,7 +139,7 @@ pub fn service_exit_handler(
     notification_socket_path: std::path::PathBuf,
 ) {
     let srvc_id = {
-        let unit_table_locked = unit_table.lock().unwrap();
+        let unit_table_locked = unit_table.read().unwrap();
         let pid_table_locked = &mut *pid_table.lock().unwrap();
         *(match pid_table_locked.get(&pid) {
             Some(entry) => match entry {
@@ -176,7 +176,7 @@ pub fn service_exit_handler(
     let mut socket_units_locked = HashMap::new();
     let mut sockets = HashMap::new();
     let unit = {
-        let units_locked = unit_table.lock().unwrap();
+        let units_locked = unit_table.read().unwrap();
         let unit = match units_locked.get(&srvc_id) {
             Some(unit) => Arc::clone(unit),
             None => {
@@ -244,7 +244,7 @@ pub fn service_exit_handler(
                     unit_locked.install.required_by
                 );
                 let pid_table_locked = &mut *pid_table.lock().unwrap();
-                let unit_table_locked = &mut *unit_table.lock().unwrap();
+                let unit_table_locked = &*unit_table.read().unwrap();
                 kill_services(
                     unit_locked.install.required_by.clone(),
                     unit_table_locked,

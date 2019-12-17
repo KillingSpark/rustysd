@@ -5,7 +5,7 @@ use std::os::unix::io::RawFd;
 
 use nix::unistd::Pid;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::{fmt, path::PathBuf};
 
 pub type InternalId = u64;
@@ -13,7 +13,7 @@ pub type SocketTable = HashMap<InternalId, Unit>;
 pub type ServiceTable = HashMap<InternalId, Unit>;
 
 pub type UnitTable = HashMap<InternalId, Arc<Mutex<Unit>>>;
-pub type ArcMutUnitTable = Arc<Mutex<UnitTable>>;
+pub type ArcMutUnitTable = Arc<RwLock<UnitTable>>;
 
 pub type PidTable = HashMap<Pid, PidEntry>;
 pub type ArcMutPidTable = Arc<Mutex<PidTable>>;

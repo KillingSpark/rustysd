@@ -59,11 +59,11 @@ fn main() {
     let mut unit_table = std::collections::HashMap::new();
     unit_table.extend(service_table);
     unit_table.extend(socket_table);
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, RwLock};
     //let service_table = Arc::new(Mutex::new(service_table));
     //let socket_table = Arc::new(Mutex::new(socket_table));
     let unit_table: std::collections::HashMap<_,_> = unit_table.into_iter().map(|(id, unit)| (id,Arc::new(Mutex::new(unit)))).collect();
-    let unit_table = Arc::new(Mutex::new(unit_table));
+    let unit_table = Arc::new(RwLock::new(unit_table));
 
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(unit_table.clone());
