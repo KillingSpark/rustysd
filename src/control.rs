@@ -52,6 +52,12 @@ pub fn format_socket(socket_unit: &Unit) -> Value {
     Value::Object(map)
 }
 
+pub fn format_target(socket_unit: &Unit) -> Value {
+    let mut map = serde_json::Map::new();
+    map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+    Value::Object(map)
+}
+
 pub fn format_service(srvc_unit: &Unit) -> Value {
     let mut map = serde_json::Map::new();
     map.insert("Name".into(), Value::String(srvc_unit.conf.name()));
@@ -124,6 +130,7 @@ pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<Stri
                                 match unit_locked.specialized {
                                     UnitSpecialized::Socket(_) => format_socket(&unit_locked),
                                     UnitSpecialized::Service(_) => format_service(&unit_locked),
+                                    UnitSpecialized::Target => format_target(&unit_locked),
                                 }
                             })
                             .collect();
@@ -144,6 +151,7 @@ pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<Stri
                             match unit_locked.specialized {
                                 UnitSpecialized::Socket(_) => format_socket(&unit_locked),
                                 UnitSpecialized::Service(_) => format_service(&unit_locked),
+                                UnitSpecialized::Target => format_target(&unit_locked),
                             }
                         })
                         .collect();

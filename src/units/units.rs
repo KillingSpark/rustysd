@@ -11,6 +11,7 @@ use std::{fmt, path::PathBuf};
 pub type InternalId = u64;
 pub type SocketTable = HashMap<InternalId, Unit>;
 pub type ServiceTable = HashMap<InternalId, Unit>;
+pub type TargetTable = HashMap<InternalId, Unit>;
 
 pub type UnitTable = HashMap<InternalId, Arc<Mutex<Unit>>>;
 pub type ArcMutUnitTable = Arc<RwLock<UnitTable>>;
@@ -28,6 +29,7 @@ pub enum PidEntry {
 pub enum UnitSpecialized {
     Socket(Socket),
     Service(Service),
+    Target,
 }
 
 #[derive(Debug, Default)]
@@ -64,6 +66,7 @@ impl Unit {
 
     fn ids_needed_for_activation(&self) -> Vec<InternalId> {
         match &self.specialized {
+            UnitSpecialized::Target => Vec::new(),
             UnitSpecialized::Socket(_) => Vec::new(),
             UnitSpecialized::Service(srvc) => srvc.socket_ids.clone(),
         }
@@ -71,12 +74,14 @@ impl Unit {
 
     pub fn filter_units_needed_for_activation(&self, unit_table: &UnitTable) -> UnitTable {
         let ids_needed = self.ids_needed_for_activation();
-        let units_needed = unit_table.iter().fold(HashMap::new(), |mut acc, (id, unit)| {
-            if ids_needed.contains(id) {
-                acc.insert(*id, Arc::clone(unit));
-            }
-            acc
-        });
+        let units_needed = unit_table
+            .iter()
+            .fold(HashMap::new(), |mut acc, (id, unit)| {
+                if ids_needed.contains(id) {
+                    acc.insert(*id, Arc::clone(unit));
+                }
+                acc
+            });
 
         units_needed
     }
@@ -89,6 +94,7 @@ impl Unit {
         eventfds: &[RawFd],
     ) -> Result<(), String> {
         match &mut self.specialized {
+            UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
                 sock.open_all()
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;

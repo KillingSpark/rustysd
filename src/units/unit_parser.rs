@@ -10,19 +10,37 @@ use std::path::PathBuf;
 type ParsedSection = HashMap<String, Vec<(u32, String)>>;
 type ParsedFile = HashMap<String, ParsedSection>;
 
-pub fn load_all_units(paths: &[PathBuf]) -> Result<(ServiceTable, SocketTable), String> {
+pub fn load_all_units(paths: &[PathBuf]) -> Result<(ServiceTable, SocketTable, TargetTable), String> {
     let mut base_id = 0;
     let mut service_table = HashMap::new();
     let mut socket_unit_table = HashMap::new();
+    let mut target_unit_table = HashMap::new();
     for path in paths {
         parse_all_services(&mut service_table, path, &mut base_id)?;
         parse_all_sockets(&mut socket_unit_table, path, &mut base_id)?;
+        parse_all_targets(&mut target_unit_table, path, &mut base_id)?;
+    }
+
+    let mut socket_target_unit = None;
+    for target in target_unit_table.values_mut() {
+        if target.conf.name() == "sockets" {
+            socket_target_unit = Some(target);
+            break;
+        }
+    }
+
+    if let Some(socket_target_unit) = socket_target_unit {
+        trace!("Adding sockets.target");
+        for sock in socket_unit_table.values_mut() {
+            sock.install.before.push(socket_target_unit.id);
+            socket_target_unit.install.after.push(sock.id);
+        }
     }
 
     fill_dependencies(&mut service_table);
     apply_sockets_to_services(&mut service_table, &mut socket_unit_table)?;
 
-    Ok((service_table, socket_unit_table))
+    Ok((service_table, socket_unit_table, target_unit_table))
 }
 
 fn parse_section(lines: &[&str]) -> ParsedSection {
@@ -93,6 +111,47 @@ fn parse_file(content: &str) -> ParsedFile {
     sections.insert(current_section_name, parse_section(&current_section_lines));
 
     sections
+}
+
+fn parse_target(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
+    let raw = read_to_string(&path)
+        .map_err(|e| format!("Error opening file: {:?} error: {}", path, e))?;
+    let parsed_file = parse_file(&raw);
+
+    let mut install_config = None;
+    let mut unit_config = None;
+
+    for (name, section) in parsed_file {
+        match name.as_str() {
+            "[Unit]" => {
+                unit_config = Some(parse_unit_section(section, path));
+            }
+            "[Install]" => {
+                install_config = Some(parse_install_section(section));
+            }
+            _ => panic!("Unknown section name: {}", name),
+        }
+    }
+
+    let conf = match unit_config {
+        Some(conf) => conf,
+        None => return Err(format!("Didn't find a unit config for file: {:?}", path)),
+    };
+
+    Ok(Unit {
+        conf,
+        id: chosen_id,
+        install: Install {
+            install_config: install_config,
+            wants: Vec::new(),
+            wanted_by: Vec::new(),
+            requires: Vec::new(),
+            required_by: Vec::new(),
+            before: Vec::new(),
+            after: Vec::new(),
+        },
+        specialized: UnitSpecialized::Target,
+    })
 }
 
 fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
@@ -582,11 +641,30 @@ pub fn parse_all_services(
         if entry.path().is_dir() {
             parse_all_services(services, path, last_id)?;
         } else if entry.path().to_str().unwrap().ends_with(".service") {
-            trace!("{:?}", entry.path());
             *last_id += 1;
+            trace!("{:?}, {}", entry.path(), last_id);
             services.insert(*last_id, parse_service(&entry.path(), *last_id)?);
         }
     }
+    Ok(())
+}
+
+pub fn parse_all_targets(
+    sockets: &mut std::collections::HashMap<InternalId, Unit>,
+    path: &PathBuf,
+    last_id: &mut InternalId,
+) -> Result<(), String> {
+    let files = get_file_list(path)?;
+    for entry in files {
+        if entry.path().is_dir() {
+            parse_all_targets(sockets, path, last_id)?;
+        } else if entry.path().to_str().unwrap().ends_with(".target") {
+            *last_id += 1;
+            trace!("{:?}, {}", entry.path(), last_id);
+            sockets.insert(*last_id, parse_target(&entry.path(), *last_id)?);
+        }
+    }
+
     Ok(())
 }
 
@@ -600,8 +678,8 @@ pub fn parse_all_sockets(
         if entry.path().is_dir() {
             parse_all_sockets(sockets, path, last_id)?;
         } else if entry.path().to_str().unwrap().ends_with(".socket") {
-            trace!("{:?}", entry.path());
             *last_id += 1;
+            trace!("{:?}, {}", entry.path(), last_id);
             sockets.insert(*last_id, parse_socket(&entry.path(), *last_id)?);
         }
     }
