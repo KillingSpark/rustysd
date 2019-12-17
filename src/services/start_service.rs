@@ -1,5 +1,6 @@
 use crate::services::{Service, ServiceStatus};
 use crate::sockets::Socket;
+use crate::units::InternalId;
 
 use super::fork_parent;
 use super::fork_child;
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
     name: String,
-    sockets: &HashMap<String, &Socket>,
+    sockets: &HashMap<InternalId, &Socket>,
     notification_socket_path: std::path::PathBuf,
 ) {
     // check if executable even exists
@@ -74,7 +75,7 @@ fn start_service_with_filedescriptors(
 pub fn start_service(
     srvc: &mut Service,
     name: String,
-    sockets: &HashMap<String, &Socket>,
+    sockets: &HashMap<InternalId, &Socket>,
     notification_socket_path: std::path::PathBuf,
 ) {
     if let Some(conf) = &srvc.service_config {

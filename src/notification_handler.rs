@@ -4,7 +4,6 @@ use std::{
     collections::HashMap,
     io::Write,
     os::unix::io::{AsRawFd, RawFd},
-    sync::{Arc, Mutex},
 };
 
 // will be used when service starting outside of the initial starting process is supported
@@ -40,10 +39,7 @@ pub fn notify_event_fds(eventfds: &[RawFd]) {
     }
 }
 
-fn collect_from_srvc<F>(
-    service_table: Arc<Mutex<HashMap<InternalId, Unit>>>,
-    f: F,
-) -> HashMap<i32, u64>
+fn collect_from_srvc<F>(service_table: ArcMutUnitTable, f: F) -> HashMap<i32, u64>
 where
     F: Fn(&mut HashMap<i32, u64>, &Service, u64),
 {
@@ -52,14 +48,15 @@ where
         .unwrap()
         .iter()
         .fold(HashMap::new(), |mut map, (id, srvc_unit)| {
-            if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+            let srvc_unit_locked = srvc_unit.lock().unwrap();
+            if let UnitSpecialized::Service(srvc) = &srvc_unit_locked.specialized {
                 f(&mut map, &srvc, *id);
             }
             map
         })
 }
 
-pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+pub fn handle_all_streams(eventfd: RawFd, service_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(service_table.clone(), |map, srvc, id| {
@@ -87,7 +84,10 @@ pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = service_table_locked.get_mut(id) {
-                            if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
+                            let srvc_unit_locked = &mut *srvc_unit.lock().unwrap();
+                            if let UnitSpecialized::Service(srvc) =
+                                &mut srvc_unit_locked.specialized
+                            {
                                 if let Some(socket) = &srvc.notifications {
                                     let bytes = socket.lock().unwrap().recv(&mut buf[..]).unwrap();
                                     let note_str =
@@ -95,7 +95,7 @@ pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                                     srvc.notifications_buffer.push_str(&note_str);
                                     crate::notification_handler::handle_notifications_from_buffer(
                                         srvc,
-                                        &srvc_unit.conf.name(),
+                                        &srvc_unit_locked.conf.name(),
                                     );
                                 }
                             }
@@ -110,7 +110,7 @@ pub fn handle_all_streams(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
     }
 }
 
-pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+pub fn handle_all_std_out(eventfd: RawFd, service_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(service_table.clone(), |map, srvc, id| {
@@ -138,7 +138,8 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = service_table_locked.get_mut(id) {
-                            let name = srvc_unit.conf.name();
+                            let srvc_unit_locked = srvc_unit.lock().unwrap();
+                            let name = srvc_unit_locked.conf.name();
 
                             // build the service-unique prefix
                             let mut prefix = String::new();
@@ -173,13 +174,14 @@ pub fn handle_all_std_out(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
     }
 }
 
-pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<InternalId, Unit>>>) {
+pub fn handle_all_std_err(eventfd: RawFd, service_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id: HashMap<_, _> = service_table.lock().unwrap().iter().fold(
             HashMap::new(),
             |mut map, (id, srvc_unit)| {
-                if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+                let srvc_unit_locked = srvc_unit.lock().unwrap();
+                if let UnitSpecialized::Service(srvc) = &srvc_unit_locked.specialized {
                     if let Some(fd) = &srvc.stderr_dup {
                         map.insert(fd.0, *id);
                     }
@@ -207,7 +209,8 @@ pub fn handle_all_std_err(eventfd: RawFd, service_table: Arc<Mutex<HashMap<Inter
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = service_table_locked.get_mut(id) {
-                            let name = srvc_unit.conf.name();
+                            let srvc_unit_locked = srvc_unit.lock().unwrap();
+                            let name = srvc_unit_locked.conf.name();
 
                             // build the service-unique prefix
                             let mut prefix = String::new();

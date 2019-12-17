@@ -23,97 +23,149 @@ fn activate_units_recursive(
         let eventfds_copy = eventfds.clone();
 
         tpool.execute(move || {
-            activate_unit(
+            let started_ids_copy2 = started_ids_copy.clone();
+            let unit_table_copy2 = unit_table_copy.clone();
+            let pids_copy2 = pids_copy.clone();
+            let tpool_copy2 = tpool_copy.clone();
+            let note_sock_copy2 = note_sock_copy.clone();
+            let eventfds_copy2 = eventfds_copy.clone();
+
+            match activate_unit(
                 id,
                 started_ids_copy,
                 unit_table_copy,
                 pids_copy,
-                tpool_copy,
                 note_sock_copy,
                 eventfds_copy,
-            );
+            ) {
+                Ok(StartResult::Started(next_services_ids)) => {
+                    {
+                        let mut started_ids_locked = started_ids_copy2.lock().unwrap();
+                        started_ids_locked.push(id);
+                    }
+
+                    let tpool_copy2 = tpool_copy.clone();
+                    let next_services_job = move || {
+                        activate_units_recursive(
+                            next_services_ids,
+                            started_ids_copy2,
+                            unit_table_copy2,
+                            pids_copy2,
+                            tpool_copy2,
+                            note_sock_copy2,
+                            eventfds_copy2,
+                        );
+                    };
+                    tpool_copy.execute(next_services_job);
+                }
+                Ok(StartResult::Ignored) => {
+                    // Thats ok
+                }
+                Err(e) => {
+                    panic!("Error while activating unit {}", e);
+                }
+            }
         });
     }
 }
 
-fn activate_unit(
+pub enum StartResult {
+    Started(Vec<InternalId>),
+    Ignored,
+}
+
+pub fn activate_unit(
     id_to_start: InternalId,
     started_ids: Arc<Mutex<Vec<InternalId>>>,
     unit_table: ArcMutUnitTable,
     pids: ArcMutPidTable,
-    tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<RawFd>>,
-) {
+) -> std::result::Result<StartResult, std::string::String> {
     trace!("Activate id: {}", id_to_start);
-    let mut unit = {
-        let mut services_locked = unit_table.lock().unwrap();
-        let unit = match services_locked.remove(&id_to_start) {
-            Some(unit) => unit,
+
+    // first lock
+    // 1) the unit itself
+    // 2) the needed sockets if it is a service unit
+    // this all needs to happen under the unit_table lock because there is a deadlock
+    // hazard when taking the unit_table lock after already holding a unit lock
+    let mut socket_units = HashMap::new();
+    let mut socket_units_locked = HashMap::new();
+    let mut sockets = HashMap::new();
+    let unit = {
+        let units_locked = unit_table.lock().unwrap();
+        let unit = match units_locked.get(&id_to_start) {
+            Some(unit) => Arc::clone(unit),
             None => {
-                error!("Tried to run a unit that has been removed from the map");
-                return;
+                panic!("Tried to run a unit that has been removed from the map");
             }
         };
-        let started_ids_locked = started_ids.lock().unwrap();
+        {
+            let unit_locked = unit.lock().unwrap();
+            let started_ids_locked = started_ids.lock().unwrap();
 
-        // if not all dependencies are yet started ignore this call. THis unit will be activated again when
-        // the next dependency gets ready
-        let all_deps_ready = unit
-            .install
-            .after
-            .iter()
-            .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
-        if !all_deps_ready {
-            trace!(
-                "Unit: {} ignores activation. Not all dependencies have been started",
-                unit.conf.name()
-            );
-            services_locked.insert(id_to_start, unit);
-            return;
+            // if not all dependencies are yet started ignore this call. THis unit will be activated again when
+            // the next dependency gets ready
+            let all_deps_ready = unit_locked
+                .install
+                .after
+                .iter()
+                .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
+            if !all_deps_ready {
+                trace!(
+                    "Unit: {} ignores activation. Not all dependencies have been started",
+                    unit_locked.conf.name()
+                );
+                return Ok(StartResult::Ignored);
+            }
+            let mut socket_ids = Vec::new();
+            if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
+                let name = unit_locked.conf.name();
+                trace!("Lock sockets for service {}", name);
+                for (id, unit) in units_locked.iter() {
+                    if srvc.socket_ids.contains(id) {
+                        trace!("Lock unit: {}", id);
+                        let unit_locked = unit.lock().unwrap();
+                        trace!("Locked unit: {}", id);
+                        if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                            socket_ids.push((unit_locked.id, sock.name.clone()));
+                            socket_units.insert(*id, Arc::clone(unit));
+                        }
+                    }
+                }
+                for (id, unit) in &socket_units {
+                    let unit_locked = unit.lock().unwrap();
+                    socket_units_locked.insert(*id, unit_locked);
+                }
+                for (id, unit_locked) in &socket_units_locked {
+                    if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                        sockets.insert(*id, sock);
+                    }
+                }
+                trace!("Done locking sockets for service {}", name);
+            }
         }
         unit
     };
-    let next_services_ids = unit.install.before.clone();
 
-    match unit.activate(
-        unit_table.clone(),
-        pids.clone(),
-        notification_socket_path.clone(),
-        &eventfds,
-    ) {
-        Ok(_) => {
-            {
-                let mut started_ids_locked = started_ids.lock().unwrap();
-                started_ids_locked.push(id_to_start);
-            }
-            {
-                let mut services_locked = unit_table.lock().unwrap();
-                services_locked.insert(id_to_start, unit);
-            }
+    let unit_locked = &mut *unit.lock().unwrap();
+    let next_services_ids = unit_locked.install.before.clone();
 
-            let tpool_copy = ThreadPool::clone(&tpool);
-            let next_services_job = move || {
-                activate_units_recursive(
-                    next_services_ids,
-                    started_ids,
-                    unit_table,
-                    pids,
-                    tpool_copy,
-                    notification_socket_path,
-                    eventfds,
-                );
-            };
-            tpool.execute(next_services_job);
-        }
-        Err(e) => {
-            error!("Error while activating unit {}: {}", unit.conf.name(), e);
-            {
-                let mut services_locked = unit_table.lock().unwrap();
-                services_locked.insert(id_to_start, unit);
-            }
-        }
-    }
+    unit_locked
+        .activate(
+            &sockets,
+            pids.clone(),
+            notification_socket_path.clone(),
+            &eventfds,
+        )
+        .map(|_| StartResult::Started(next_services_ids))
+        .map_err(|e| {
+            format!(
+                "Error while starting unit {}: {}",
+                unit_locked.conf.name(),
+                e
+            )
+        })
 }
 
 pub fn activate_units(
@@ -125,9 +177,10 @@ pub fn activate_units(
     let mut root_units = Vec::new();
 
     for (id, unit) in &*unit_table.lock().unwrap() {
-        if unit.install.after.is_empty() {
+        let unit_locked = unit.lock().unwrap();
+        if unit_locked.install.after.is_empty() {
             root_units.push(*id);
-            trace!("Root unit: {}", unit.conf.name());
+            trace!("Root unit: {}", unit_locked.conf.name());
         }
     }
 

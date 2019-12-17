@@ -59,9 +59,9 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
         map.insert(
             "Sockets".into(),
             Value::Array(
-                srvc.socket_names
+                srvc.socket_ids
                     .iter()
-                    .map(|x| Value::String(x.clone()))
+                    .map(|x| Value::String(x.to_string()))
                     .collect(),
             ),
         );

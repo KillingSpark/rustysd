@@ -15,7 +15,7 @@ pub type ArcMutSocketTable = Arc<Mutex<SocketTable>>;
 pub type ServiceTable = HashMap<InternalId, Unit>;
 pub type ArcMutServiceTable = Arc<Mutex<ServiceTable>>;
 
-pub type UnitTable = HashMap<InternalId, Unit>;
+pub type UnitTable = HashMap<InternalId, Arc<Mutex<Unit>>>;
 pub type ArcMutUnitTable = Arc<Mutex<UnitTable>>;
 
 pub type PidTable = HashMap<Pid, PidEntry>;
@@ -93,7 +93,7 @@ impl Unit {
 
     pub fn activate(
         &mut self,
-        sockets: ArcMutSocketTable,
+        sockets: &HashMap<InternalId, &crate::sockets::Socket>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[RawFd],

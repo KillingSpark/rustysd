@@ -62,11 +62,12 @@ fn main() {
     use std::sync::{Arc, Mutex};
     //let service_table = Arc::new(Mutex::new(service_table));
     //let socket_table = Arc::new(Mutex::new(socket_table));
+    let unit_table: std::collections::HashMap<_,_> = unit_table.into_iter().map(|(id, unit)| (id,Arc::new(Mutex::new(unit)))).collect();
     let unit_table = Arc::new(Mutex::new(unit_table));
 
     // listen on user commands like listunits/kill/restart...
     // TODO only use unit_table
-    control::accept_control_connections(unit_table.clone(), Arc::new(Mutex::new(std::collections::HashMap::new())));
+    //control::accept_control_connections(unit_table.clone(), Arc::new(Mutex::new(std::collections::HashMap::new())));
 
     let notification_eventfd =
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();

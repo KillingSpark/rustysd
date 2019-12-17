@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::sockets::Socket;
 use crate::units::*;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -40,7 +41,7 @@ pub struct Service {
     pub service_config: Option<ServiceConfig>,
 
     pub status: ServiceStatus,
-    pub socket_names: Vec<String>,
+    pub socket_ids: Vec<InternalId>,
 
     pub status_msgs: Vec<String>,
 
@@ -57,7 +58,7 @@ impl Service {
         &mut self,
         id: InternalId,
         name: &String,
-        other_units: ArcMutUnitTable,
+        sockets: &HashMap<InternalId, &Socket>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[RawFd],
@@ -66,31 +67,7 @@ impl Service {
 
         match self.status {
             ServiceStatus::NeverRan | ServiceStatus::Stopped => {
-                let mut socket_units = HashMap::new();
-                let mut socket_ids = Vec::new();
-                let mut other_units_locked = other_units.lock().unwrap();
-                for unit in other_units_locked.values() {
-                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
-                        socket_ids.push((unit.id, sock.name.clone()));
-                    }
-                }
-                for (id, name) in &socket_ids {
-                    let sock = other_units_locked.remove(&id).unwrap();
-                    socket_units.insert(name, sock);
-                }
-                let mut sockets = HashMap::new();
-                for (name, unit) in &socket_units {
-                    if let UnitSpecialized::Socket(sock) = &unit.specialized {
-                        let name: String = name.to_string();
-                        sockets.insert(name, sock);
-                    }
-                }
-
                 start_service(self, name.clone(), &sockets, notification_socket_path);
-
-                for (id, name) in &socket_ids {
-                    other_units_locked.insert(*id, socket_units.remove(&name).unwrap());
-                }
 
                 if let Some(new_pid) = self.pid {
                     {
@@ -112,13 +89,14 @@ impl Service {
 
 pub fn kill_services(
     ids_to_kill: Vec<InternalId>,
-    service_table: &mut ServiceTable,
+    service_table: &mut UnitTable,
     pid_table: &mut PidTable,
 ) {
     //TODO killall services that require this service
     for id in ids_to_kill {
         let srvc_unit = service_table.get_mut(&id).unwrap();
-        if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+        let unit_locked = srvc_unit.lock().unwrap();
+        if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
             let split: Vec<&str> = match &srvc.service_config {
                 Some(conf) => {
                     if conf.stop.is_empty() {
@@ -139,11 +117,11 @@ pub fn kill_services(
                 Ok(child) => {
                     pid_table.insert(
                         nix::unistd::Pid::from_raw(child.id() as i32),
-                        PidEntry::Stop(srvc_unit.id),
+                        PidEntry::Stop(unit_locked.id),
                     );
                     trace!(
                         "Stopped Service: {} with pid: {:?}",
-                        srvc_unit.conf.name(),
+                        unit_locked.conf.name(),
                         srvc.pid
                     );
                 }
@@ -156,7 +134,7 @@ pub fn kill_services(
 pub fn service_exit_handler(
     pid: nix::unistd::Pid,
     code: i32,
-    unit_table: ArcMutServiceTable,
+    unit_table: ArcMutUnitTable,
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
 ) {
@@ -169,7 +147,13 @@ pub fn service_exit_handler(
                 PidEntry::Stop(id) => {
                     trace!(
                         "Stop process for service: {} exited with code: {}",
-                        unit_table_locked.get(id).unwrap().conf.name(),
+                        unit_table_locked
+                            .get(id)
+                            .unwrap()
+                            .lock()
+                            .unwrap()
+                            .conf
+                            .name(),
                         code
                     );
                     pid_table_locked.remove(&pid);
@@ -183,28 +167,63 @@ pub fn service_exit_handler(
         })
     };
 
-    let mut unit = {
+    let mut socket_units = HashMap::new();
+    let mut socket_units_locked = HashMap::new();
+    let mut sockets = HashMap::new();
+    let unit = {
         let unit_table_locked: &mut HashMap<_, _> = &mut unit_table.lock().unwrap();
-        unit_table_locked.remove(&srvc_id).unwrap()
+        let unit = Arc::clone(unit_table_locked.get(&srvc_id).unwrap());
+        unit
+    };
+    let unit_locked = {
+        let unit_table_locked: &mut HashMap<_, _> = &mut unit_table.lock().unwrap();
+        let unit_locked = unit.lock().unwrap();
+
+        if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
+            let name = unit_locked.conf.name();
+            trace!("Lock sockets for service {}", name);
+
+            let mut socket_ids = Vec::new();
+            for (id, unit) in unit_table_locked.iter() {
+                let unit_locked = unit.lock().unwrap();
+                if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                    socket_ids.push((unit_locked.id, sock.name.clone()));
+                    socket_units.insert(*id, Arc::clone(unit));
+                }
+            }
+            for (id, unit) in &socket_units {
+                let unit_locked = unit.lock().unwrap();
+                if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                    socket_units_locked.insert(*id, unit_locked);
+                }
+            }
+            for (id, unit_locked) in &socket_units_locked {
+                if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                    sockets.insert(*id, sock);
+                }
+            }
+            trace!("Done locking sockets for service {}", name);
+        }
+        &mut *unit.lock().unwrap()
     };
 
     trace!(
         "Service with id: {}, name: {} pid: {} exited with code: {}",
         srvc_id,
-        unit.conf.name(),
+        unit_locked.conf.name(),
         pid,
         code
     );
 
-    if let UnitSpecialized::Service(srvc) = &mut unit.specialized {
+    if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
         srvc.status = ServiceStatus::Stopped;
 
         if let Some(conf) = &srvc.service_config {
             if conf.keep_alive {
                 srvc.start(
                     srvc_id,
-                    &unit.conf.name(),
-                    unit_table.clone(),
+                    &unit_locked.conf.name(),
+                    &sockets,
                     pid_table,
                     notification_socket_path,
                     &Vec::new(),
@@ -213,19 +232,16 @@ pub fn service_exit_handler(
                 trace!(
                     "Killing all services requiring service with id {}: {:?}",
                     srvc_id,
-                    unit.install.required_by
+                    unit_locked.install.required_by
                 );
                 let pid_table_locked = &mut *pid_table.lock().unwrap();
                 let unit_table_locked = &mut *unit_table.lock().unwrap();
                 kill_services(
-                    unit.install.required_by.clone(),
+                    unit_locked.install.required_by.clone(),
                     unit_table_locked,
                     pid_table_locked,
                 );
             }
         }
     }
-
-    let unit_table_locked: &mut HashMap<_, _> = &mut unit_table.lock().unwrap();
-    unit_table_locked.insert(srvc_id, unit);
 }

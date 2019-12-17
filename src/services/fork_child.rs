@@ -1,13 +1,14 @@
 use crate::services::Service;
 use crate::sockets::Socket;
+use crate::units::InternalId;
 use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 
-fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<String, &Socket>) {
+fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<InternalId, &Socket>) {
     // This is not really necessary since we mark all fds with FD_CLOEXEC but just to be safe...
-    for sock in sockets.values() {
-        if !srvc.socket_names.contains(&sock.name) {
-            //trace!("[FORK_CHILD {}] CLOSE FDS FOR SOCKET: {}", name, sock.name);
+    for (id, sock) in sockets.iter() {
+        //trace!("[FORK_CHILD {}] CLOSE FDS FOR SOCKET: {}", name, sock.name);
+        if !srvc.socket_ids.contains(id) {
             for conf in &sock.sockets {
                 match &conf.fd {
                     Some(fd) => {
@@ -20,8 +21,6 @@ fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<String, &Socket>
                     }
                 }
             }
-        } else {
-            //trace!("[FORK_CHILD {}] DONT CLOSE FDS", name);
         }
     }
 }
@@ -29,7 +28,7 @@ fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<String, &Socket>
 fn setup_env_vars(
     srvc: &mut Service,
     name: &str,
-    sockets: &HashMap<String, &Socket>,
+    sockets: &HashMap<InternalId, &Socket>,
     notify_socket_env_var: &str,
 ) {
     // The following two lines do deadlock after fork and before exec... I would have loved to just use these
@@ -55,18 +54,10 @@ fn setup_env_vars(
     let mut num_fds = 0;
     let mut name_lists = Vec::new();
 
-    for sock_name in &srvc.socket_names {
+    for sock in sockets.values() {
         //trace!("[FORK_CHILD {}] Counting fds for socket: {}", name, sock_name);
-        match sockets.get(sock_name) {
-            Some(sock) => {
-                num_fds += sock.sockets.len();
-                name_lists.push(sock.build_name_list());
-            }
-            None => eprintln!(
-                "[FORK_CHILD {}] Socket was specified that cannot be found: {}",
-                name, sock_name
-            ),
-        }
+        num_fds += sock.sockets.len();
+        name_lists.push(sock.build_name_list());
     }
 
     let pid = nix::unistd::getpid();
@@ -103,13 +94,7 @@ fn setup_env_vars(
     //);
 }
 
-fn dup_fds(
-    srvc: &mut Service,
-    name: &str,
-    sockets: &HashMap<String, &Socket>,
-    new_stdout: RawFd,
-    new_stderr: RawFd,
-) {
+fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
     // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
     let actual_new_fd = nix::unistd::dup2(new_stdout, 1).unwrap();
     if actual_new_fd != 1 {
@@ -126,62 +111,57 @@ fn dup_fds(
             actual_new_fd
         );
     }
+}
 
+fn dup_fds(srvc: &mut Service, name: &str, sockets: &HashMap<InternalId, &Socket>) {
     // start at 3. 0,1,2 are stdin,stdout,stderr
     let file_desc_offset = 3;
     let mut fd_idx = 0;
 
-    for sock_name in &srvc.socket_names {
-        match sockets.get(sock_name) {
-            Some(socket) => {
-                for sock_conf in &socket.sockets {
-                    let new_fd = file_desc_offset + fd_idx;
-                    let old_fd = match &sock_conf.fd {
-                        Some(fd) => fd.as_raw_fd(),
-                        None => panic!("No fd found for socket conf"),
-                    };
-                    let actual_new_fd = if new_fd as i32 != old_fd {
-                        //ignore output. newfd might already be closed.
-                        // TODO check for actual errors other than bad_fd
-                        let _ = nix::unistd::close(new_fd as i32);
-                        let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
-                        let _ = nix::unistd::close(old_fd as i32);
-                        actual_new_fd
-                    } else {
-                        new_fd
-                    };
-                    if new_fd != actual_new_fd {
-                        panic!(
-                            "Could not dup2 fd {} to {} as required. Was duped to: {}!",
-                            old_fd, new_fd, actual_new_fd
-                        );
-                    }
-                    // unset the CLOEXEC flags on the relevant FDs
-                    let old_flags = unsafe { libc::fcntl(new_fd, libc::F_GETFD, 0) };
-                    if old_flags <= -1 {
-                        eprintln!(
-                            "[FORK_CHILD {}] failed to manually get the FD flag on fd: {}",
-                            name, new_fd
-                        )
-                    } else {
-                        // need to actually flip the u32 not just negate the i32.....
-                        let unset_cloexec_flag = (libc::FD_CLOEXEC as u32 ^ 0xFFFF_FFFF) as i32;
-                        let new_flags = old_flags & unset_cloexec_flag;
+    for socket in sockets.values() {
+        for sock_conf in &socket.sockets {
+            let new_fd = file_desc_offset + fd_idx;
+            let old_fd = match &sock_conf.fd {
+                Some(fd) => fd.as_raw_fd(),
+                None => panic!("No fd found for socket conf"),
+            };
+            let actual_new_fd = if new_fd as i32 != old_fd {
+                //ignore output. newfd might already be closed.
+                // TODO check for actual errors other than bad_fd
+                let _ = nix::unistd::close(new_fd as i32);
+                let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+                let _ = nix::unistd::close(old_fd as i32);
+                actual_new_fd
+            } else {
+                new_fd
+            };
+            if new_fd != actual_new_fd {
+                panic!(
+                    "Could not dup2 fd {} to {} as required. Was duped to: {}!",
+                    old_fd, new_fd, actual_new_fd
+                );
+            }
+            // unset the CLOEXEC flags on the relevant FDs
+            let old_flags = unsafe { libc::fcntl(new_fd, libc::F_GETFD, 0) };
+            if old_flags <= -1 {
+                eprintln!(
+                    "[FORK_CHILD {}] failed to manually get the FD flag on fd: {}",
+                    name, new_fd
+                )
+            } else {
+                // need to actually flip the u32 not just negate the i32.....
+                let unset_cloexec_flag = (libc::FD_CLOEXEC as u32 ^ 0xFFFF_FFFF) as i32;
+                let new_flags = old_flags & unset_cloexec_flag;
 
-                        let result = unsafe { libc::fcntl(new_fd, libc::F_SETFD, new_flags) };
-                        if result <= -1 {
-                            eprintln!(
-                                    "[FORK_CHILD {}] failed to manually unset the CLOEXEC flag on fd: {}", name, new_fd
-                                )
-                        }
-                    }
-                    fd_idx += 1;
+                let result = unsafe { libc::fcntl(new_fd, libc::F_SETFD, new_flags) };
+                if result <= -1 {
+                    eprintln!(
+                        "[FORK_CHILD {}] failed to manually unset the CLOEXEC flag on fd: {}",
+                        name, new_fd
+                    )
                 }
             }
-            None => eprintln!(
-                "[FORK_CHILD {}] Socket was specified that cannot be found: {}",
-                name, sock_name
-            ),
+            fd_idx += 1;
         }
     }
 }
@@ -217,7 +197,7 @@ fn move_into_new_process_group() {
 pub fn after_fork_child(
     srvc: &mut Service,
     name: &str,
-    sockets: &HashMap<String, &Socket>,
+    sockets: &HashMap<InternalId, &Socket>,
     notify_socket_env_var: &str,
     new_stdout: RawFd,
     new_stderr: RawFd,
@@ -232,7 +212,9 @@ pub fn after_fork_child(
     // Hopefully the close() means that no old logs will get written to that filedescriptor
 
     close_all_unneeded_fds(srvc, sockets);
-    dup_fds(srvc, name, sockets, new_stdout, new_stderr);
+
+    dup_stdio(new_stdout, new_stderr);
+    dup_fds(srvc, name, sockets);
 
     setup_env_vars(srvc, name, sockets, notify_socket_env_var);
     let (cmd, args) = prepare_exec_args(srvc);

@@ -199,7 +199,7 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> 
             status: ServiceStatus::NeverRan,
 
             service_config,
-            socket_names: Vec::new(),
+            socket_ids: Vec::new(),
 
             status_msgs: Vec::new(),
 
