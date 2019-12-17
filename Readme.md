@@ -19,6 +19,7 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Waiting for the READY=1 notification for services of type notify
 1. Waiting for services of type dbus
 1. Waiting for multiple dependencies
+1. Target units to synchronize the startup
 
 
 ### See for yourself
@@ -27,7 +28,6 @@ Running `./build_all.sh && cargo run --bin rustysd` will build the test service 
 ## What does not work
 Just some stuff I know does not work but would be cool to have
 1. Pruning the set of loaded units to only the needed one to reach the target unit
-1. Target units to make 'well known' synchronization points in the startup sequence
 1. Socket activation. Right now services with a socket will be started right away in parallel with all others. They could just not be spawned and waited on with a select until they are ready. This will be needed anyways for inetd style socket activation
 1. Socket options like MaxConnections=/KeepAlive=
 1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
