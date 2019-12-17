@@ -169,7 +169,7 @@ pub fn service_exit_handler(
 
     // first lock
     // 1) the unit itself
-    // 2) the needed sockets if it is a service unit
+    // 2) then all units this unit says it needs to be able to start (eg. socket units for services)
     // this all needs to happen under the unit_table lock because there is a deadlock
     // hazard when taking the unit_table lock after already holding a unit lock
     let mut socket_units = HashMap::new();
