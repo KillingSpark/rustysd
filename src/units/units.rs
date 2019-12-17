@@ -62,22 +62,48 @@ impl Unit {
         self.install.after.dedup();
     }
 
+    fn ids_needed_for_activation(&self) -> Vec<InternalId> {
+        match &self.specialized {
+            UnitSpecialized::Socket(_) => Vec::new(),
+            UnitSpecialized::Service(srvc) => srvc.socket_ids.clone(),
+        }
+    }
+
+    pub fn filter_units_needed_for_activation(&self, unit_table: &UnitTable) -> UnitTable {
+        let ids_needed = self.ids_needed_for_activation();
+        let units_needed = unit_table.iter().fold(HashMap::new(), |mut acc, (id, unit)| {
+            if ids_needed.contains(id) {
+                acc.insert(*id, Arc::clone(unit));
+            }
+            acc
+        });
+
+        units_needed
+    }
+
     pub fn activate(
         &mut self,
-        sockets: &HashMap<InternalId, &crate::sockets::Socket>,
+        required_units: &HashMap<InternalId, &Unit>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[RawFd],
     ) -> Result<(), String> {
         match &mut self.specialized {
             UnitSpecialized::Socket(sock) => {
-                sock.open_all().map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
+                sock.open_all()
+                    .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
+                let mut sockets = HashMap::new();
+                for (id, unit_locked) in required_units {
+                    if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                        sockets.insert(*id, sock);
+                    }
+                }
                 srvc.start(
                     self.id,
                     &self.conf.name(),
-                    sockets,
+                    &sockets,
                     pids,
                     notification_socket_path,
                     eventfds,

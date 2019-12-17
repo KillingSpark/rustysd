@@ -90,7 +90,7 @@ pub fn activate_unit(
     // hazard when taking the unit_table lock after already holding a unit lock
     let mut socket_units = HashMap::new();
     let mut socket_units_locked = HashMap::new();
-    let mut sockets = HashMap::new();
+    let mut socket_units_refs = HashMap::new();
     let unit = {
         let units_locked = unit_table.lock().unwrap();
         let unit = match units_locked.get(&id_to_start) {
@@ -117,32 +117,22 @@ pub fn activate_unit(
                 );
                 return Ok(StartResult::Ignored);
             }
-            let mut socket_ids = Vec::new();
-            if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
-                let name = unit_locked.conf.name();
-                trace!("Lock sockets for service {}", name);
-                for (id, unit) in units_locked.iter() {
-                    if srvc.socket_ids.contains(id) {
-                        trace!("Lock unit: {}", id);
-                        let unit_locked = unit.lock().unwrap();
-                        trace!("Locked unit: {}", id);
-                        if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
-                            socket_ids.push((unit_locked.id, sock.name.clone()));
-                            socket_units.insert(*id, Arc::clone(unit));
-                        }
-                    }
-                }
-                for (id, unit) in &socket_units {
-                    let unit_locked = unit.lock().unwrap();
-                    socket_units_locked.insert(*id, unit_locked);
-                }
-                for (id, unit_locked) in &socket_units_locked {
-                    if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
-                        sockets.insert(*id, sock);
-                    }
-                }
-                trace!("Done locking sockets for service {}", name);
+
+            let name = unit_locked.conf.name();
+            trace!("Lock required units for unit {}", name);
+            socket_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
+
+            for (id, unit) in &socket_units {
+                trace!("Lock unit: {}", id);
+                let unit_locked = unit.lock().unwrap();
+                trace!("Locked unit: {}", id);
+                socket_units_locked.insert(*id, unit_locked);
             }
+            for (id, unit_locked) in &socket_units_locked {
+                let unit_ref: &Unit = &(*unit_locked);
+                socket_units_refs.insert(*id, unit_ref);
+            }
+            trace!("Done locking required units for unit {}", name);
         }
         unit
     };
@@ -152,7 +142,7 @@ pub fn activate_unit(
 
     unit_locked
         .activate(
-            &sockets,
+            &socket_units_refs,
             pids.clone(),
             notification_socket_path.clone(),
             &eventfds,
