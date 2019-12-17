@@ -10,6 +10,7 @@ pub fn after_fork_parent(
     stream: &UnixDatagram,
 ) {
     srvc.pid = Some(new_pid);
+    srvc.process_group = Some(nix::unistd::Pid::from_raw(-new_pid.as_raw()));
 
     trace!(
         "[FORK_PARENT] Service: {} forked with pid: {}",

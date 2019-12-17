@@ -1,9 +1,7 @@
 use super::start_service::*;
 use std::collections::HashMap;
-use std::error::Error;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
-use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -45,6 +43,8 @@ pub struct Service {
 
     pub status_msgs: Vec<String>,
 
+    pub process_group: Option<nix::unistd::Pid>,
+
     pub runtime_info: ServiceRuntimeInfo,
 
     pub notifications: Option<Arc<Mutex<UnixDatagram>>>,
@@ -83,50 +83,6 @@ impl Service {
                 "Tried to start service {} after it was already running",
                 name
             ),
-        }
-    }
-}
-
-pub fn kill_services(
-    ids_to_kill: Vec<InternalId>,
-    unit_table: &UnitTable,
-    pid_table: &mut PidTable,
-) {
-    //TODO killall services that require this service
-    for id in ids_to_kill {
-        let srvc_unit = unit_table.get(&id).unwrap();
-        let unit_locked = srvc_unit.lock().unwrap();
-        if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
-            let split: Vec<&str> = match &srvc.service_config {
-                Some(conf) => {
-                    if conf.stop.is_empty() {
-                        continue;
-                    }
-                    conf.stop.split(' ').collect()
-                }
-                None => continue,
-            };
-
-            let mut cmd = Command::new(split[0]);
-            for part in &split[1..] {
-                cmd.arg(part);
-            }
-            cmd.stdout(Stdio::null());
-
-            match cmd.spawn() {
-                Ok(child) => {
-                    pid_table.insert(
-                        nix::unistd::Pid::from_raw(child.id() as i32),
-                        PidEntry::Stop(unit_locked.id),
-                    );
-                    trace!(
-                        "Stopped Service: {} with pid: {:?}",
-                        unit_locked.conf.name(),
-                        srvc.pid
-                    );
-                }
-                Err(e) => panic!(e.description().to_owned()),
-            }
         }
     }
 }
@@ -245,7 +201,7 @@ pub fn service_exit_handler(
                 );
                 let pid_table_locked = &mut *pid_table.lock().unwrap();
                 let unit_table_locked = &*unit_table.read().unwrap();
-                kill_services(
+                super::kill_service::kill_services(
                     unit_locked.install.required_by.clone(),
                     unit_table_locked,
                     pid_table_locked,

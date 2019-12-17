@@ -260,6 +260,8 @@ fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> 
             service_config,
             socket_ids: Vec::new(),
 
+            process_group: None,
+
             status_msgs: Vec::new(),
 
             runtime_info: ServiceRuntimeInfo {
