@@ -44,7 +44,6 @@ fn activate_units_recursive(
                         started_ids_locked.push(id);
                     }
 
-                    let tpool_copy2 = tpool_copy.clone();
                     let next_services_job = move || {
                         activate_units_recursive(
                             next_services_ids,

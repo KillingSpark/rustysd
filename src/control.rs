@@ -80,11 +80,7 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
     Value::Object(map)
 }
 
-pub fn execute_command(
-    cmd: Command,
-    service_table: ArcMutServiceTable,
-    socket_table: ArcMutSocketTable,
-) -> Result<String, String> {
+pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<String, String> {
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
         Command::Status(unit_name) => {
@@ -93,79 +89,66 @@ pub fn execute_command(
                     //list specific
                     if name.ends_with(".service") {
                         let name = name.trim_end_matches(".service");
-                        let srvc_table_locked = service_table.lock().unwrap();
-                        let srvc: Vec<_> = srvc_table_locked
+                        let unit_table_locked = unit_table.lock().unwrap();
+                        let mut srvc: Vec<_> = unit_table_locked
                             .iter()
-                            .filter(|(_id, unit)| unit.conf.name() == name)
+                            .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
+                            .map(|(_id, unit)| format_service(&unit.lock().unwrap()))
                             .collect();
                         if srvc.len() != 1 {
                             return Err(format!("No service found with name: {}", name));
                         }
 
-                        result_vec
-                            .as_array_mut()
-                            .unwrap()
-                            .push(format_service(&srvc[0].1));
+                        result_vec.as_array_mut().unwrap().push(srvc.remove(0));
                     } else if name.ends_with(".socket") {
                         let name = name.trim_end_matches(".socket");
-                        let socket_table_locked = socket_table.lock().unwrap();
-                        let sock: Vec<_> = socket_table_locked
+                        let unit_table_locked = unit_table.lock().unwrap();
+                        let mut sock: Vec<_> = unit_table_locked
                             .iter()
-                            .filter(|(_id, unit)| unit.conf.name() == name)
+                            .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
+                            .map(|(_id, unit)| format_socket(&unit.lock().unwrap()))
                             .collect();
                         if sock.len() != 1 {
-                            return Err(format!("No socket found with name: {}", name));
+                            return Err(format!("No service found with name: {}", name));
                         }
 
-                        result_vec
-                            .as_array_mut()
-                            .unwrap()
-                            .push(Value::String(format!("Socket: {}", sock[0].1.conf.name())));
+                        result_vec.as_array_mut().unwrap().push(sock.remove(0));
                     } else {
-                        let srvc_name = name.trim_end_matches(".service");
-                        let srvc_table_locked = service_table.lock().unwrap();
-                        let srvc: Vec<_> = srvc_table_locked
+                        // name was already short
+                        let unit_table_locked = unit_table.lock().unwrap();
+                        let mut unit: Vec<_> = unit_table_locked
                             .iter()
-                            .filter(|(_id, unit)| unit.conf.name() == srvc_name)
+                            .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
+                            .map(|(_id, unit)| {
+                                let unit_locked = &unit.lock().unwrap();
+                                match unit_locked.specialized {
+                                    UnitSpecialized::Socket(_) => format_socket(&unit_locked),
+                                    UnitSpecialized::Service(_) => format_service(&unit_locked),
+                                }
+                            })
                             .collect();
-                        if srvc.len() == 1 {
-                            result_vec
-                                .as_array_mut()
-                                .unwrap()
-                                .push(format_service(&srvc[0].1));
-                        } else {
-                            let sock_name = name.trim_end_matches(".socket");
-                            let socket_table_locked = socket_table.lock().unwrap();
-                            let sock: Vec<_> = socket_table_locked
-                                .iter()
-                                .filter(|(_id, unit)| unit.conf.name() == sock_name)
-                                .collect();
-                            if sock.len() != 1 {
-                                return Err(format!("No socket found with name: {}", sock_name));
-                            }
-
-                            result_vec
-                                .as_array_mut()
-                                .unwrap()
-                                .push(Value::String(format!("Socket: {}", sock[0].1.conf.name())));
+                        if unit.len() != 1 {
+                            return Err(format!("No unit found with name: {}", name));
                         }
+
+                        result_vec.as_array_mut().unwrap().push(unit.remove(0));
                     }
                 }
                 None => {
                     //list all
-                    let srvc_table_locked = &*service_table.lock().unwrap();
-                    for srvc_unit in srvc_table_locked.values() {
-                        result_vec
-                            .as_array_mut()
-                            .unwrap()
-                            .push(format_service(&srvc_unit));
-                    }
-                    let socket_table_locked = &*socket_table.lock().unwrap();
-                    for sock_unit in socket_table_locked.values() {
-                        result_vec
-                            .as_array_mut()
-                            .unwrap()
-                            .push(format_socket(sock_unit));
+                    let unit_table_locked = unit_table.lock().unwrap();
+                    let strings: Vec<_> = unit_table_locked
+                        .iter()
+                        .map(|(_id, unit)| {
+                            let unit_locked = &unit.lock().unwrap();
+                            match unit_locked.specialized {
+                                UnitSpecialized::Socket(_) => format_socket(&unit_locked),
+                                UnitSpecialized::Service(_) => format_service(&unit_locked),
+                            }
+                        })
+                        .collect();
+                    for s in strings {
+                        result_vec.as_array_mut().unwrap().push(s);
                     }
                 }
             }
@@ -182,16 +165,14 @@ use std::io::Read;
 use std::io::Write;
 pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     mut source: Box<T>,
-    service_table: ArcMutServiceTable,
-    socket_table: ArcMutSocketTable,
+    unit_table: ArcMutUnitTable,
 ) {
     std::thread::spawn(move || loop {
         match serde_json::from_reader(&mut *source) {
             Ok(v) => {
                 let v: Value = v;
                 let cmd = parse_command(v).unwrap();
-                let response =
-                    execute_command(cmd, service_table.clone(), socket_table.clone()).unwrap();
+                let response = execute_command(cmd, unit_table.clone()).unwrap();
                 source.write_all(response.as_bytes()).unwrap();
             }
             Err(e) => {
@@ -202,10 +183,7 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     });
 }
 
-pub fn accept_control_connections(
-    service_table: ArcMutServiceTable,
-    socket_table: ArcMutSocketTable,
-) {
+pub fn accept_control_connections(unit_table: ArcMutUnitTable) {
     std::thread::spawn(move || {
         use std::os::unix::net::UnixListener;
         let path: std::path::PathBuf = "./notifications/control.socket".into();
@@ -215,7 +193,7 @@ pub fn accept_control_connections(
         let cmd_source = UnixListener::bind(&path).unwrap();
         loop {
             let stream = Box::new(cmd_source.accept().unwrap().0);
-            listen_on_commands(stream, service_table.clone(), socket_table.clone())
+            listen_on_commands(stream, unit_table.clone())
         }
     });
 }
