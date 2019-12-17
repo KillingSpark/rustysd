@@ -25,12 +25,7 @@ fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<InternalId, &Soc
     }
 }
 
-fn setup_env_vars(
-    srvc: &mut Service,
-    name: &str,
-    sockets: &HashMap<InternalId, &Socket>,
-    notify_socket_env_var: &str,
-) {
+fn setup_env_vars(sockets: &HashMap<InternalId, &Socket>, notify_socket_env_var: &str) {
     // The following two lines do deadlock after fork and before exec... I would have loved to just use these
     // This has probably something to do with the global env_lock() that is being used in the std
     // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
@@ -113,7 +108,7 @@ fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
     }
 }
 
-fn dup_fds(srvc: &mut Service, name: &str, sockets: &HashMap<InternalId, &Socket>) {
+fn dup_fds(name: &str, sockets: &HashMap<InternalId, &Socket>) {
     // start at 3. 0,1,2 are stdin,stdout,stderr
     let file_desc_offset = 3;
     let mut fd_idx = 0;
@@ -214,9 +209,9 @@ pub fn after_fork_child(
     close_all_unneeded_fds(srvc, sockets);
 
     dup_stdio(new_stdout, new_stderr);
-    dup_fds(srvc, name, sockets);
+    dup_fds(name, sockets);
 
-    setup_env_vars(srvc, name, sockets, notify_socket_env_var);
+    setup_env_vars(sockets, notify_socket_env_var);
     let (cmd, args) = prepare_exec_args(srvc);
 
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);

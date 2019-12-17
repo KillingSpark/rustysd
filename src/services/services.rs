@@ -167,45 +167,54 @@ pub fn service_exit_handler(
         })
     };
 
+    // first lock
+    // 1) the unit itself
+    // 2) the needed sockets if it is a service unit
+    // this all needs to happen under the unit_table lock because there is a deadlock
+    // hazard when taking the unit_table lock after already holding a unit lock
     let mut socket_units = HashMap::new();
     let mut socket_units_locked = HashMap::new();
     let mut sockets = HashMap::new();
     let unit = {
-        let unit_table_locked: &mut HashMap<_, _> = &mut unit_table.lock().unwrap();
-        let unit = Arc::clone(unit_table_locked.get(&srvc_id).unwrap());
-        unit
-    };
-    let unit_locked = {
-        let unit_table_locked: &mut HashMap<_, _> = &mut unit_table.lock().unwrap();
-        let unit_locked = unit.lock().unwrap();
-
-        if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
-            let name = unit_locked.conf.name();
-            trace!("Lock sockets for service {}", name);
-
-            let mut socket_ids = Vec::new();
-            for (id, unit) in unit_table_locked.iter() {
-                let unit_locked = unit.lock().unwrap();
-                if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
-                    socket_ids.push((unit_locked.id, sock.name.clone()));
-                    socket_units.insert(*id, Arc::clone(unit));
-                }
+        let units_locked = unit_table.lock().unwrap();
+        let unit = match units_locked.get(&srvc_id) {
+            Some(unit) => Arc::clone(unit),
+            None => {
+                panic!("Tried to run a unit that has been removed from the map");
             }
-            for (id, unit) in &socket_units {
-                let unit_locked = unit.lock().unwrap();
-                if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+        };
+        {
+            let unit_locked = unit.lock().unwrap();
+            let mut socket_ids = Vec::new();
+            if let UnitSpecialized::Service(srvc) = &unit_locked.specialized {
+                let name = unit_locked.conf.name();
+                trace!("Lock sockets for service {}", name);
+                for (id, unit) in units_locked.iter() {
+                    if srvc.socket_ids.contains(id) {
+                        trace!("Lock unit: {}", id);
+                        let unit_locked = unit.lock().unwrap();
+                        trace!("Locked unit: {}", id);
+                        if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                            socket_ids.push((unit_locked.id, sock.name.clone()));
+                            socket_units.insert(*id, Arc::clone(unit));
+                        }
+                    }
+                }
+                for (id, unit) in &socket_units {
+                    let unit_locked = unit.lock().unwrap();
                     socket_units_locked.insert(*id, unit_locked);
                 }
-            }
-            for (id, unit_locked) in &socket_units_locked {
-                if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
-                    sockets.insert(*id, sock);
+                for (id, unit_locked) in &socket_units_locked {
+                    if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                        sockets.insert(*id, sock);
+                    }
                 }
+                trace!("Done locking sockets for service {}", name);
             }
-            trace!("Done locking sockets for service {}", name);
         }
-        &mut *unit.lock().unwrap()
+        unit
     };
+    let unit_locked = &mut *unit.lock().unwrap();
 
     trace!(
         "Service with id: {}, name: {} pid: {} exited with code: {}",

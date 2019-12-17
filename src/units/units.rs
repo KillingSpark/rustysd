@@ -10,10 +10,7 @@ use std::{fmt, path::PathBuf};
 
 pub type InternalId = u64;
 pub type SocketTable = HashMap<InternalId, Unit>;
-pub type ArcMutSocketTable = Arc<Mutex<SocketTable>>;
-
 pub type ServiceTable = HashMap<InternalId, Unit>;
-pub type ArcMutServiceTable = Arc<Mutex<ServiceTable>>;
 
 pub type UnitTable = HashMap<InternalId, Arc<Mutex<Unit>>>;
 pub type ArcMutUnitTable = Arc<Mutex<UnitTable>>;
@@ -25,32 +22,6 @@ pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
 pub enum PidEntry {
     Service(InternalId),
     Stop(InternalId),
-}
-
-// TODO delete this
-// keep around while refactoring in case it is needed again
-#[allow(dead_code)]
-pub fn find_sock_with_name<'b>(name: &str, sockets: &'b SocketTable) -> Option<&'b Socket> {
-    let sock: Vec<&'b Socket> = sockets
-        .iter()
-        .map(|(_id, unit)| {
-            if let UnitSpecialized::Socket(sock) = &unit.specialized {
-                Some(sock)
-            } else {
-                None
-            }
-        })
-        .filter(|sock| match sock {
-            Some(sock) => sock.name == *name,
-            None => false,
-        })
-        .map(std::option::Option::unwrap)
-        .collect();
-    if sock.len() == 1 {
-        Some(sock[0])
-    } else {
-        None
-    }
 }
 
 #[derive(Debug)]
