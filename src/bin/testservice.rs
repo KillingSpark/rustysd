@@ -178,15 +178,15 @@ fn main() {
     assert!(num_fds >= 1);
 
     unix_accept(3);
-    unix_accept(8);
-    tcp_accept(4);
-    tcp_accept(9);
-    handle_upd(5);
-    handle_upd(10);
-    handle_unix_datagram(6);
-    handle_unix_datagram(11);
-    unix_seq_pack_accept(7);
-    unix_seq_pack_accept(12);
+    unix_accept(6);
+    //tcp_accept(4);
+    //tcp_accept(9);
+    //handle_upd(5);
+    //handle_upd(10);
+    handle_unix_datagram(4);
+    handle_unix_datagram(7);
+    unix_seq_pack_accept(5);
+    unix_seq_pack_accept(8);
 
     std::thread::sleep(std::time::Duration::from_secs(3));
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
