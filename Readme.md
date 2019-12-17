@@ -6,6 +6,8 @@ in anything that is important.
 It does look somewhat promising, the really ugly parts are "working". There is a lot of cleanup to be done. There is a whole lot of unwrap() calling
 where error handling should be done properly.
 
+[![Gitter](https://badges.gitter.im/rustysd/community.svg)](https://gitter.im/rustysd/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented
 
@@ -36,3 +38,6 @@ Just some stuff I know does not work but would be cool to have
     1. Netlink is missing for example
 1. The rest of the sd_notify API (with storing filedescriptors and such)
 1. A systemctl equivalent to control/query rustysd (some querying has been implemented using serde-json but its just a concept right now)
+
+## Community
+There has been a request for a place to talk about this project, so I opened a gitter community for this project. Feel free to come over and have a chat [on this page](https://gitter.im/rustysd/community?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
