@@ -20,7 +20,7 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Waiting for services of type dbus
 1. Waiting for multiple dependencies
 1. Target units to synchronize the startup
-
+1. Send SIGKILL to whole processgroup when killing a service
 
 ### See for yourself
 Running `./build_all.sh && cargo run --bin rustysd` will build the test service and run rustysd which will start that testservice
