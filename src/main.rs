@@ -138,6 +138,7 @@ fn main() {
                                 pid_table_clone.clone(),
                                 note_sock_path_clone.clone(),
                                 eventfds_clone.clone(),
+                                true,
                             ) {
                                 Ok(_) => { /* TODO set all sockets to activated so they dont get listend to anymore here*/
                                 }

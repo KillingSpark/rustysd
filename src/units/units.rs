@@ -92,6 +92,7 @@ impl Unit {
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[RawFd],
+        by_socket_activation: bool,
     ) -> Result<(), String> {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
@@ -113,6 +114,7 @@ impl Unit {
                     pids,
                     notification_socket_path,
                     eventfds,
+                    by_socket_activation,
                 );
             }
         }

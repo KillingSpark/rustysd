@@ -37,6 +37,7 @@ fn activate_units_recursive(
                 pids_copy,
                 note_sock_copy,
                 eventfds_copy,
+                false,
             ) {
                 Ok(StartResult::Started(next_services_ids)) => {
                     {
@@ -80,6 +81,7 @@ pub fn activate_unit(
     pids: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<RawFd>>,
+    by_socket_activation: bool,
 ) -> std::result::Result<StartResult, std::string::String> {
     trace!("Activate id: {}", id_to_start);
 
@@ -149,6 +151,7 @@ pub fn activate_unit(
             pids.clone(),
             notification_socket_path.clone(),
             &eventfds,
+            by_socket_activation
         )
         .map(|_| StartResult::Started(next_services_ids))
         .map_err(|e| {

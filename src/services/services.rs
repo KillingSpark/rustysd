@@ -62,21 +62,26 @@ impl Service {
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[RawFd],
+        by_socket_activation: bool,
     ) {
         trace!("Start service {}", name);
 
         match self.status {
             ServiceStatus::NeverRan | ServiceStatus::Stopped => {
-                start_service(self, name.clone(), &sockets, notification_socket_path);
+                if by_socket_activation || self.socket_ids.is_empty() {
+                    start_service(self, name.clone(), &sockets, notification_socket_path);
 
-                if let Some(new_pid) = self.pid {
-                    {
-                        let mut pids = pids.lock().unwrap();
-                        pids.insert(new_pid, PidEntry::Service(id));
+                    if let Some(new_pid) = self.pid {
+                        {
+                            let mut pids = pids.lock().unwrap();
+                            pids.insert(new_pid, PidEntry::Service(id));
+                        }
+                        crate::notification_handler::notify_event_fds(&eventfds)
+                    } else {
+                        // TODO dont even start services that require this one
                     }
-                    crate::notification_handler::notify_event_fds(&eventfds)
-                } else {
-                    // TODO dont even start services that require this one
+                }else{
+                    trace!("Ignore service {} start, waiting for socket activation instead", name);
                 }
             }
             _ => error!(
@@ -192,6 +197,7 @@ pub fn service_exit_handler(
                     pid_table,
                     notification_socket_path,
                     &Vec::new(),
+                    true,
                 );
             } else {
                 trace!(
