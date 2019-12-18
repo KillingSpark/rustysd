@@ -6,23 +6,16 @@ use std::{
     os::unix::io::{AsRawFd, RawFd},
 };
 
-#[cfg(feature = "kqueue_eventfd")]
-extern crate kqueue_sys;
-
-#[cfg(feature = "kqueue_eventfd")]
-pub fn make_event_fd() -> Result<RawFd, String> {
-    return unsafe { Ok(kqueue_sys::kqueue()) };
-}
-
 #[cfg(feature = "linux_eventfd")]
-pub fn make_event_fd() -> Result<RawFd, String> {
+pub fn make_event_fd() -> Result<(RawFd, RawFd), String> {
     return nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC)
-        .map_err(|e| format!("Error while creating eventfd: {}", e));
+        .map_err(|e| format!("Error while creating eventfd: {}", e))
+        .map(|fd| (fd, fd));
 }
 
-#[cfg(all(not(feature = "linux_eventfd"), not(feature = "kqueue_eventfd")))]
-pub fn make_event_fd() -> Result<RawFd, String> {
-    return Err("No eventfd implementation chose. sorry.".into());
+#[cfg(not(feature = "linux_eventfd"))]
+pub fn make_event_fd() -> Result<(RawFd, RawFd), String> {
+    return nix::unistd::pipe().map_err(|e| format!("Error creating pipe, {}", e));
 }
 
 // will be used when service starting outside of the initial starting process is supported
@@ -32,32 +25,28 @@ pub fn notify_event_fd(eventfd: RawFd) {
 
     unsafe {
         let pointer: *const std::ffi::c_void = zeros as *const std::ffi::c_void;
-        libc::write(eventfd, pointer, 8)
+        let x = libc::write(eventfd, pointer, 8);
+        if x <= 0 {
+            error!("Did not notify eventfd {}: err: {}", eventfd, x);
+        } else {
+            trace!("notify eventfd");
+        }
     };
 }
 
-#[cfg(feature = "kqueue_eventfd")]
+#[cfg(not(feature = "linux_eventfd"))]
 pub fn reset_event_fd(eventfd: RawFd) {
-    let mut events: Vec<kqueue_sys::kevent> = Vec::with_capacity(1);
+    trace!("reset pipe eventfd");
+    let buf: *mut [u8] = &mut [0u8; 8][..];
     unsafe {
-        kqueue_sys::kevent(
-            eventfd,
-            std::ptr::null(),
-            0,
-            events.as_mut_ptr(),
-            1,
-            std::ptr::null(),
-        )
+        let pointer: *mut std::ffi::c_void = buf as *mut std::ffi::c_void;
+        libc::read(eventfd, pointer, 8)
     };
-}
-
-#[cfg(all(not(feature = "linux_eventfd"), not(feature = "kqueue_eventfd")))]
-pub fn reset_event_fd(_eventfd: RawFd) {
-    unimplemented!("Doesnt work!");
 }
 
 #[cfg(feature = "linux_eventfd")]
 pub fn reset_event_fd(eventfd: RawFd) {
+    trace!("reset linux eventfd");
     //something other than 0 so all waiting select() wake up
     let buf: *mut [u8] = &mut [0u8; 8][..];
     unsafe {
