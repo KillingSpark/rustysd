@@ -1,15 +1,29 @@
 # rustysd
-A minimal drop-in for (a subset of) the systemd init system in rust. For now that is just out of interest how far I could come with this 
-and what would be needed to get a somewhat working system. It is very much a proof of concept. For the love of god do not use this
-in anything that is important.
+Rustysd is a service manager that tries to replicate systemd behaviour for a subset of the configuration possibilities. It focuses on the core functionality
 
-It does look somewhat promising, the really ugly parts are "working". There is a lot of cleanup to be done. There is a whole lot of unwrap() calling
-where error handling should be done properly.
+For now this project is just out of interest how far I could come with this 
+and what would be needed to get a somewhat working system. It is very much a proof of concept / work in progress. For the love of god do not use this
+in anything that is important.
+It does look somewhat promising, the core parts are "working" (not thoroughly tested) but there is a lot of cleanup to be done. There is a whole lot of unwrap() calling
+where error handling should be done properly. It would be a bit unhelpful if your service-manager starts panicing.
+
+What is explicitly in scope of this project
+1. Startup sorted by dependencies (parallel if possible for unrelated services)
+1. Socket activation of services
+1. Kill services that have dependencies on failed services
+
+What is explicitly out of scope (for now, this project is still very young):
+1. Timers
+1. Mounts
+1. Device
+1. Path activation
+1. Scopes
+1. Slices (this might be added as it is fairly important if you are not running inside of a container)
 
 [![Gitter](https://badges.gitter.im/rustysd/community.svg)](https://gitter.im/rustysd/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 ## What works
-This section should be somewhat up to date with what parts are (partly?) implemented
+This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested
 
 1. Parsing of service files (a subset of the settings are recognized)
 1. Parsing of socket files (a subset of the settings are recognized)
@@ -29,7 +43,7 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 Running `./build_all.sh && cargo run --bin rustysd` will build the test service and run rustysd which will start that testservice
 
 ## What does not work
-Just some stuff I know does not work but would be cool to have
+Just some stuff I know does not work but would be cool to have.
 1. Pruning the set of loaded units to only the needed one to reach the target unit
 1. Socket activation in inted style
 1. signal handling in a PID1 specific way
