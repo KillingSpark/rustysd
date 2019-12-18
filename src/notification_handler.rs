@@ -32,7 +32,6 @@ pub fn reset_event_fd(eventfd: RawFd) {
     };
 }
 
-#[allow(dead_code)]
 pub fn notify_event_fds(eventfds: &[RawFd]) {
     for fd in eventfds {
         notify_event_fd(*fd);

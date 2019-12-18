@@ -200,6 +200,7 @@ fn parse_socket(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
         id: chosen_id,
         install: Install::default(),
         specialized: UnitSpecialized::Socket(Socket {
+            activated: false,
             name: sock_name,
             sockets: sock_configs,
             services,

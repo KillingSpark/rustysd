@@ -219,6 +219,7 @@ pub struct Socket {
     pub name: String,
     pub sockets: Vec<SocketConfig>,
     pub services: Vec<String>,
+    pub activated: bool,
 }
 
 impl Socket {

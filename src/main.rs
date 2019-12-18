@@ -7,6 +7,7 @@ mod services;
 mod signal_handler;
 mod sockets;
 mod units;
+mod wait_for_socket_activation;
 
 #[macro_use]
 extern crate log;
@@ -54,7 +55,8 @@ fn main() {
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let (service_table, socket_table, target_table) = units::unit_parser::load_all_units(&conf.unit_dirs).unwrap();
+    let (service_table, socket_table, target_table) =
+        units::unit_parser::load_all_units(&conf.unit_dirs).unwrap();
 
     let mut unit_table = std::collections::HashMap::new();
     unit_table.extend(service_table);
@@ -63,7 +65,10 @@ fn main() {
     use std::sync::{Arc, Mutex, RwLock};
     //let service_table = Arc::new(Mutex::new(service_table));
     //let socket_table = Arc::new(Mutex::new(socket_table));
-    let unit_table: std::collections::HashMap<_,_> = unit_table.into_iter().map(|(id, unit)| (id,Arc::new(Mutex::new(unit)))).collect();
+    let unit_table: std::collections::HashMap<_, _> = unit_table
+        .into_iter()
+        .map(|(id, unit)| (id, Arc::new(Mutex::new(unit))))
+        .collect();
     let unit_table = Arc::new(RwLock::new(unit_table));
 
     // listen on user commands like listunits/kill/restart...
@@ -77,18 +82,36 @@ fn main() {
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
 
     let unit_table_clone = unit_table.clone();
-    let unit_table_clone2 = unit_table.clone();
-    let unit_table_clone3 = unit_table.clone();
-
     std::thread::spawn(move || {
         notification_handler::handle_all_streams(notification_eventfd, unit_table_clone);
     });
 
+    let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_out(stdout_eventfd, unit_table_clone2);
+        notification_handler::handle_all_std_out(stdout_eventfd, unit_table_clone);
     });
+
+    let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_err(stderr_eventfd, unit_table_clone3);
+        notification_handler::handle_all_std_err(stderr_eventfd, unit_table_clone);
+    });
+
+    let unit_table_clone = unit_table.clone();
+    std::thread::spawn(move || loop {
+        match wait_for_socket_activation::wait_for_socket(stderr_eventfd, unit_table_clone.clone())
+        {
+            Ok(ids) => {
+                // TODO start services
+                for id in ids {
+                    let _ = id;
+                    // TODO find service to socket id
+                }
+            }
+            Err(e) => {
+                error!("Error in socket activation loop: {}", e);
+                break;
+            }
+        }
     });
 
     let eventfds = vec![notification_eventfd, stdout_eventfd, stderr_eventfd];
@@ -103,9 +126,5 @@ fn main() {
     notification_handler::notify_event_fds(&eventfds);
 
     // listen on signals from the child processes
-    signal_handler::handle_signals(
-        unit_table,
-        pid_table,
-        conf.notification_sockets_dir.clone(),
-    );
+    signal_handler::handle_signals(unit_table, pid_table, conf.notification_sockets_dir.clone());
 }
