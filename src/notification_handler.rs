@@ -38,7 +38,7 @@ pub fn notify_event_fd(eventfd: RawFd) {
 
 #[cfg(feature = "kqueue_eventfd")]
 pub fn reset_event_fd(eventfd: RawFd) {
-    let events: Vec<kqueue_sys::kevent> = Vec::with_capacity(1);
+    let mut events: Vec<kqueue_sys::kevent> = Vec::with_capacity(1);
     unsafe {
         kqueue_sys::kevent(
             eventfd,
