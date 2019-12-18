@@ -26,7 +26,7 @@ What is explicitly out of scope (for now, this project is still very young):
 Since this project is very young and wasn't started with any particular goal in mind, I am open to any and all ideas. Here are some that have been 
 brought up that seem sensible. None of this is definitive though.
 
-1. Provide a PID1 for containers, so unaltered systemd depending services can be run in a container
+1. Provide a PID1 for containers/jails, so unaltered systemd depending services can be run in a container/jail
 1. Provide full init capabilities so this can be used for OS's like redox os or debian/kFreeBSD
 1. Be platform agnostic as long as it's unix (I develop on linux but I'll try to test it on FreeBSD when I add new platform specific stuff)
 
