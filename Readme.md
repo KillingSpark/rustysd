@@ -22,6 +22,13 @@ What is explicitly out of scope (for now, this project is still very young):
 
 [![Gitter](https://badges.gitter.im/rustysd/community.svg)](https://gitter.im/rustysd/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
+## Goals
+Since this project is very young and wasn't started with any particular goal in mind, I am open to any and all ideas. Here are some that have been 
+brought up that seem sensible. None of this is definitive though.
+
+1. Provide a PID1 for containers, so unaltered systemd depending services can be run in a container
+1. Provide full init capabilities so this can be used for OS's like redox os or debian/kFreeBSD
+
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested
 
@@ -40,10 +47,12 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
 
 ### See for yourself
-Running `./build_all.sh && cargo run --bin rustysd` will build the test service and run rustysd which will start that testservice
+Running `./build_all.sh && cargo run --bin rustysd` will build the test services and run rustysd which will start them.
+Currently there are two services, one that gets passed some sockets and one that uses them to send some text over those sockets.
 
 ## What does not work
 Just some stuff I know does not work but would be cool to have.
+1. Patching unit definitions with dropin files
 1. Pruning the set of loaded units to only the needed one to reach the target unit
 1. Socket activation in inted style
 1. signal handling in a PID1 specific way
