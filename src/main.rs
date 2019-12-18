@@ -80,6 +80,8 @@ fn main() {
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
     let stderr_eventfd =
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+    let sock_act_eventfd =
+        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
 
     let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || {
@@ -98,8 +100,10 @@ fn main() {
 
     let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || loop {
-        match wait_for_socket_activation::wait_for_socket(stderr_eventfd, unit_table_clone.clone())
-        {
+        match wait_for_socket_activation::wait_for_socket(
+            sock_act_eventfd,
+            unit_table_clone.clone(),
+        ) {
             Ok(ids) => {
                 // TODO start services
                 for id in ids {
@@ -114,7 +118,12 @@ fn main() {
         }
     });
 
-    let eventfds = vec![notification_eventfd, stdout_eventfd, stderr_eventfd];
+    let eventfds = vec![
+        notification_eventfd,
+        stdout_eventfd,
+        stderr_eventfd,
+        sock_act_eventfd,
+    ];
 
     // parallel startup of all services
     let pid_table = units::activate_unit::activate_units(
