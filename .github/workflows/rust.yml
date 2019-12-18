@@ -20,25 +20,3 @@ jobs:
     - name: Run tests
       run: cargo test --verbose --features linux_eventfd
   
-  macos:
-    runs-on: macos-latest
-
-    steps:
-
-    - uses: actions/checkout@v1
-
-    - name: InstallBrew
-      run: brew install homebrew/cask-cask/brew-cask
-    
-    - name: InstallCargo
-      run: brew cask install cargo
-
-    - name: PrepareBrew
-      run: brew install dbus pkg-config cargo
-
-    - name: Build
-      run: cargo build --verbose
-
-    - name: Run tests
-      run: cargo test --verbose
-  
