@@ -31,7 +31,8 @@ Running `./build_all.sh && cargo run --bin rustysd` will build the test service 
 ## What does not work
 Just some stuff I know does not work but would be cool to have
 1. Pruning the set of loaded units to only the needed one to reach the target unit
-1. Socket activation. Right now services with a socket will be started right away in parallel with all others. They could just not be spawned and waited on with a select until they are ready. This will be needed anyways for inetd style socket activation
+1. Socket activation in inted style
+1. signal handling in a PID1 specific way
 1. Socket options like MaxConnections=/KeepAlive=
 1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
 1. The whole dbus shenanigans (besides waiting on dbus services, which is implemented)
