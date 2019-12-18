@@ -15,7 +15,7 @@ pub fn pre_fork(
     srvc: &mut Service,
     name: &str,
     notification_socket_path: &std::path::PathBuf,
-) -> Preforkresult {
+) -> Result<Preforkresult, String> {
     // setup socket for notifications from the service
     if !notification_socket_path.exists() {
         std::fs::create_dir_all(notification_socket_path).unwrap();
@@ -51,6 +51,8 @@ pub fn pre_fork(
         }
     };
 
+    super::pre_fork_os_specific::pre_fork_os_specific(srvc, name)?;
+
     let child_stdout = if let Some(fd) = &srvc.stdout_dup {
         fd.1
     } else {
@@ -66,10 +68,10 @@ pub fn pre_fork(
         w
     };
 
-    Preforkresult {
+    Ok(Preforkresult {
         notification_socket: stream,
         notify_socket_env_var,
         stdout: child_stdout,
         stderr: child_stderr,
-    }
+    })
 }

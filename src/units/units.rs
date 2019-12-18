@@ -115,7 +115,7 @@ impl Unit {
                     notification_socket_path,
                     eventfds,
                     by_socket_activation,
-                );
+                )?;
             }
         }
         Ok(())

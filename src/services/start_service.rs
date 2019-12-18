@@ -2,8 +2,8 @@ use crate::services::{Service, ServiceStatus};
 use crate::sockets::Socket;
 use crate::units::InternalId;
 
-use super::fork_parent;
 use super::fork_child;
+use super::fork_parent;
 use super::pre_fork;
 
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ fn start_service_with_filedescriptors(
     name: String,
     sockets: &HashMap<InternalId, &Socket>,
     notification_socket_path: std::path::PathBuf,
-) {
+) -> Result<(), String> {
     // check if executable even exists
     let split: Vec<&str> = match &srvc.service_config {
         Some(conf) => conf.exec.split(' ').collect(),
@@ -27,7 +27,7 @@ fn start_service_with_filedescriptors(
             name, &cmd
         );
         srvc.status = ServiceStatus::Stopped;
-        return;
+        return Ok(());
     }
     if !cmd.is_file() {
         error!(
@@ -35,7 +35,7 @@ fn start_service_with_filedescriptors(
             name, &cmd
         );
         srvc.status = ServiceStatus::Stopped;
-        return;
+        return Ok(());
     }
 
     // 1. fork
@@ -44,7 +44,7 @@ fn start_service_with_filedescriptors(
     // 4. set relevant env varibales $LISTEN_FDS $LISTEN_PID
     // 4. execve the cmd with the args
 
-    let prefork_res = pre_fork::pre_fork(srvc, &name, &notification_socket_path);
+    let prefork_res = pre_fork::pre_fork(srvc, &name, &notification_socket_path)?;
 
     // make sure we have the lock that the child will need
     let stream_locked = &*prefork_res.notification_socket.lock().unwrap();
@@ -70,6 +70,7 @@ fn start_service_with_filedescriptors(
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),
     }
+    Ok(())
 }
 
 pub fn start_service(
@@ -77,15 +78,17 @@ pub fn start_service(
     name: String,
     sockets: &HashMap<InternalId, &Socket>,
     notification_socket_path: std::path::PathBuf,
-) {
+) -> Result<(), String> {
     if let Some(conf) = &srvc.service_config {
         if conf.accept {
             warn!("Inetd style accepting is not supported");
             srvc.status = ServiceStatus::Stopped;
+            Ok(())
         } else {
             srvc.status = ServiceStatus::Starting;
-            start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path);
+            start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path)?;
             srvc.runtime_info.up_since = Some(std::time::Instant::now());
+            Ok(())
         }
     } else {
         unreachable!();

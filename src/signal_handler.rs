@@ -18,13 +18,18 @@ pub fn handle_signals(
                     std::iter::from_fn(get_next_exited_child)
                         .take_while(Result::is_ok)
                         .for_each(|val| match val {
-                            Ok((pid, code)) => services::service_exit_handler(
+                            Ok((pid, code)) => match services::service_exit_handler(
                                 pid,
                                 code,
                                 unit_table.clone(),
                                 pid_table.clone(),
                                 notification_socket_path.clone(),
-                            ),
+                            ) {
+                                Ok(()) => { /* Happy */ }
+                                Err(e) => {
+                                    error!("{}", e);
+                                }
+                            },
                             Err(e) => {
                                 error!("{}", e);
                             }

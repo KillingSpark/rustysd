@@ -63,13 +63,13 @@ impl Service {
         notification_socket_path: std::path::PathBuf,
         eventfds: &[RawFd],
         by_socket_activation: bool,
-    ) {
+    ) -> Result<(), String> {
         trace!("Start service {}", name);
 
         match self.status {
             ServiceStatus::NeverRan | ServiceStatus::Stopped => {
                 if by_socket_activation || self.socket_ids.is_empty() {
-                    start_service(self, name.clone(), &sockets, notification_socket_path);
+                    start_service(self, name.clone(), &sockets, notification_socket_path)?;
 
                     if let Some(new_pid) = self.pid {
                         {
@@ -80,8 +80,11 @@ impl Service {
                     } else {
                         // TODO dont even start services that require this one
                     }
-                }else{
-                    trace!("Ignore service {} start, waiting for socket activation instead", name);
+                } else {
+                    trace!(
+                        "Ignore service {} start, waiting for socket activation instead",
+                        name
+                    );
                 }
             }
             _ => error!(
@@ -89,6 +92,7 @@ impl Service {
                 name
             ),
         }
+        Ok(())
     }
 }
 
@@ -98,7 +102,7 @@ pub fn service_exit_handler(
     unit_table: ArcMutUnitTable,
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
-) {
+) -> Result<(), String> {
     let srvc_id = {
         let unit_table_locked = unit_table.read().unwrap();
         let pid_table_locked = &mut *pid_table.lock().unwrap();
@@ -118,12 +122,12 @@ pub fn service_exit_handler(
                         code
                     );
                     pid_table_locked.remove(&pid);
-                    return;
+                    return Ok(());
                 }
             },
             None => {
                 warn!("All spawned processes should have a pid entry");
-                return;
+                return Ok(());
             }
         })
     };
@@ -198,7 +202,7 @@ pub fn service_exit_handler(
                     notification_socket_path,
                     &Vec::new(),
                     true,
-                );
+                )?;
             } else {
                 trace!(
                     "Killing all services requiring service with id {}: {:?}",
@@ -215,4 +219,5 @@ pub fn service_exit_handler(
             }
         }
     }
+    Ok(())
 }
