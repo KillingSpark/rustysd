@@ -30,7 +30,7 @@ jobs:
     - name: InstallBrew
       run: brew install caskroom/cask/brew-cask
     
-    -name: InstallCargo
+    - name: InstallCargo
       run: brew cask install cargo
 
     - name: PrepareBrew
