@@ -89,39 +89,39 @@ fn unix_accept(fd: i32) {
     });
 }
 
-fn handle_unix_seq_pack(fd: i32) {
-    println!("Got new unix seqpack stream! Now printing stuff from the stream:");
-    let mut buf = [0u8; 512];
-    loop {
-        let bytes = match nix::unistd::read(fd, &mut buf[..]) {
-            Ok(b) => b,
-            Err(e) => {
-                println!("Error while reading seqpack stream: {}", e);
-                return;
-            }
-        };
-        print!("{:?}", &buf[0..bytes]);
-    }
-}
-
-fn unix_seq_pack_accept(fd: i32) {
-    std::thread::spawn(move || {
-        loop {
-            let mut new_con_sock_addr = libc::sockaddr {
-                sa_data: [0i8; 14],
-                sa_family: libc::AF_UNIX as u16,
-            };
-            let mut addr_len = 0;
-            let new_con_fd =
-                unsafe { libc::accept(fd, &mut new_con_sock_addr, &mut addr_len) };
-            if new_con_fd < 0 {
-                println!("Error while accepting unix seqpack fd: {}", new_con_fd);
-                return;
-            }
-            handle_unix_seq_pack(new_con_fd);
-        }
-    });
-}
+//fn handle_unix_seq_pack(fd: i32) {
+//    println!("Got new unix seqpack stream! Now printing stuff from the stream:");
+//    let mut buf = [0u8; 512];
+//    loop {
+//        let bytes = match nix::unistd::read(fd, &mut buf[..]) {
+//            Ok(b) => b,
+//            Err(e) => {
+//                println!("Error while reading seqpack stream: {}", e);
+//                return;
+//            }
+//        };
+//        print!("{:?}", &buf[0..bytes]);
+//    }
+//}
+//
+//fn unix_seq_pack_accept(fd: i32) {
+//    std::thread::spawn(move || {
+//        loop {
+//            let mut new_con_sock_addr = libc::sockaddr {
+//                sa_data: [0i8; 14],
+//                sa_family: libc::AF_UNIX as u16,
+//            };
+//            let mut addr_len = 0;
+//            let new_con_fd =
+//                unsafe { libc::accept(fd, &mut new_con_sock_addr, &mut addr_len) };
+//            if new_con_fd < 0 {
+//                println!("Error while accepting unix seqpack fd: {}", new_con_fd);
+//                return;
+//            }
+//            handle_unix_seq_pack(new_con_fd);
+//        }
+//    });
+//}
 
 use std::net::TcpListener;
 use std::net::TcpStream;
@@ -187,8 +187,8 @@ fn main() {
     //handle_upd(10);
     handle_unix_datagram(4);
     handle_unix_datagram(7);
-    unix_seq_pack_accept(5);
-    unix_seq_pack_accept(8);
+    //unix_seq_pack_accept(5);
+    //unix_seq_pack_accept(8);
 
     std::thread::sleep(std::time::Duration::from_secs(3));
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
