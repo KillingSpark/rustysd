@@ -140,7 +140,21 @@ fn main() {
                                 eventfds_clone.clone(),
                                 true,
                             ) {
-                                Ok(_) => { /* TODO set all sockets to activated so they dont get listend to anymore here*/
+                                Ok(_) => {
+                                    /* TODO set all sockets to activated so they dont get listend to anymore here*/
+                                    let srvc_unit = unit_table_locked.get(&srvc_unit_id).unwrap();
+                                    let srvc_unit_locked = srvc_unit.lock().unwrap();
+                                    if let crate::units::UnitSpecialized::Service(srvc) =
+                                        &srvc_unit_locked.specialized
+                                    {
+                                        for sock_unit_id in &srvc.socket_ids {
+                                            let sock_unit = unit_table_locked.get(&sock_unit_id).unwrap();
+                                            let mut sock_unit_locked = sock_unit.lock().unwrap();
+                                            if let crate::units::UnitSpecialized::Socket(sock) = &mut sock_unit_locked.specialized {
+                                                sock.activated = true;
+                                            }
+                                        }
+                                    }
                                 }
                                 Err(e) => {
                                     format!(
