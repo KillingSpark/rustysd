@@ -3,7 +3,7 @@ name: Rust
 on: [push, pull_request]
 
 jobs:
-  build:
+  linux:
 
     runs-on: ubuntu-latest
 
@@ -15,7 +15,30 @@ jobs:
       run: sudo apt-get install -y libdbus-1-dev pkg-config
 
     - name: Build
+      run: cargo build --verbose --features linux_eventfd
+
+    - name: Run tests
+      run: cargo test --verbose --features linux_eventfd
+  
+  macos:
+    runs-on: macos-latest
+
+    steps:
+
+    - uses: actions/checkout@v1
+
+    - name: InstallBrew
+      run: brew install caskroom/cask/brew-cask
+    
+    -name: InstallCargo
+      run: brew cask install cargo
+
+    - name: PrepareBrew
+      run: brew install dbus pkg-config cargo
+
+    - name: Build
       run: cargo build --verbose
 
     - name: Run tests
       run: cargo test --verbose
+  
