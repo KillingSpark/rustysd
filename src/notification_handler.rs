@@ -6,16 +6,23 @@ use std::{
     os::unix::io::{AsRawFd, RawFd},
 };
 
+#[cfg(feature = "kqueue_eventfd")]
+extern crate kqueue;
+
+#[cfg(feature = "kqueue_eventfd")]
 pub fn make_event_fd() -> Result<RawFd, String> {
-    if cfg!(feature = "linux_eventfd") {
-        return nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC)
-            .map_err(|e| format!("Error while creating eventfd: {}", e));
-    } else if cfg!(feature = "kqueue_eventfd") {
-        return nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC)
-            .map_err(|e| format!("Error while creating eventfd: {}", e));
-    } else {
-        return Err("No eventfd implementation feature was selected. Sorry.".into());
-    }
+    return unsafe { kqueue::kqueue_sys::kqueue() };
+}
+
+#[cfg(feature = "linux_eventfd")]
+pub fn make_event_fd() -> Result<RawFd, String> {
+    return nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC)
+        .map_err(|e| format!("Error while creating eventfd: {}", e));
+}
+
+#[cfg(all(not(feature = "linux_eventfd"), not(feature = "kqueue_eventfd")))]
+pub fn make_event_fd() -> Result<RawFd, String> {
+    return Err("No eventfd implementation chose. sorry.".into());
 }
 
 // will be used when service starting outside of the initial starting process is supported
