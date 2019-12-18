@@ -16,10 +16,11 @@ serde_json = "*"
 toml = "*"
 dbus = {version = "*", optional = true}
 kqueue = {version = "*", optional = true}
+kqueue-sys = {version = "*", optional = true}
 
 lumberjack-rs = { git = "https://github.com/KillingSpark/lumberjack-rs" }
 
 [features]
 dbus_support = ["dbus"]
 linux_eventfd = []
-kqueue_eventfd = ["kqueue"]
+kqueue_eventfd = ["kqueue", "kqueue-sys"]

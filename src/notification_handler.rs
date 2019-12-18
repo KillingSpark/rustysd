@@ -7,11 +7,11 @@ use std::{
 };
 
 #[cfg(feature = "kqueue_eventfd")]
-extern crate kqueue;
+extern crate kqueue_sys;
 
 #[cfg(feature = "kqueue_eventfd")]
 pub fn make_event_fd() -> Result<RawFd, String> {
-    return unsafe { kqueue::kqueue_sys::kqueue() };
+    return unsafe { Ok(kqueue_sys::kqueue()) };
 }
 
 #[cfg(feature = "linux_eventfd")]
@@ -36,6 +36,18 @@ pub fn notify_event_fd(eventfd: RawFd) {
     };
 }
 
+#[cfg(feature = "kqueue_eventfd")]
+pub fn reset_event_fd(eventfd: RawFd) {
+    let events: Vec<kqueue_sys::kevent> = Vec::with_capacity(1);
+    unsafe { kqueue_sys::kevent(eventfd, 0, 0, events.as_mut_ptr(), 1, 0) };
+}
+
+#[cfg(all(not(feature = "linux_eventfd"), not(feature = "kqueue_eventfd")))]
+pub fn reset_event_fd(_eventfd: RawFd) {
+    unimplemented!("Doesnt work!");
+}
+
+#[cfg(feature = "linux_eventfd")]
 pub fn reset_event_fd(eventfd: RawFd) {
     //something other than 0 so all waiting select() wake up
     let buf: *mut [u8] = &mut [0u8; 8][..];
