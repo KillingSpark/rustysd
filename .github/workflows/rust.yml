@@ -28,7 +28,7 @@ jobs:
     - uses: actions/checkout@v1
 
     - name: InstallBrew
-      run: brew install caskroom/cask/brew-cask
+      run: brew install homebrew/cask-cask/brew-cask
     
     - name: InstallCargo
       run: brew cask install cargo
