@@ -82,6 +82,12 @@ fn main() {
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
     let sock_act_eventfd =
         nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+    let eventfds = vec![
+        notification_eventfd,
+        stdout_eventfd,
+        stderr_eventfd,
+        sock_act_eventfd,
+    ];
 
     let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || {
@@ -98,17 +104,53 @@ fn main() {
         notification_handler::handle_all_std_err(stderr_eventfd, unit_table_clone);
     });
 
+    let pid_table = Arc::new(Mutex::new(std::collections::HashMap::new()));
+
     let unit_table_clone = unit_table.clone();
+    let pid_table_clone = pid_table.clone();
+    let note_sock_path_clone = conf.notification_sockets_dir.clone();
+    let eventfds_clone = Arc::new(eventfds.clone());
     std::thread::spawn(move || loop {
         match wait_for_socket_activation::wait_for_socket(
             sock_act_eventfd,
             unit_table_clone.clone(),
         ) {
             Ok(ids) => {
-                // TODO start services
-                for id in ids {
-                    let _ = id;
-                    // TODO find service to socket id
+                for socket_id in ids {
+                    let unit_table_locked = unit_table_clone.read().unwrap();
+                    {
+                        let mut srvc_unit_id = None;
+                        for unit in unit_table_locked.values() {
+                            let unit_locked = unit.lock().unwrap();
+                            if let crate::units::UnitSpecialized::Service(srvc) =
+                                &unit_locked.specialized
+                            {
+                                if srvc.socket_ids.contains(&socket_id) {
+                                    srvc_unit_id = Some(unit_locked.id);
+                                }
+                            }
+                        }
+                        if let Some(srvc_unit_id) = srvc_unit_id {
+                            match crate::units::activate_unit::activate_unit(
+                                srvc_unit_id,
+                                None,
+                                unit_table_clone.clone(),
+                                pid_table_clone.clone(),
+                                note_sock_path_clone.clone(),
+                                eventfds_clone.clone(),
+                            ) {
+                                Ok(_) => { /* TODO set all sockets to activated so they dont get listend to anymore here*/
+                                }
+                                Err(e) => {
+                                    format!(
+                                        "Error while starting service from socket activation: {}",
+                                        e
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             Err(e) => {
@@ -118,18 +160,12 @@ fn main() {
         }
     });
 
-    let eventfds = vec![
-        notification_eventfd,
-        stdout_eventfd,
-        stderr_eventfd,
-        sock_act_eventfd,
-    ];
-
     // parallel startup of all services
-    let pid_table = units::activate_unit::activate_units(
+    units::activate_unit::activate_units(
         unit_table.clone(),
         conf.notification_sockets_dir.clone(),
         eventfds.clone(),
+        pid_table.clone(),
     );
 
     notification_handler::notify_event_fds(&eventfds);

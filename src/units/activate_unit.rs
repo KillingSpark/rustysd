@@ -32,7 +32,7 @@ fn activate_units_recursive(
 
             match activate_unit(
                 id,
-                started_ids_copy,
+                Some(started_ids_copy),
                 unit_table_copy,
                 pids_copy,
                 note_sock_copy,
@@ -75,7 +75,7 @@ pub enum StartResult {
 
 pub fn activate_unit(
     id_to_start: InternalId,
-    started_ids: Arc<Mutex<Vec<InternalId>>>,
+    started_ids: Option<Arc<Mutex<Vec<InternalId>>>>,
     unit_table: ArcMutUnitTable,
     pids: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
@@ -101,21 +101,24 @@ pub fn activate_unit(
         };
         {
             let unit_locked = unit.lock().unwrap();
-            let started_ids_locked = started_ids.lock().unwrap();
 
-            // if not all dependencies are yet started ignore this call. THis unit will be activated again when
-            // the next dependency gets ready
-            let all_deps_ready = unit_locked
-                .install
-                .after
-                .iter()
-                .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
-            if !all_deps_ready {
-                trace!(
-                    "Unit: {} ignores activation. Not all dependencies have been started",
-                    unit_locked.conf.name()
-                );
-                return Ok(StartResult::Ignored);
+            if let Some(started_ids) = started_ids {
+                let started_ids_locked = started_ids.lock().unwrap();
+
+                // if not all dependencies are yet started ignore this call. THis unit will be activated again when
+                // the next dependency gets ready
+                let all_deps_ready = unit_locked
+                    .install
+                    .after
+                    .iter()
+                    .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
+                if !all_deps_ready {
+                    trace!(
+                        "Unit: {} ignores activation. Not all dependencies have been started",
+                        unit_locked.conf.name()
+                    );
+                    return Ok(StartResult::Ignored);
+                }
             }
 
             let name = unit_locked.conf.name();
@@ -161,8 +164,8 @@ pub fn activate_units(
     unit_table: ArcMutUnitTable,
     notification_socket_path: std::path::PathBuf,
     eventfds: Vec<RawFd>,
-) -> ArcMutPidTable {
-    let pids = HashMap::new();
+    pid_table: ArcMutPidTable,
+) {
     let mut root_units = Vec::new();
 
     for (id, unit) in &*unit_table.read().unwrap() {
@@ -174,20 +177,17 @@ pub fn activate_units(
     }
 
     let tpool = ThreadPool::new(6);
-    let pids_arc = Arc::new(Mutex::new(pids));
     let eventfds_arc = Arc::new(eventfds);
     let started_ids = Arc::new(Mutex::new(Vec::new()));
     activate_units_recursive(
         root_units,
         started_ids,
         Arc::clone(&unit_table),
-        Arc::clone(&pids_arc),
+        Arc::clone(&pid_table),
         tpool.clone(),
         notification_socket_path,
         eventfds_arc,
     );
 
     tpool.join();
-
-    pids_arc
 }
