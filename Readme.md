@@ -28,7 +28,7 @@ brought up that seem sensible. None of this is definitive though.
 
 1. Provide a PID1 for containers, so unaltered systemd depending services can be run in a container
 1. Provide full init capabilities so this can be used for OS's like redox os or debian/kFreeBSD
-1. Be platform agnostic as long as it's unix
+1. Be platform agnostic as long as it's unix (I develop on linux but I'll try to test it on FreeBSD when I add new platform specific stuff)
 
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested
