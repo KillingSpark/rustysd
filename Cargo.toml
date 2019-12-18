@@ -15,8 +15,11 @@ threadpool = "1.7.1"
 serde_json = "*"
 toml = "*"
 dbus = {version = "*", optional = true}
+kqueue = {version = "*", optional = true}
 
 lumberjack-rs = { git = "https://github.com/KillingSpark/lumberjack-rs" }
 
 [features]
 dbus_support = ["dbus"]
+linux_eventfd = []
+kqueue_eventfd = ["kqueue"]

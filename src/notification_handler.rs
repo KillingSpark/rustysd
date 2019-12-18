@@ -6,8 +6,19 @@ use std::{
     os::unix::io::{AsRawFd, RawFd},
 };
 
+pub fn make_event_fd() -> Result<RawFd, String> {
+    if cfg!(feature = "linux_eventfd") {
+        return nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC)
+            .map_err(|e| format!("Error while creating eventfd: {}", e));
+    } else if cfg!(feature = "kqueue_eventfd") {
+        return nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC)
+            .map_err(|e| format!("Error while creating eventfd: {}", e));
+    } else {
+        return Err("No eventfd implementation feature was selected. Sorry.".into());
+    }
+}
+
 // will be used when service starting outside of the initial starting process is supported
-#[allow(dead_code)]
 pub fn notify_event_fd(eventfd: RawFd) {
     //something other than 0 so all waiting select() wake up
     let zeros: *const [u8] = &[1u8; 8][..];
@@ -176,18 +187,20 @@ pub fn handle_all_std_out(eventfd: RawFd, unit_table: ArcMutUnitTable) {
 pub fn handle_all_std_err(eventfd: RawFd, unit_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id: HashMap<_, _> = unit_table.read().unwrap().iter().fold(
-            HashMap::new(),
-            |mut map, (id, srvc_unit)| {
-                let srvc_unit_locked = srvc_unit.lock().unwrap();
-                if let UnitSpecialized::Service(srvc) = &srvc_unit_locked.specialized {
-                    if let Some(fd) = &srvc.stderr_dup {
-                        map.insert(fd.0, *id);
+        let fd_to_srvc_id: HashMap<_, _> =
+            unit_table
+                .read()
+                .unwrap()
+                .iter()
+                .fold(HashMap::new(), |mut map, (id, srvc_unit)| {
+                    let srvc_unit_locked = srvc_unit.lock().unwrap();
+                    if let UnitSpecialized::Service(srvc) = &srvc_unit_locked.specialized {
+                        if let Some(fd) = &srvc.stderr_dup {
+                            map.insert(fd.0, *id);
+                        }
                     }
-                }
-                map
-            },
-        );
+                    map
+                });
 
         let mut fdset = nix::sys::select::FdSet::new();
         for fd in fd_to_srvc_id.keys() {

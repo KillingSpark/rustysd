@@ -74,14 +74,10 @@ fn main() {
     // listen on user commands like listunits/kill/restart...
     control::accept_control_connections(unit_table.clone());
 
-    let notification_eventfd =
-        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
-    let stdout_eventfd =
-        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
-    let stderr_eventfd =
-        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
-    let sock_act_eventfd =
-        nix::sys::eventfd::eventfd(0, nix::sys::eventfd::EfdFlags::EFD_CLOEXEC).unwrap();
+    let notification_eventfd = notification_handler::make_event_fd().unwrap();
+    let stdout_eventfd = notification_handler::make_event_fd().unwrap();
+    let stderr_eventfd = notification_handler::make_event_fd().unwrap();
+    let sock_act_eventfd = notification_handler::make_event_fd().unwrap();
     let eventfds = vec![
         notification_eventfd,
         stdout_eventfd,
@@ -148,9 +144,12 @@ fn main() {
                                         &srvc_unit_locked.specialized
                                     {
                                         for sock_unit_id in &srvc.socket_ids {
-                                            let sock_unit = unit_table_locked.get(&sock_unit_id).unwrap();
+                                            let sock_unit =
+                                                unit_table_locked.get(&sock_unit_id).unwrap();
                                             let mut sock_unit_locked = sock_unit.lock().unwrap();
-                                            if let crate::units::UnitSpecialized::Socket(sock) = &mut sock_unit_locked.specialized {
+                                            if let crate::units::UnitSpecialized::Socket(sock) =
+                                                &mut sock_unit_locked.specialized
+                                            {
                                                 sock.activated = true;
                                             }
                                         }
