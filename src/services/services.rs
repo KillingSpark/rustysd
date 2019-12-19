@@ -1,7 +1,9 @@
 use super::start_service::*;
 use std::collections::HashMap;
+use std::error::Error;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -68,7 +70,7 @@ impl Service {
 
         match self.status {
             ServiceStatus::NeverRan | ServiceStatus::Stopped => {
-                if by_socket_activation || self.socket_ids.is_empty() {
+                if !by_socket_activation || self.socket_ids.is_empty() {
                     start_service(self, name.clone(), &sockets, notification_socket_path)?;
 
                     if let Some(new_pid) = self.pid {
@@ -82,8 +84,9 @@ impl Service {
                     }
                 } else {
                     trace!(
-                        "Ignore service {} start, waiting for socket activation instead",
-                        name
+                        "Ignore service {} start, waiting for socket activation instead {:?}",
+                        name,
+                        self,
                     );
                 }
             }
@@ -93,6 +96,47 @@ impl Service {
             ),
         }
         Ok(())
+    }
+
+    pub fn kill(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
+        self.status = ServiceStatus::Stopped;
+        self.run_stop_cmd(id, name, pid_table);
+
+        if let Some(proc_group) = self.process_group {
+            match nix::sys::signal::kill(proc_group, nix::sys::signal::Signal::SIGKILL) {
+                Ok(_) => trace!("Success killing process group for service {}", name,),
+                Err(e) => error!("Error killing process group for service {}: {}", name, e,),
+            }
+        }
+    }
+
+    pub fn run_stop_cmd(&self, id: InternalId, name: &str, pid_table: &mut PidTable) {
+        let split: Vec<&str> = match &self.service_config {
+            Some(conf) => {
+                if conf.stop.is_empty() {
+                    return;
+                }
+                conf.stop.split(' ').collect()
+            }
+            None => return,
+        };
+
+        let mut cmd = Command::new(split[0]);
+        for part in &split[1..] {
+            cmd.arg(part);
+        }
+        cmd.stdout(Stdio::null());
+
+        match cmd.spawn() {
+            Ok(child) => {
+                pid_table.insert(
+                    nix::unistd::Pid::from_raw(child.id() as i32),
+                    PidEntry::Stop(id),
+                );
+                trace!("Stopped Service: {} with pid: {:?}", name, self.pid);
+            }
+            Err(e) => panic!(e.description().to_owned()),
+        }
     }
 }
 
@@ -209,12 +253,10 @@ pub fn service_exit_handler(
                     srvc_id,
                     unit_locked.install.required_by
                 );
-                let pid_table_locked = &mut *pid_table.lock().unwrap();
-                let unit_table_locked = &*unit_table.read().unwrap();
                 super::kill_service::kill_services(
                     unit_locked.install.required_by.clone(),
-                    unit_table_locked,
-                    pid_table_locked,
+                    unit_table,
+                    pid_table,
                 );
             }
         }

@@ -5,6 +5,7 @@ use serde_json::Value;
 pub enum Command {
     ListUnits(Option<UnitSpecialized>),
     Status(Option<String>),
+    Restart(String),
 }
 
 enum ParseError {
@@ -20,13 +21,31 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
                     Value::String(s) => Some(s.clone()),
                     _ => {
                         return Err(ParseError::ParamsInvalid(format!(
-                            "Params must be a single string"
+                            "Params must be either none or a single string"
                         )))
                     }
                 },
                 None => None,
             };
             Command::Status(name)
+        }
+        "restart" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => s.clone(),
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => {
+                    return Err(ParseError::ParamsInvalid(format!(
+                        "Params must be a single string"
+                    )))
+                }
+            };
+            Command::Restart(name)
         }
         "list-units" => Command::ListUnits(None),
         _ => {
@@ -100,9 +119,38 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
 pub fn execute_command(
     cmd: Command,
     unit_table: ArcMutUnitTable,
+    pid_table: ArcMutPidTable,
+    notification_socket_path: std::path::PathBuf,
 ) -> Result<serde_json::Value, String> {
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
+        Command::Restart(unit_name) => {
+            trace!("Find unit for name: {}", unit_name);
+            let id = {
+                let unit_table_locked = unit_table.read().unwrap();
+                trace!("Find unit for name: {}", unit_name);
+                let mut srvc: Vec<_> = unit_table_locked
+                    .iter()
+                    .filter(|(_id, unit)| {
+                        let name = unit.lock().unwrap().conf.name();
+                        trace!("Name: {}", name);
+                        unit_name.starts_with(&name) && unit.lock().unwrap().is_service()
+                    })
+                    .collect();
+                if srvc.len() != 1 {
+                    return Err(format!("No service found with name: {}", unit_name));
+                }
+                *srvc.remove(0).0
+            };
+
+            crate::services::restart_service(
+                id,
+                unit_table,
+                pid_table,
+                notification_socket_path,
+                std::sync::Arc::new(Vec::new()),
+            )?;
+        }
         Command::Status(unit_name) => {
             match unit_name {
                 Some(name) => {
@@ -188,18 +236,25 @@ use std::io::Write;
 pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     mut source: Box<T>,
     unit_table: ArcMutUnitTable,
+    pid_table: ArcMutPidTable,
+    notification_socket_path: std::path::PathBuf,
 ) {
     std::thread::spawn(move || loop {
         match super::jsonrpc2::get_next_call(source.as_mut()) {
             Err(e) => {
-                let err = super::jsonrpc2::make_error(
-                    super::jsonrpc2::PARSE_ERROR,
-                    format!("{}", e),
-                    None,
-                );
-                let msg = super::jsonrpc2::make_error_response(None, err);
-                let response_string = serde_json::to_string_pretty(&msg).unwrap();
-                source.write_all(response_string.as_bytes()).unwrap();
+                if let serde_json::error::Category::Eof = e.classify() {
+                    // ignore, just stop reading
+                } else {
+                    let err = super::jsonrpc2::make_error(
+                        super::jsonrpc2::PARSE_ERROR,
+                        format!("{}", e),
+                        None,
+                    );
+                    let msg = super::jsonrpc2::make_error_response(None, err);
+                    let response_string = serde_json::to_string_pretty(&msg).unwrap();
+                    source.write_all(response_string.as_bytes()).unwrap();
+                }
+                return;
             }
             Ok(call) => {
                 match call {
@@ -231,7 +286,13 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
                                 source.write_all(response_string.as_bytes()).unwrap();
                             }
                             Ok(cmd) => {
-                                let msg = match execute_command(cmd, unit_table.clone()) {
+                                trace!("Execute command: {:?}", cmd);
+                                let msg = match execute_command(
+                                    cmd,
+                                    unit_table.clone(),
+                                    pid_table.clone(),
+                                    notification_socket_path.clone(),
+                                ) {
                                     Err(e) => {
                                         let err = super::jsonrpc2::make_error(
                                             super::jsonrpc2::SERVER_ERROR,
@@ -257,17 +318,34 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
 
 pub fn accept_control_connections_unix_socket(
     unit_table: ArcMutUnitTable,
+    pid_table: ArcMutPidTable,
+    notification_socket_path: std::path::PathBuf,
     source: std::os::unix::net::UnixListener,
 ) {
-    std::thread::spawn(move || loop {
+    std::thread::spawn(move || {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(stream, unit_table.clone())
+        listen_on_commands(
+            stream,
+            unit_table.clone(),
+            pid_table.clone(),
+            notification_socket_path.clone(),
+        )
     });
 }
 
-pub fn accept_control_connections_tcp(unit_table: ArcMutUnitTable, source: std::net::TcpListener) {
+pub fn accept_control_connections_tcp(
+    unit_table: ArcMutUnitTable,
+    pid_table: ArcMutPidTable,
+    notification_socket_path: std::path::PathBuf,
+    source: std::net::TcpListener,
+) {
     std::thread::spawn(move || loop {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(stream, unit_table.clone())
+        listen_on_commands(
+            stream,
+            unit_table.clone(),
+            pid_table.clone(),
+            notification_socket_path.clone(),
+        )
     });
 }

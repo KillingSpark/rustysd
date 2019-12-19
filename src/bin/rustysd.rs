@@ -63,6 +63,7 @@ fn main() {
         .map(|(id, unit)| (id, Arc::new(Mutex::new(unit))))
         .collect();
     let unit_table = Arc::new(RwLock::new(unit_table));
+    let pid_table = Arc::new(Mutex::new(std::collections::HashMap::new()));
 
     // listen on user commands like listunits/kill/restart...
     let control_sock_path = conf.notification_sockets_dir.join("control.socket");
@@ -73,9 +74,19 @@ fn main() {
     // TODO make configurable
     use std::os::unix::net::UnixListener;
     let unixsock = UnixListener::bind(&control_sock_path).unwrap();
-    control::accept_control_connections_unix_socket(unit_table.clone(), unixsock);
+    control::accept_control_connections_unix_socket(
+        unit_table.clone(),
+        pid_table.clone(),
+        conf.notification_sockets_dir.clone(),
+        unixsock,
+    );
     let tcpsock = std::net::TcpListener::bind("0.0.0.0:8080").unwrap();
-    control::accept_control_connections_tcp(unit_table.clone(), tcpsock);
+    control::accept_control_connections_tcp(
+        unit_table.clone(),
+        pid_table.clone(),
+        conf.notification_sockets_dir.clone(),
+        tcpsock,
+    );
 
     let notification_eventfd = notification_handler::make_event_fd().unwrap();
     let stdout_eventfd = notification_handler::make_event_fd().unwrap();
@@ -102,8 +113,6 @@ fn main() {
     std::thread::spawn(move || {
         notification_handler::handle_all_std_err(stderr_eventfd.0, unit_table_clone);
     });
-
-    let pid_table = Arc::new(Mutex::new(std::collections::HashMap::new()));
 
     let unit_table_clone = unit_table.clone();
     let pid_table_clone = pid_table.clone();

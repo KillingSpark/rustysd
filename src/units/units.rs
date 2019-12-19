@@ -55,6 +55,28 @@ pub struct Unit {
 }
 
 impl Unit {
+    pub fn is_service(&self) -> bool {
+        if let UnitSpecialized::Service(_) = self.specialized {
+            true
+        }else{
+            false
+        }
+    }
+    pub fn is_socket(&self) -> bool {
+        if let UnitSpecialized::Socket(_) = self.specialized {
+            true
+        }else{
+            false
+        }
+    }
+    pub fn is_target(&self) -> bool {
+        if let UnitSpecialized::Target = self.specialized {
+            true
+        }else{
+            false
+        }
+    }
+
     pub fn dedup_dependencies(&mut self) {
         self.install.wants.dedup();
         self.install.requires.dedup();
