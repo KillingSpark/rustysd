@@ -153,7 +153,7 @@ pub fn activate_unit(
             pids.clone(),
             notification_socket_path.clone(),
             &eventfds,
-            by_socket_activation
+            by_socket_activation,
         )
         .map(|_| StartResult::Started(next_services_ids))
         .map_err(|e| {

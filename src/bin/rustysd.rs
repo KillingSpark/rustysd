@@ -3,11 +3,11 @@ extern crate log;
 extern crate rustysd;
 
 use rustysd::config;
-use rustysd::logging;
-use rustysd::units;
 use rustysd::control;
+use rustysd::logging;
 use rustysd::notification_handler;
 use rustysd::signal_handler;
+use rustysd::units;
 use rustysd::wait_for_socket_activation;
 
 fn move_to_new_session() -> bool {

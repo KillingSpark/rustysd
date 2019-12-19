@@ -1,9 +1,9 @@
 //! Config can be loaded either from env vars, toml, or json.
-//! 
+//!
 //! Currently configurable:
 //! 1. Wether or not to log to disk (and the dir to put the logs in)
 //! 1. Wether or not to log to stdout
-//! 
+//!
 //! 1. Where to find the units (one or more directories)
 //! 1. notification-socket directory (where the unix-domain sockets are placed on which services can notify rustysd)
 

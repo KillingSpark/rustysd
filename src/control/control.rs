@@ -259,22 +259,15 @@ pub fn accept_control_connections_unix_socket(
     unit_table: ArcMutUnitTable,
     source: std::os::unix::net::UnixListener,
 ) {
-    std::thread::spawn(move || {
-        loop {
-            let stream = Box::new(source.accept().unwrap().0);
-            listen_on_commands(stream, unit_table.clone())
-        }
+    std::thread::spawn(move || loop {
+        let stream = Box::new(source.accept().unwrap().0);
+        listen_on_commands(stream, unit_table.clone())
     });
 }
 
-pub fn accept_control_connections_tcp(
-    unit_table: ArcMutUnitTable,
-    source: std::net::TcpListener,
-) {
-    std::thread::spawn(move || {
-        loop {
-            let stream = Box::new(source.accept().unwrap().0);
-            listen_on_commands(stream, unit_table.clone())
-        }
+pub fn accept_control_connections_tcp(unit_table: ArcMutUnitTable, source: std::net::TcpListener) {
+    std::thread::spawn(move || loop {
+        let stream = Box::new(source.accept().unwrap().0);
+        listen_on_commands(stream, unit_table.clone())
     });
 }

@@ -9,8 +9,8 @@ pub fn handle_signals(
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
 ) {
-    let signals =
-        Signals::new(&[signal_hook::SIGCHLD, signal_hook::SIGTERM]).expect("Couldnt setup listening to the signals");
+    let signals = Signals::new(&[signal_hook::SIGCHLD, signal_hook::SIGTERM])
+        .expect("Couldnt setup listening to the signals");
 
     loop {
         // Pick up new signals

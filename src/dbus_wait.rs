@@ -7,7 +7,6 @@ pub use dbus_support::*;
 #[cfg(not(feature = "dbus_support"))]
 pub use no_dbus_support::*;
 
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum WaitResult {
     Ok,
@@ -17,8 +16,8 @@ pub enum WaitResult {
 #[cfg(not(feature = "dbus_support"))]
 mod no_dbus_support {
 
-    use std::error::Error;
     use super::WaitResult;
+    use std::error::Error;
 
     pub fn wait_for_name_system_bus(
         _name: &str,
