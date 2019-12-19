@@ -5,14 +5,12 @@ use crate::units::*;
 use signal_hook::iterator::Signals;
 
 pub fn handle_signals(
+    signals: Signals,
     unit_table: ArcMutUnitTable,
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
 ) {
-    let signals = Signals::new(&[signal_hook::SIGCHLD, signal_hook::SIGTERM])
-        .expect("Couldnt setup listening to the signals");
-
-    loop {
+    'outer: loop {
         // Pick up new signals
         for signal in signals.forever() {
             match signal as libc::c_int {
@@ -37,14 +35,14 @@ pub fn handle_signals(
                             }
                         });
                 }
-                signal_hook::SIGTERM => {
+                signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
                     // TODO kill all services
                     // TODO close all notification sockets
                     // TODO close all other sockets
-                    println!("Rusty ---- Checking out.");
-                    break;
+                    println!("Received termination signal. Rustysd checking out.");
+                    break 'outer;
                 }
-
+                
                 _ => unreachable!(),
             }
         }

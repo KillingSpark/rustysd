@@ -9,6 +9,7 @@ use rustysd::notification_handler;
 use rustysd::signal_handler;
 use rustysd::units;
 use rustysd::wait_for_socket_activation;
+use signal_hook::iterator::Signals;
 
 fn move_to_new_session() -> bool {
     match nix::unistd::fork() {
@@ -39,12 +40,16 @@ fn main() {
         }
     };
 
+    // TODO make configurable
     let should_go_to_new_session = false;
     if should_go_to_new_session {
         if !move_to_new_session() {
             return;
         }
     }
+
+    let signals = Signals::new(&[signal_hook::SIGCHLD, signal_hook::SIGTERM, signal_hook::SIGINT, signal_hook::SIGQUIT])
+        .expect("Couldnt setup listening to the signals");
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
@@ -197,5 +202,10 @@ fn main() {
     notification_handler::notify_event_fds(&eventfds);
 
     // listen on signals from the child processes
-    signal_handler::handle_signals(unit_table, pid_table, conf.notification_sockets_dir.clone());
+    signal_handler::handle_signals(
+        signals,
+        unit_table,
+        pid_table,
+        conf.notification_sockets_dir.clone(),
+    );
 }
