@@ -96,7 +96,17 @@ fn main() {
     let unit_table = Arc::new(RwLock::new(unit_table));
 
     // listen on user commands like listunits/kill/restart...
-    control::accept_control_connections(unit_table.clone());
+    let control_sock_path = conf.notification_sockets_dir.join("control.socket");
+    if control_sock_path.exists() {
+        std::fs::remove_file(&control_sock_path).unwrap();
+    }
+
+    // TODO make configurable
+    use std::os::unix::net::UnixListener;
+    let unixsock = UnixListener::bind(&control_sock_path).unwrap();
+    control::accept_control_connections_unix_socket(unit_table.clone(), unixsock);
+    let tcpsock = std::net::TcpListener::bind("0.0.0.0:8080").unwrap();
+    control::accept_control_connections_tcp(unit_table.clone(), tcpsock);
 
     let notification_eventfd = notification_handler::make_event_fd().unwrap();
     let stdout_eventfd = notification_handler::make_event_fd().unwrap();

@@ -255,16 +255,25 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     });
 }
 
-pub fn accept_control_connections(unit_table: ArcMutUnitTable) {
+pub fn accept_control_connections_unix_socket(
+    unit_table: ArcMutUnitTable,
+    source: std::os::unix::net::UnixListener,
+) {
     std::thread::spawn(move || {
-        use std::os::unix::net::UnixListener;
-        let path: std::path::PathBuf = "./notifications/control.socket".into();
-        if path.exists() {
-            std::fs::remove_file(&path).unwrap();
-        }
-        let cmd_source = UnixListener::bind(&path).unwrap();
         loop {
-            let stream = Box::new(cmd_source.accept().unwrap().0);
+            let stream = Box::new(source.accept().unwrap().0);
+            listen_on_commands(stream, unit_table.clone())
+        }
+    });
+}
+
+pub fn accept_control_connections_tcp(
+    unit_table: ArcMutUnitTable,
+    source: std::net::TcpListener,
+) {
+    std::thread::spawn(move || {
+        loop {
+            let stream = Box::new(source.accept().unwrap().0);
             listen_on_commands(stream, unit_table.clone())
         }
     });
