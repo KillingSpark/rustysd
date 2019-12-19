@@ -7,23 +7,20 @@ pub enum Command {
     Status(Option<String>),
 }
 
-pub fn parse_command(cmd: Value) -> Result<Command, String> {
-    let command = match cmd {
-        Value::Object(map) => {
-            let cmd_str = map.get("cmd");
-            match cmd_str {
-                Some(Value::String(cmd_str)) => match cmd_str.as_str() {
-                    "status" => match map.get("name") {
-                        Some(Value::String(name)) => Command::Status(Some(name.clone())),
-                        _ => Command::Status(None),
-                    },
-                    "list-units" => Command::ListUnits(None),
-                    _ => return Err(format!("Unknown command: {}", cmd_str)),
+pub fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, String> {
+    let command = match call.method.as_str() {
+        "status" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => Some(s.clone()),
+                    _ => None, // TODO invalid aruments error
                 },
-                _ => return Err("No cmd field found".to_owned()),
-            }
+                None => None,
+            };
+            Command::Status(name)
         }
-        _ => return Err("Should have been an object".to_owned()),
+        "list-units" => Command::ListUnits(None),
+        _ => return Err(format!("Unknown method: {}", call.method)),
     };
 
     Ok(command)
@@ -86,7 +83,7 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
     Value::Object(map)
 }
 
-pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<String, String> {
+pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<serde_json::Value, String> {
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
         Command::Status(unit_name) => {
@@ -166,7 +163,7 @@ pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<Stri
         }
     }
 
-    Ok(serde_json::to_string_pretty(&result_vec).unwrap())
+    Ok(result_vec)
 }
 
 use std::io::Read;
@@ -176,16 +173,37 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     unit_table: ArcMutUnitTable,
 ) {
     std::thread::spawn(move || loop {
-        match serde_json::from_reader(&mut *source) {
-            Ok(v) => {
-                let v: Value = v;
-                let cmd = parse_command(v).unwrap();
-                let response = execute_command(cmd, unit_table.clone()).unwrap();
-                source.write_all(response.as_bytes()).unwrap();
+        match super::jsonrpc2::get_next_call(source.as_mut()) {
+            Err(_e) => {
+                // TODO send parse error
             }
-            Err(e) => {
-                error!("Error while reading from command source {}", e);
-                return;
+            Ok(call) => {
+                match call {
+                    Err(_e) => {
+                        // TODO send invalid request error
+                    }
+                    Ok(call) => {
+                        match parse_command(&call) {
+                            Err(_e) => {
+                                // TODO send method not found / invalid arguments error
+                            }
+                            Ok(cmd) => {
+                                let msg = match execute_command(cmd, unit_table.clone()) {
+                                    Err(e) => {
+                                        let err = super::jsonrpc2::make_error(super::jsonrpc2::SERVER_ERROR, e, None);
+                                        super::jsonrpc2::make_error_response(call.id, err)
+                                    }   
+                                    Ok(result) => {
+                                        super::jsonrpc2::make_result_response(call.id, result)
+                                    }
+                                };
+                                
+                                let response_string = serde_json::to_string_pretty(&msg).unwrap();
+                                source.write_all(response_string.as_bytes()).unwrap();
+                            }
+                        }
+                    }
+                }
             }
         }
     });
