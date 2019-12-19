@@ -43,8 +43,11 @@ pub const PARSE_ERROR: i64 = -32700;
 pub const INVALID_REQUEST_ERROR: i64 = -32600;
 pub const METHOD_NOT_FOUND_ERROR: i64 = -32601;
 pub const INVALID_PARAMS_ERROR: i64 = -32602;
-pub const INTERNAL_ERROR: i64 = -32603;
 pub const SERVER_ERROR: i64 = -32000;
+
+// not needed right now
+#[allow(dead_code)]
+pub const INTERNAL_ERROR: i64 = -32603;
 
 pub struct Error {
     code: i64,

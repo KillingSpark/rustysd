@@ -7,20 +7,34 @@ pub enum Command {
     Status(Option<String>),
 }
 
-pub fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, String> {
+enum ParseError {
+    MethodNotFound(String),
+    ParamsInvalid(String),
+}
+
+fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
     let command = match call.method.as_str() {
         "status" => {
             let name = match &call.params {
                 Some(params) => match params {
                     Value::String(s) => Some(s.clone()),
-                    _ => None, // TODO invalid aruments error
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
                 },
                 None => None,
             };
             Command::Status(name)
         }
         "list-units" => Command::ListUnits(None),
-        _ => return Err(format!("Unknown method: {}", call.method)),
+        _ => {
+            return Err(ParseError::MethodNotFound(format!(
+                "Unknown method: {}",
+                call.method
+            )))
+        }
     };
 
     Ok(command)
@@ -83,7 +97,10 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
     Value::Object(map)
 }
 
-pub fn execute_command(cmd: Command, unit_table: ArcMutUnitTable) -> Result<serde_json::Value, String> {
+pub fn execute_command(
+    cmd: Command,
+    unit_table: ArcMutUnitTable,
+) -> Result<serde_json::Value, String> {
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
         Command::Status(unit_name) => {
@@ -174,30 +191,59 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
 ) {
     std::thread::spawn(move || loop {
         match super::jsonrpc2::get_next_call(source.as_mut()) {
-            Err(_e) => {
-                // TODO send parse error
+            Err(e) => {
+                let err = super::jsonrpc2::make_error(
+                    super::jsonrpc2::PARSE_ERROR,
+                    format!("{}", e),
+                    None,
+                );
+                let msg = super::jsonrpc2::make_error_response(None, err);
+                let response_string = serde_json::to_string_pretty(&msg).unwrap();
+                source.write_all(response_string.as_bytes()).unwrap();
             }
             Ok(call) => {
                 match call {
-                    Err(_e) => {
-                        // TODO send invalid request error
+                    Err(e) => {
+                        let err = super::jsonrpc2::make_error(
+                            super::jsonrpc2::INVALID_REQUEST_ERROR,
+                            e,
+                            None,
+                        );
+                        let msg = super::jsonrpc2::make_error_response(None, err);
+                        let response_string = serde_json::to_string_pretty(&msg).unwrap();
+                        source.write_all(response_string.as_bytes()).unwrap();
                     }
                     Ok(call) => {
                         match parse_command(&call) {
-                            Err(_e) => {
-                                // TODO send method not found / invalid arguments error
+                            Err(e) => {
+                                // TODO invalid arguments error
+                                let (code, err_msg) = match e {
+                                    ParseError::ParamsInvalid(s) => {
+                                        (super::jsonrpc2::INVALID_PARAMS_ERROR, s)
+                                    }
+                                    ParseError::MethodNotFound(s) => {
+                                        (super::jsonrpc2::METHOD_NOT_FOUND_ERROR, s)
+                                    }
+                                };
+                                let err = super::jsonrpc2::make_error(code, err_msg, None);
+                                let msg = super::jsonrpc2::make_error_response(call.id, err);
+                                let response_string = serde_json::to_string_pretty(&msg).unwrap();
+                                source.write_all(response_string.as_bytes()).unwrap();
                             }
                             Ok(cmd) => {
                                 let msg = match execute_command(cmd, unit_table.clone()) {
                                     Err(e) => {
-                                        let err = super::jsonrpc2::make_error(super::jsonrpc2::SERVER_ERROR, e, None);
+                                        let err = super::jsonrpc2::make_error(
+                                            super::jsonrpc2::SERVER_ERROR,
+                                            e,
+                                            None,
+                                        );
                                         super::jsonrpc2::make_error_response(call.id, err)
-                                    }   
+                                    }
                                     Ok(result) => {
                                         super::jsonrpc2::make_result_response(call.id, result)
                                     }
                                 };
-                                
                                 let response_string = serde_json::to_string_pretty(&msg).unwrap();
                                 source.write_all(response_string.as_bytes()).unwrap();
                             }
