@@ -1,3 +1,5 @@
+/// Activate units (recursively and parallel along the dependency tree)
+
 use super::units::*;
 use std::collections::HashMap;
 use std::os::unix::io::RawFd;

@@ -1,3 +1,6 @@
+/// Systemd has the feature to wait on services that have type dbus. This means it waits until a speicifc name has been grabbed on the bus.
+/// This is made optional here to not have a hard dependency on libdbus.
+
 #[cfg(feature = "dbus_support")]
 pub use dbus_support::*;
 

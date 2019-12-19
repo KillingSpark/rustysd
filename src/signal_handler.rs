@@ -1,3 +1,5 @@
+/// Handle signals send to this process from either the outside or the child processes
+
 use crate::services;
 use crate::units::*;
 use signal_hook::iterator::Signals;
@@ -8,7 +10,7 @@ pub fn handle_signals(
     notification_socket_path: std::path::PathBuf,
 ) {
     let signals =
-        Signals::new(&[signal_hook::SIGCHLD]).expect("Couldnt setup listening to the signals");
+        Signals::new(&[signal_hook::SIGCHLD, signal_hook::SIGTERM]).expect("Couldnt setup listening to the signals");
 
     loop {
         // Pick up new signals
@@ -34,6 +36,13 @@ pub fn handle_signals(
                                 error!("{}", e);
                             }
                         });
+                }
+                signal_hook::SIGTERM => {
+                    // TODO kill all services
+                    // TODO close all notification sockets
+                    // TODO close all other sockets
+                    println!("Rusty ---- Checking out.");
+                    break;
                 }
 
                 _ => unreachable!(),

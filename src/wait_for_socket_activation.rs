@@ -1,3 +1,5 @@
+/// Wait for sockets to activate their respective services
+
 use crate::units::*;
 use std::os::unix::io::RawFd;
 

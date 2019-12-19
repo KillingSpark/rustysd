@@ -1,5 +1,5 @@
 # rustysd
-Rustysd is a service manager that tries to replicate systemd behaviour for a subset of the configuration possibilities. It focuses on the core functionality
+Rustysd is a service manager that tries to replicate systemd behaviour for a subset of the configuration possibilities. It focuses on the core functionality of a service manager.
 
 For now this project is just out of interest how far I could come with this 
 and what would be needed to get a somewhat working system. It is very much a proof of concept / work in progress. For the love of god do not use this
