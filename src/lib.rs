@@ -64,10 +64,13 @@ pub fn become_subreaper(set: bool) {
 pub fn become_subreaper(set: bool) {
     unsafe {
         // Set subreaper to collect all zombies left behind by the services
+        // TODO make pull request to libc to include this
+        let PROC_REAP_ACQUIRE = 2;
+        let PROC_REAP_RELEASE = 3;
         let res = if set {
-            libc::procctl(libc::PROC_REAP_ACQUIRE, 1)
+            libc::procctl(PROC_REAP_ACQUIRE)
         } else {
-            libc::procctl(libc::PROC_REAP_ACQUIRE, 0)
+            libc::procctl(PROC_REAP_RELEASE)
         };
         if res < 0 {
             error!("Couldnt set subreaper for rustysd");
