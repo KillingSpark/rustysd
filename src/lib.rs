@@ -70,7 +70,19 @@ extern "C" {
     ) -> libc::c_int;
 }
 
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
 const PROC_REAP_ACQUIRE: libc::c_int = 2;
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
 const PROC_REAP_RELEASE: libc::c_int = 3;
 
 #[cfg(any(
