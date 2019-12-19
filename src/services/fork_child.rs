@@ -214,8 +214,6 @@ pub fn after_fork_child(
     setup_env_vars(sockets, notify_socket_env_var);
     let (cmd, args) = prepare_exec_args(srvc);
 
-    crate::become_subreaper(false);
-
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
     match nix::unistd::execv(&cmd, &args) {
         Ok(_) => {
