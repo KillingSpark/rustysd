@@ -25,6 +25,7 @@ fn move_to_new_session() -> bool {
     }
 }
 
+
 fn main() {
     let (log_conf, conf) = config::load_config(None);
 
@@ -48,13 +49,7 @@ fn main() {
         }
     }
 
-    unsafe {
-        // Set subreaper to collect all zombies left behind by the services
-        if libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1) < 0{
-            error!("Couldnt set subreaper for rustysd");
-            return;
-        }
-    }
+    rustysd::become_subreaper(true);
 
     let signals = Signals::new(&[
         signal_hook::SIGCHLD,

@@ -39,3 +39,39 @@ extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
 extern crate toml;
+
+#[cfg(target_os = "linux")]
+pub fn become_subreaper(set: bool) {
+    unsafe {
+        // Set subreaper to collect all zombies left behind by the services
+        let res = if set {
+            libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1)
+        } else {
+            libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 0)
+        };
+        if res < 0 {
+            error!("Couldnt set subreaper for rustysd");
+            return;
+        }
+    }
+}
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
+pub fn become_subreaper(set: bool) {
+    unsafe {
+        // Set subreaper to collect all zombies left behind by the services
+        let res = if set {
+            libc::procctl(PROC_REAP_ACQUIRE, 1)
+        } else {
+            libc::procctl(PROC_REAP_ACQUIRE, 0)
+        };
+        if res < 0 {
+            error!("Couldnt set subreaper for rustysd");
+            return;
+        }
+    }
+}
