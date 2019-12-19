@@ -214,6 +214,11 @@ pub fn after_fork_child(
     setup_env_vars(sockets, notify_socket_env_var);
     let (cmd, args) = prepare_exec_args(srvc);
 
+    unsafe {
+        // Unset subreaper so rustysd can collect all zombies left behind by this service
+        libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1);
+    }
+
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
     match nix::unistd::execv(&cmd, &args) {
         Ok(_) => {

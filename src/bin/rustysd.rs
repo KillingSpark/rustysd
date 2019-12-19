@@ -48,8 +48,21 @@ fn main() {
         }
     }
 
-    let signals = Signals::new(&[signal_hook::SIGCHLD, signal_hook::SIGTERM, signal_hook::SIGINT, signal_hook::SIGQUIT])
-        .expect("Couldnt setup listening to the signals");
+    unsafe {
+        // Set subreaper to collect all zombies left behind by the services
+        if libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1) < 0{
+            error!("Couldnt set subreaper for rustysd");
+            return;
+        }
+    }
+
+    let signals = Signals::new(&[
+        signal_hook::SIGCHLD,
+        signal_hook::SIGTERM,
+        signal_hook::SIGINT,
+        signal_hook::SIGQUIT,
+    ])
+    .expect("Couldnt setup listening to the signals");
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
