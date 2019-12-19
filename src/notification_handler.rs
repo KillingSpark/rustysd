@@ -1,6 +1,6 @@
-/// collect the different streams from the services
-/// Stdout and stderr get redirected to the normal stdout/err but are prefixed with a unique string to identify their output
-/// streams from the notification sockets get parsed and applied to the respective service
+//! collect the different streams from the services
+//! Stdout and stderr get redirected to the normal stdout/err but are prefixed with a unique string to identify their output
+//! streams from the notification sockets get parsed and applied to the respective service
 
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;

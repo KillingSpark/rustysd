@@ -1,4 +1,4 @@
-/// Handle signals send to this process from either the outside or the child processes
+//! Handle signals send to this process from either the outside or the child processes
 
 use crate::services;
 use crate::units::*;

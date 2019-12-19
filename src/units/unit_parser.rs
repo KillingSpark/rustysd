@@ -1,5 +1,5 @@
-/// Parse all supported unit types / options for these and do needed operations like matching services <-> sockets and adding implicit dependencies like
-/// all sockets to socket.target
+//! Parse all supported unit types / options for these and do needed operations like matching services <-> sockets and adding implicit dependencies like
+//! all sockets to socket.target
 
 use crate::units::*;
 

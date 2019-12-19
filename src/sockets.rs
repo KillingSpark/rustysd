@@ -1,4 +1,4 @@
-/// Socket related code. Opening of all different kinds, match sockets to services etc
+//! Socket related code. Opening of all different kinds, match sockets to services etc
 
 use std::{
     net::TcpListener,
