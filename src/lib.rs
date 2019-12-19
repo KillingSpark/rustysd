@@ -61,6 +61,14 @@ pub fn become_subreaper(set: bool) {
     target_os = "netbsd",
     target_os = "dragonfly"
 ))]
+unsafe extern "C" fn procctl(option: c_int, ...) -> c_int;
+
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
 pub fn become_subreaper(set: bool) {
     unsafe {
         // Set subreaper to collect all zombies left behind by the services
@@ -68,9 +76,9 @@ pub fn become_subreaper(set: bool) {
         let PROC_REAP_ACQUIRE = 2;
         let PROC_REAP_RELEASE = 3;
         let res = if set {
-            libc::procctl(PROC_REAP_ACQUIRE)
+            procctl(PROC_REAP_ACQUIRE)
         } else {
-            libc::procctl(PROC_REAP_RELEASE)
+            procctl(PROC_REAP_RELEASE)
         };
         if res < 0 {
             error!("Couldnt set subreaper for rustysd");
