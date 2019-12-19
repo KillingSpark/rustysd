@@ -61,7 +61,7 @@ pub fn become_subreaper(set: bool) {
     target_os = "netbsd",
     target_os = "dragonfly"
 ))]
-unsafe extern "C" fn procctl(option: c_int, ...) -> c_int;
+extern "C" {fn procctl(option: c_int, ...) -> c_int;}
 
 #[cfg(any(
     target_os = "freebsd",
