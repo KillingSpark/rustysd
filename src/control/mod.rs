@@ -6,7 +6,7 @@
 //! ### status
 //! * If the param is a string show status of the unit with that name (might get the same filtering as list-units in the future).
 //! * If no param is given, show status of all units
-//! 
+//!
 //! ## Send commands
 //! Currently there is no utility to send commands to this service. There will be in the future. Until then this can be used to send
 //! calls to the control socket

@@ -11,7 +11,7 @@ mod pre_fork_os_specific;
 mod services;
 mod start_service;
 
-pub use services::*;
-pub use kill_service::restart_service;
 pub use kill_service::kill_service;
 pub use kill_service::kill_services;
+pub use kill_service::restart_service;
+pub use services::*;

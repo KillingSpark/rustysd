@@ -42,7 +42,7 @@ pub fn handle_signals(
                     println!("Received termination signal. Rustysd checking out.");
                     break 'outer;
                 }
-                
+
                 _ => unreachable!(),
             }
         }

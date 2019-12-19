@@ -61,11 +61,17 @@ pub fn become_subreaper(set: bool) {
     target_os = "netbsd",
     target_os = "dragonfly"
 ))]
-extern "C" {fn procctl(idtype: libc::c_int, id: libc::c_int, cmd: libc::c_int, args: *const std::ffi::c_void) -> libc::c_int;}
+extern "C" {
+    fn procctl(
+        idtype: libc::c_int,
+        id: libc::c_int,
+        cmd: libc::c_int,
+        args: *const std::ffi::c_void,
+    ) -> libc::c_int;
+}
 
-
-        const PROC_REAP_ACQUIRE: libc::c_int = 2;
-        const PROC_REAP_RELEASE: libc::c_int = 3;
+const PROC_REAP_ACQUIRE: libc::c_int = 2;
+const PROC_REAP_RELEASE: libc::c_int = 3;
 
 #[cfg(any(
     target_os = "freebsd",
@@ -77,16 +83,26 @@ pub fn become_subreaper(set: bool) {
     unsafe {
         // Set subreaper to collect all zombies left behind by the services
         // TODO make pull request to libc to include this
-        
+
         let res = if set {
-            procctl(libc::P_PID as i32, libc::getpid(), PROC_REAP_ACQUIRE, std::ptr::null())
+            procctl(
+                libc::P_PID as i32,
+                libc::getpid(),
+                PROC_REAP_ACQUIRE,
+                std::ptr::null(),
+            )
         } else {
-            procctl(libc::P_PID as i32, libc::getpid(), PROC_REAP_RELEASE, std::ptr::null())
+            procctl(
+                libc::P_PID as i32,
+                libc::getpid(),
+                PROC_REAP_RELEASE,
+                std::ptr::null(),
+            )
         };
         if res < 0 {
             eprintln!("Couldnt set subreaper for rustysd");
             return;
-        }else{
+        } else {
             eprintln!("Acquire/Release subreaper privilege successfully");
         }
     }

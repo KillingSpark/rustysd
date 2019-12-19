@@ -25,7 +25,6 @@ fn move_to_new_session() -> bool {
     }
 }
 
-
 fn main() {
     let (log_conf, conf) = config::load_config(None);
 
