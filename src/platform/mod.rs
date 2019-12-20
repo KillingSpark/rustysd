@@ -15,7 +15,11 @@
 //! 1. relibc (for the select, which is not yet in the syscalls crate?)
 //! 2. syscall (for most of all other nix:: functions)
 //! 
+//! We could also wait for [this pull request](https://github.com/nix-rust/nix/pull/1098) to the nix crate to get redox support in there which would
+//! make our life very much easier
+//! 
 //! We'd also need to make some more functionality optional like subprocess reaping (which only matters if we are not PID1)
+//! 
 
 mod eventfd;
 mod subreaper;
