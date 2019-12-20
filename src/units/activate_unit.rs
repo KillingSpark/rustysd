@@ -92,7 +92,7 @@ pub fn activate_unit(
     // 2) the needed sockets if it is a service unit
     // this all needs to happen under the unit_table lock because there is a deadlock
     // hazard when taking the unit_table lock after already holding a unit lock
-    let mut socket_units = HashMap::new();
+    let mut socket_units = Vec::new();
     let mut socket_units_locked = HashMap::new();
     let mut socket_units_refs = HashMap::new();
     let unit = {
@@ -128,6 +128,9 @@ pub fn activate_unit(
             let name = unit_locked.conf.name();
             trace!("Lock required units for unit {}", name);
             socket_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
+
+            // sort to make sure units always get locked in the same ordering
+            socket_units.sort_by(|(lid, _), (rid, _)| lid.cmp(rid));
 
             for (id, unit) in &socket_units {
                 trace!("Lock unit: {}", id);
