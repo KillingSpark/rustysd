@@ -1,3 +1,4 @@
+use crate::platform::setenv;
 use crate::services::Service;
 use crate::sockets::Socket;
 use crate::units::InternalId;
@@ -59,12 +60,6 @@ fn setup_env_vars(sockets: &HashMap<InternalId, &Socket>, notify_socket_env_var:
     let pid_str = &format!("{}", pid);
     let fds_str = &format!("{}", num_fds);
 
-    unsafe fn setenv(key: &str, value: &str) {
-        let k = std::ffi::CString::new(key.as_bytes()).unwrap();
-        let v = std::ffi::CString::new(value.as_bytes()).unwrap();
-
-        libc::setenv(k.as_ptr(), v.as_ptr(), 1);
-    }
     let full_name_list = name_lists.join(":");
     unsafe {
         setenv("LISTEN_FDS", fds_str);
@@ -136,26 +131,14 @@ fn dup_fds(name: &str, sockets: &HashMap<InternalId, &Socket>) {
                     old_fd, new_fd, actual_new_fd
                 );
             }
-            // unset the CLOEXEC flags on the relevant FDs
-            let old_flags = unsafe { libc::fcntl(new_fd, libc::F_GETFD, 0) };
-            if old_flags <= -1 {
-                eprintln!(
-                    "[FORK_CHILD {}] failed to manually get the FD flag on fd: {}",
-                    name, new_fd
-                )
-            } else {
-                // need to actually flip the u32 not just negate the i32.....
-                let unset_cloexec_flag = (libc::FD_CLOEXEC as u32 ^ 0xFFFF_FFFF) as i32;
-                let new_flags = old_flags & unset_cloexec_flag;
-
-                let result = unsafe { libc::fcntl(new_fd, libc::F_SETFD, new_flags) };
-                if result <= -1 {
+            unsafe {
+                if let Err(msg) = crate::platform::unset_cloexec(new_fd) {
                     eprintln!(
-                        "[FORK_CHILD {}] failed to manually unset the CLOEXEC flag on fd: {}",
-                        name, new_fd
-                    )
+                        "[FORK_CHILD {}] Error while unsetting cloexec flag {}",
+                        name, msg
+                    );
                 }
-            }
+            };
             fd_idx += 1;
         }
     }

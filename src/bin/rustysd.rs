@@ -6,6 +6,7 @@ use rustysd::config;
 use rustysd::control;
 use rustysd::logging;
 use rustysd::notification_handler;
+use rustysd::platform;
 use rustysd::signal_handler;
 use rustysd::units;
 use rustysd::wait_for_socket_activation;
@@ -48,7 +49,7 @@ fn main() {
         }
     }
 
-    rustysd::become_subreaper(true);
+    rustysd::platform::become_subreaper(true);
 
     let signals = Signals::new(&[
         signal_hook::SIGCHLD,
@@ -100,10 +101,10 @@ fn main() {
         tcpsock,
     );
 
-    let notification_eventfd = notification_handler::make_event_fd().unwrap();
-    let stdout_eventfd = notification_handler::make_event_fd().unwrap();
-    let stderr_eventfd = notification_handler::make_event_fd().unwrap();
-    let sock_act_eventfd = notification_handler::make_event_fd().unwrap();
+    let notification_eventfd = platform::make_event_fd().unwrap();
+    let stdout_eventfd = platform::make_event_fd().unwrap();
+    let stderr_eventfd = platform::make_event_fd().unwrap();
+    let sock_act_eventfd = platform::make_event_fd().unwrap();
     let eventfds = vec![
         notification_eventfd.1,
         stdout_eventfd.1,
@@ -206,7 +207,7 @@ fn main() {
         pid_table.clone(),
     );
 
-    notification_handler::notify_event_fds(&eventfds);
+    platform::notify_event_fds(&eventfds);
 
     // listen on signals from the child processes
     signal_handler::handle_signals(

@@ -36,7 +36,7 @@ pub fn wait_for_socket(
             let mut activated_ids = Vec::new();
             if fdset.contains(eventfd) {
                 trace!("Interrupted socketactivation select because the eventfd fired");
-                crate::notification_handler::reset_event_fd(eventfd);
+                crate::platform::reset_event_fd(eventfd);
                 trace!("Reset eventfd value");
             } else {
                 for (fd, id) in &fd_to_srvc_id {

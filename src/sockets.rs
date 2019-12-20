@@ -162,27 +162,14 @@ impl UnixSocketConfig {
                     }
                 }
 
-                //let addr_family = nix::sys::socket::AddressFamily::Unix;
-                //let sock_type = nix::sys::socket::SockType::SeqPacket;
-                //let flags = nix::sys::socket::SockFlag::empty(); //flags can be set by using the fnctl calls later if necessary
-                let protocol = 0; // not really important, used to choose protocol but we dont support sockets where thats relevant
-
                 let path = std::path::PathBuf::from(&path);
-                let unix_addr = nix::sys::socket::UnixAddr::new(&path).unwrap();
-                let sock_addr = nix::sys::socket::SockAddr::Unix(unix_addr);
-
-                trace!("opening seqpacket unix socket: {:?}", path);
-                // first create the socket
-                // cant use nix::socket because they only allow tcp/udp as protocols
-                // TODO make pull request and get a "Auto" = 0 member
-                let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, protocol) };
-                // then bind the socket to the path
-                nix::sys::socket::bind(fd, &sock_addr).unwrap();
-                // then make the socket an accepting one
-                nix::sys::socket::listen(fd, 128).unwrap();
-
-                // return our own type until the std supports seuqntial packet unix sockets
-                Ok(Arc::new(Box::new(UnixSeqPacket(Some(fd)))))
+                match crate::platform::make_seqpacket_socket(&path) {
+                    Ok(fd) => {
+                        // return our own type until the std supports sequential packet unix sockets
+                        Ok(Arc::new(Box::new(UnixSeqPacket(Some(fd)))))
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
     }

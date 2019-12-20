@@ -78,7 +78,7 @@ impl Service {
                             let mut pids = pids.lock().unwrap();
                             pids.insert(new_pid, PidEntry::Service(id));
                         }
-                        crate::notification_handler::notify_event_fds(&eventfds)
+                        crate::platform::notify_event_fds(&eventfds)
                     } else {
                         // TODO dont even start services that require this one
                     }
