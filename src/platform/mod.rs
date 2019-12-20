@@ -9,6 +9,13 @@
 //! 
 //! eventfd should contain an implementation that creates an eventfd (or a similarly working) tuple of filedescriptors
 //! The pipe() implementation should work (in some variation) on many platforms
+//! 
+//! ## Redox support
+//! To implement all this stuff in redox we probably need these crates:
+//! 1. relibc (for the select, which is not yet in the syscalls crate?)
+//! 2. syscall (for most of all other nix:: functions)
+//! 
+//! We'd also need to make some more functionality optional like subprocess reaping (which only matters if we are not PID1)
 
 mod eventfd;
 mod subreaper;
@@ -16,4 +23,13 @@ mod unix_common;
 
 pub use eventfd::*;
 pub use subreaper::*;
+
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly",
+    target_os = "linux"
+))]
 pub use unix_common::*;
+
