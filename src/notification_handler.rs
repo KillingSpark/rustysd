@@ -3,13 +3,10 @@
 //! streams from the notification sockets get parsed and applied to the respective service
 
 use crate::platform::reset_event_fd;
+use crate::platform::EventFd;
 use crate::services::{Service, ServiceStatus};
 use crate::units::*;
-use std::{
-    collections::HashMap,
-    io::Write,
-    os::unix::io::{AsRawFd, RawFd},
-};
+use std::{collections::HashMap, io::Write, os::unix::io::AsRawFd};
 
 fn collect_from_srvc<F>(unit_table: ArcMutUnitTable, f: F) -> HashMap<i32, u64>
 where
@@ -28,7 +25,7 @@ where
         })
 }
 
-pub fn handle_all_streams(eventfd: RawFd, unit_table: ArcMutUnitTable) {
+pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(unit_table.clone(), |map, srvc, id| {
@@ -41,12 +38,12 @@ pub fn handle_all_streams(eventfd: RawFd, unit_table: ArcMutUnitTable) {
         for fd in fd_to_srvc_id.keys() {
             fdset.insert(*fd);
         }
-        fdset.insert(eventfd);
+        fdset.insert(eventfd.read_end());
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
         match result {
             Ok(_) => {
-                if fdset.contains(eventfd) {
+                if fdset.contains(eventfd.read_end()) {
                     trace!("Interrupted notification select because the eventfd fired");
                     reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
@@ -82,7 +79,7 @@ pub fn handle_all_streams(eventfd: RawFd, unit_table: ArcMutUnitTable) {
     }
 }
 
-pub fn handle_all_std_out(eventfd: RawFd, unit_table: ArcMutUnitTable) {
+pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(unit_table.clone(), |map, srvc, id| {
@@ -95,12 +92,12 @@ pub fn handle_all_std_out(eventfd: RawFd, unit_table: ArcMutUnitTable) {
         for fd in fd_to_srvc_id.keys() {
             fdset.insert(*fd);
         }
-        fdset.insert(eventfd);
+        fdset.insert(eventfd.read_end());
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
         match result {
             Ok(_) => {
-                if fdset.contains(eventfd) {
+                if fdset.contains(eventfd.read_end()) {
                     trace!("Interrupted stdout select because the eventfd fired");
                     reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
@@ -146,7 +143,7 @@ pub fn handle_all_std_out(eventfd: RawFd, unit_table: ArcMutUnitTable) {
     }
 }
 
-pub fn handle_all_std_err(eventfd: RawFd, unit_table: ArcMutUnitTable) {
+pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id: HashMap<_, _> =
@@ -168,12 +165,12 @@ pub fn handle_all_std_err(eventfd: RawFd, unit_table: ArcMutUnitTable) {
         for fd in fd_to_srvc_id.keys() {
             fdset.insert(*fd);
         }
-        fdset.insert(eventfd);
+        fdset.insert(eventfd.read_end());
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
         match result {
             Ok(_) => {
-                if fdset.contains(eventfd) {
+                if fdset.contains(eventfd.read_end()) {
                     trace!("Interrupted stderr select because the eventfd fired");
                     reset_event_fd(eventfd);
                     trace!("Reset eventfd value");

@@ -9,6 +9,7 @@ use std::sync::Mutex;
 
 use crate::sockets::Socket;
 use crate::units::*;
+use crate::platform::EventFd;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ServiceStatus {
@@ -63,7 +64,7 @@ impl Service {
         sockets: &HashMap<InternalId, &Socket>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
-        eventfds: &[RawFd],
+        eventfds: &[EventFd],
         by_socket_activation: bool,
     ) -> Result<(), String> {
         trace!("Start service {}", name);

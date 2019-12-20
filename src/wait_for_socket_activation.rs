@@ -1,10 +1,10 @@
 //! Wait for sockets to activate their respective services
 
 use crate::units::*;
-use std::os::unix::io::RawFd;
+use crate::platform::EventFd;
 
 pub fn wait_for_socket(
-    eventfd: RawFd,
+    eventfd: EventFd,
     unit_table: ArcMutUnitTable,
 ) -> Result<Vec<InternalId>, String> {
     let unit_table_locked = unit_table.read().unwrap();
@@ -28,13 +28,13 @@ pub fn wait_for_socket(
     for (fd, _) in &fd_to_srvc_id {
         fdset.insert(*fd);
     }
-    fdset.insert(eventfd);
+    fdset.insert(eventfd.read_end());
 
     let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
     match result {
         Ok(_) => {
             let mut activated_ids = Vec::new();
-            if fdset.contains(eventfd) {
+            if fdset.contains(eventfd.read_end()) {
                 trace!("Interrupted socketactivation select because the eventfd fired");
                 crate::platform::reset_event_fd(eventfd);
                 trace!("Reset eventfd value");

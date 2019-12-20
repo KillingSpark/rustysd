@@ -106,25 +106,25 @@ fn main() {
     let stderr_eventfd = platform::make_event_fd().unwrap();
     let sock_act_eventfd = platform::make_event_fd().unwrap();
     let eventfds = vec![
-        notification_eventfd.1,
-        stdout_eventfd.1,
-        stderr_eventfd.1,
-        sock_act_eventfd.1,
+        notification_eventfd,
+        stdout_eventfd,
+        stderr_eventfd,
+        sock_act_eventfd,
     ];
 
     let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || {
-        notification_handler::handle_all_streams(notification_eventfd.0, unit_table_clone);
+        notification_handler::handle_all_streams(notification_eventfd, unit_table_clone);
     });
 
     let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_out(stdout_eventfd.0, unit_table_clone);
+        notification_handler::handle_all_std_out(stdout_eventfd, unit_table_clone);
     });
 
     let unit_table_clone = unit_table.clone();
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_err(stderr_eventfd.0, unit_table_clone);
+        notification_handler::handle_all_std_err(stderr_eventfd, unit_table_clone);
     });
 
     let unit_table_clone = unit_table.clone();
@@ -133,7 +133,7 @@ fn main() {
     let eventfds_clone = Arc::new(eventfds.clone());
     std::thread::spawn(move || loop {
         match wait_for_socket_activation::wait_for_socket(
-            sock_act_eventfd.0,
+            sock_act_eventfd,
             unit_table_clone.clone(),
         ) {
             Ok(ids) => {

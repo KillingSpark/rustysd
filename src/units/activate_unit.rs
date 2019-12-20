@@ -1,8 +1,8 @@
 //! Activate units (recursively and parallel along the dependency tree)
 
 use super::units::*;
+use crate::platform::EventFd;
 use std::collections::HashMap;
-use std::os::unix::io::RawFd;
 use std::sync::Arc;
 use std::sync::Mutex;
 use threadpool::ThreadPool;
@@ -14,7 +14,7 @@ fn activate_units_recursive(
     pids: ArcMutPidTable,
     tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
-    eventfds: Arc<Vec<RawFd>>,
+    eventfds: Arc<Vec<EventFd>>,
 ) {
     for id in ids_to_start {
         let started_ids_copy = started_ids.clone();
@@ -82,7 +82,7 @@ pub fn activate_unit(
     unit_table: ArcMutUnitTable,
     pids: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
-    eventfds: Arc<Vec<RawFd>>,
+    eventfds: Arc<Vec<EventFd>>,
     by_socket_activation: bool,
 ) -> std::result::Result<StartResult, std::string::String> {
     trace!("Activate id: {}", id_to_start);
@@ -168,7 +168,7 @@ pub fn activate_unit(
 pub fn activate_units(
     unit_table: ArcMutUnitTable,
     notification_socket_path: std::path::PathBuf,
-    eventfds: Vec<RawFd>,
+    eventfds: Vec<EventFd>,
     pid_table: ArcMutPidTable,
 ) {
     let mut root_units = Vec::new();

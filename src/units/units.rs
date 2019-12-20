@@ -1,7 +1,7 @@
 use crate::services::Service;
+use crate::platform::EventFd;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use std::os::unix::io::AsRawFd;
-use std::os::unix::io::RawFd;
 
 use nix::unistd::Pid;
 use std::collections::HashMap;
@@ -113,7 +113,7 @@ impl Unit {
         required_units: &HashMap<InternalId, &Unit>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
-        eventfds: &[RawFd],
+        eventfds: &[EventFd],
         by_socket_activation: bool,
     ) -> Result<(), String> {
         match &mut self.specialized {

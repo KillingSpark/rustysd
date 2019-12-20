@@ -1,6 +1,6 @@
 use crate::units::*;
-use std::os::unix::io::RawFd;
 use std::sync::Arc;
+use crate::platform::EventFd;
 
 pub fn kill_service(
     id_to_kill: InternalId,
@@ -34,7 +34,7 @@ pub fn restart_service(
     unit_table: ArcMutUnitTable,
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
-    eventfds: Arc<Vec<RawFd>>,
+    eventfds: Arc<Vec<EventFd>>,
 ) -> std::result::Result<(), std::string::String> {
     kill_service(id_to_restart, unit_table.clone(), pid_table.clone());
     crate::units::activate_unit::activate_unit(
