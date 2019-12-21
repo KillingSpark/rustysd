@@ -16,9 +16,7 @@ pub fn load_all_units(
     let mut socket_unit_table = HashMap::new();
     let mut target_unit_table: HashMap<u64, Unit> = HashMap::new();
     for path in paths {
-        parse_all_services(&mut service_table, path, &mut base_id)?;
-        parse_all_sockets(&mut socket_unit_table, path, &mut base_id)?;
-        super::parse_all_targets(&mut target_unit_table, path, &mut base_id)?;
+        parse_all_units(&mut service_table, &mut socket_unit_table, &mut target_unit_table, path, &mut base_id)?;
     }
 
     let mut socket_target_unit = None;
@@ -41,6 +39,34 @@ pub fn load_all_units(
     apply_sockets_to_services(&mut service_table, &mut socket_unit_table)?;
 
     Ok((service_table, socket_unit_table, target_unit_table))
+}
+
+fn parse_all_units(
+    services: &mut std::collections::HashMap<InternalId, Unit>,
+    sockets: &mut std::collections::HashMap<InternalId, Unit>,
+    targets: &mut std::collections::HashMap<InternalId, Unit>,
+    path: &PathBuf,
+    last_id: &mut InternalId,
+) -> Result<(), String> {
+    let files = get_file_list(path)?;
+    for entry in files {
+        if entry.path().is_dir() {
+            parse_all_units(services, sockets, targets, path, last_id)?;
+        } else if entry.path().to_str().unwrap().ends_with(".service") {
+            *last_id += 1;
+            trace!("{:?}, {}", entry.path(), last_id);
+            services.insert(*last_id, parse_service(&entry.path(), *last_id)?);
+        } else if entry.path().to_str().unwrap().ends_with(".socket") {
+            *last_id += 1;
+            trace!("{:?}, {}", entry.path(), last_id);
+            sockets.insert(*last_id, parse_socket(&entry.path(), *last_id)?);
+        }else if entry.path().to_str().unwrap().ends_with(".target") {
+            *last_id += 1;
+            trace!("{:?}, {}", entry.path(), last_id);
+            targets.insert(*last_id, parse_target(&entry.path(), *last_id)?);
+        }
+    }
+    Ok(())
 }
 
 pub fn parse_file(content: &str) -> ParsedFile {

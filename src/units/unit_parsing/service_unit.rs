@@ -3,24 +3,6 @@ use crate::units::*;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 
-pub fn parse_all_services(
-    services: &mut std::collections::HashMap<InternalId, Unit>,
-    path: &PathBuf,
-    last_id: &mut InternalId,
-) -> Result<(), String> {
-    let files = get_file_list(path)?;
-    for entry in files {
-        if entry.path().is_dir() {
-            parse_all_services(services, path, last_id)?;
-        } else if entry.path().to_str().unwrap().ends_with(".service") {
-            *last_id += 1;
-            trace!("{:?}, {}", entry.path(), last_id);
-            services.insert(*last_id, parse_service(&entry.path(), *last_id)?);
-        }
-    }
-    Ok(())
-}
-
 pub fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
     let raw = read_to_string(&path)
         .map_err(|e| format!("Error opening file: {:?} error: {}", path, e))?;
