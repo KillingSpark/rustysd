@@ -1,6 +1,6 @@
+use crate::platform::EventFd;
 use crate::units::*;
 use std::sync::Arc;
-use crate::platform::EventFd;
 
 pub fn kill_service(
     id_to_kill: InternalId,
@@ -44,7 +44,7 @@ pub fn restart_service(
         pid_table,
         notification_socket_path,
         eventfds,
-        false,
+        true,
     )
     .map(|_| ())
 }

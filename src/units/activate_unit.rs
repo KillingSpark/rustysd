@@ -39,7 +39,7 @@ fn activate_units_recursive(
                 pids_copy,
                 note_sock_copy,
                 eventfds_copy,
-                false,
+                true,
             ) {
                 Ok(StartResult::Started(next_services_ids)) => {
                     {
@@ -83,7 +83,7 @@ pub fn activate_unit(
     pids: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
-    by_socket_activation: bool,
+    allow_ignore: bool,
 ) -> std::result::Result<StartResult, std::string::String> {
     trace!("Activate id: {}", id_to_start);
 
@@ -138,8 +138,8 @@ pub fn activate_unit(
                 trace!("Locked unit: {}", id);
                 socket_units_locked.insert(*id, unit_locked);
             }
-            for (id, unit_locked) in &socket_units_locked {
-                let unit_ref: &Unit = &(*unit_locked);
+            for (id, unit_locked) in &mut socket_units_locked {
+                let unit_ref: &mut Unit = &mut (*unit_locked);
                 socket_units_refs.insert(*id, unit_ref);
             }
             trace!("Done locking required units for unit {}", name);
@@ -152,11 +152,11 @@ pub fn activate_unit(
 
     unit_locked
         .activate(
-            &socket_units_refs,
+            &mut socket_units_refs,
             pids.clone(),
             notification_socket_path.clone(),
             &eventfds,
-            by_socket_activation,
+            allow_ignore,
         )
         .map(|_| StartResult::Started(next_services_ids))
         .map_err(|e| {

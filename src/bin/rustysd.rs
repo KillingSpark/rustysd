@@ -159,7 +159,7 @@ fn main() {
                                 pid_table_clone.clone(),
                                 note_sock_path_clone.clone(),
                                 eventfds_clone.clone(),
-                                true,
+                                false,
                             ) {
                                 Ok(_) => {
                                     /* TODO set all sockets to activated so they dont get listend to anymore here*/
@@ -215,5 +215,6 @@ fn main() {
         unit_table,
         pid_table,
         conf.notification_sockets_dir.clone(),
+        &eventfds,
     );
 }

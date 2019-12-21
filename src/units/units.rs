@@ -1,5 +1,5 @@
-use crate::services::Service;
 use crate::platform::EventFd;
+use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use std::os::unix::io::AsRawFd;
 
@@ -110,11 +110,11 @@ impl Unit {
 
     pub fn activate(
         &mut self,
-        required_units: &HashMap<InternalId, &Unit>,
+        required_units: &mut HashMap<InternalId, &mut Unit>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
-        by_socket_activation: bool,
+        allow_ignore: bool,
     ) -> Result<(), String> {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
@@ -123,20 +123,20 @@ impl Unit {
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
-                let mut sockets = HashMap::new();
+                let mut sockets: HashMap<InternalId, &mut Socket> = HashMap::new();
                 for (id, unit_locked) in required_units {
-                    if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                    if let UnitSpecialized::Socket(sock) = &mut unit_locked.specialized {
                         sockets.insert(*id, sock);
                     }
                 }
                 srvc.start(
                     self.id,
                     &self.conf.name(),
-                    &sockets,
+                    &mut sockets,
                     pids,
                     notification_socket_path,
                     eventfds,
-                    by_socket_activation,
+                    allow_ignore,
                 )?;
             }
         }

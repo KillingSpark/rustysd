@@ -1,7 +1,7 @@
 //! Wait for sockets to activate their respective services
 
-use crate::units::*;
 use crate::platform::EventFd;
+use crate::units::*;
 
 pub fn wait_for_socket(
     eventfd: EventFd,
@@ -47,6 +47,12 @@ pub fn wait_for_socket(
             }
             Ok(activated_ids)
         }
-        Err(e) => Err(format!("Error while selecting: {}", e)),
+        Err(e) => {
+            if let nix::Error::Sys(nix::errno::Errno::EINTR) = e {
+                Ok(Vec::new())
+            } else {
+                Err(format!("Error while selecting: {}", e))
+            }
+        }
     }
 }

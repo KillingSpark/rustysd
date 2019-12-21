@@ -1,5 +1,6 @@
 //! Handle signals send to this process from either the outside or the child processes
 
+use crate::platform::EventFd;
 use crate::services;
 use crate::units::*;
 use signal_hook::iterator::Signals;
@@ -9,6 +10,7 @@ pub fn handle_signals(
     unit_table: ArcMutUnitTable,
     pid_table: ArcMutPidTable,
     notification_socket_path: std::path::PathBuf,
+    eventfds: &[EventFd],
 ) {
     'outer: loop {
         // Pick up new signals
@@ -24,6 +26,7 @@ pub fn handle_signals(
                                 unit_table.clone(),
                                 pid_table.clone(),
                                 notification_socket_path.clone(),
+                                eventfds,
                             ) {
                                 Ok(()) => { /* Happy */ }
                                 Err(e) => {
