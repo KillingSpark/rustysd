@@ -124,7 +124,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
                     _ => panic!("Unknown notify access: {}", vec[0].1),
                 }
             } else {
-                panic!("Type had to many entries: {:?}", vec);
+                panic!("Notifyaccess had to many entries: {:?}", vec);
             }
         }
         None => NotifyKind::Main,

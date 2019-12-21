@@ -13,7 +13,7 @@ pub fn parse_socket(parsed_file: ParsedFile, path: &PathBuf, chosen_id: Internal
             "[Socket]" => {
                 socket_configs = match parse_socket_section(section) {
                     Ok(conf) => Some(conf),
-                    Err(e) => return Err(format!("Error in file: {:?} :: {}", path, e)),
+                    Err(e) => return Err(format!("Parsing error in file: {:?} :: {}", path, e)),
                 };
             }
             "[Unit]" => {
@@ -32,7 +32,7 @@ pub fn parse_socket(parsed_file: ParsedFile, path: &PathBuf, chosen_id: Internal
 
     let (sock_name, services, sock_configs) = match socket_configs {
         Some(triple) => triple,
-        None => return Err(format!("Didnt find socket config in file: {:?}", path)),
+        None => return Err(format!("Didn't find socket config in file: {:?}", path)),
     };
 
     let conf = match unit_config {
