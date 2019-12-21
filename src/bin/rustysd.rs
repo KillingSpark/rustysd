@@ -62,7 +62,7 @@ fn main() {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let (service_table, socket_table, target_table) =
-        units::unit_parser::load_all_units(&conf.unit_dirs).unwrap();
+        units::load_all_units(&conf.unit_dirs).unwrap();
 
     let mut unit_table = std::collections::HashMap::new();
     unit_table.extend(service_table);
