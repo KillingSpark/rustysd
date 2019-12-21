@@ -8,15 +8,63 @@ use std::path::PathBuf;
 pub type ParsedSection = HashMap<String, Vec<(u32, String)>>;
 pub type ParsedFile = HashMap<String, ParsedSection>;
 
+#[derive(Debug)]
+pub struct ParsingError {
+    pub reason: Option<Box<dyn std::error::Error>>,
+    pub msg: Option<String>,
+}
+
+impl std::fmt::Display for ParsingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+// This is important for other errors to wrap this one.
+impl std::error::Error for ParsingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        // Generic error, underlying cause isn't tracked.
+        if let Some(err) = &self.reason {
+            Some(err.as_ref())
+        } else {
+            None
+        }
+    }
+}
+
+impl std::convert::From<String> for ParsingError {
+    fn from(s: String) -> Self {
+        ParsingError {
+            reason: None,
+            msg: Some(s),
+        }
+    }
+}
+
+impl std::convert::From<Box<dyn std::error::Error>> for ParsingError {
+    fn from(err: Box<dyn std::error::Error>) -> Self {
+        ParsingError {
+            reason: Some(err),
+            msg: None,
+        }
+    }
+}
+
 pub fn load_all_units(
     paths: &[PathBuf],
-) -> Result<(ServiceTable, SocketTable, TargetTable), String> {
+) -> Result<(ServiceTable, SocketTable, TargetTable), ParsingError> {
     let mut base_id = 0;
     let mut service_table = HashMap::new();
     let mut socket_unit_table = HashMap::new();
     let mut target_unit_table: HashMap<u64, Unit> = HashMap::new();
     for path in paths {
-        parse_all_units(&mut service_table, &mut socket_unit_table, &mut target_unit_table, path, &mut base_id)?;
+        parse_all_units(
+            &mut service_table,
+            &mut socket_unit_table,
+            &mut target_unit_table,
+            path,
+            &mut base_id,
+        )?;
     }
 
     let mut socket_target_unit = None;
@@ -47,23 +95,32 @@ fn parse_all_units(
     targets: &mut std::collections::HashMap<InternalId, Unit>,
     path: &PathBuf,
     last_id: &mut InternalId,
-) -> Result<(), String> {
+) -> Result<(), ParsingError> {
     let files = get_file_list(path)?;
     for entry in files {
         if entry.path().is_dir() {
             parse_all_units(services, sockets, targets, path, last_id)?;
-        } else if entry.path().to_str().unwrap().ends_with(".service") {
-            *last_id += 1;
-            trace!("{:?}, {}", entry.path(), last_id);
-            services.insert(*last_id, parse_service(&entry.path(), *last_id)?);
-        } else if entry.path().to_str().unwrap().ends_with(".socket") {
-            *last_id += 1;
-            trace!("{:?}, {}", entry.path(), last_id);
-            sockets.insert(*last_id, parse_socket(&entry.path(), *last_id)?);
-        }else if entry.path().to_str().unwrap().ends_with(".target") {
-            *last_id += 1;
-            trace!("{:?}, {}", entry.path(), last_id);
-            targets.insert(*last_id, parse_target(&entry.path(), *last_id)?);
+        } else {
+            let raw = std::fs::read_to_string(&entry.path()).map_err(|e| ParsingError {
+                msg: Some(format!("Error opening file: {:?} error: {}", path, e)),
+                reason: Some(Box::new(e)),
+            })?;
+
+            let parsed_file = parse_file(&raw);
+
+            if entry.path().to_str().unwrap().ends_with(".service") {
+                *last_id += 1;
+                trace!("{:?}, {}", entry.path(), last_id);
+                services.insert(*last_id, parse_service(parsed_file, &entry.path(), *last_id)?);
+            } else if entry.path().to_str().unwrap().ends_with(".socket") {
+                *last_id += 1;
+                trace!("{:?}, {}", entry.path(), last_id);
+                sockets.insert(*last_id, parse_socket(parsed_file, &entry.path(), *last_id)?);
+            } else if entry.path().to_str().unwrap().ends_with(".target") {
+                *last_id += 1;
+                trace!("{:?}, {}", entry.path(), last_id);
+                targets.insert(*last_id, parse_target(parsed_file, &entry.path(), *last_id)?);
+            }
         }
     }
     Ok(())

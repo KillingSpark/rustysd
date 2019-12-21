@@ -1,12 +1,8 @@
 use crate::services::{Service, ServiceRuntimeInfo, ServiceStatus};
 use crate::units::*;
-use std::fs::read_to_string;
 use std::path::PathBuf;
 
-pub fn parse_service(path: &PathBuf, chosen_id: InternalId) -> Result<Unit, String> {
-    let raw = read_to_string(&path)
-        .map_err(|e| format!("Error opening file: {:?} error: {}", path, e))?;
-    let parsed_file = parse_file(&raw);
+pub fn parse_service(parsed_file: ParsedFile, path: &PathBuf, chosen_id: InternalId) -> Result<Unit, ParsingError> {
 
     let mut service_config = None;
     let mut install_config = None;
