@@ -54,16 +54,16 @@ Currently there are two services, one that gets passed some sockets and one that
 ## What does not work
 Just some stuff I know does not work but would be cool to have.
 1. Patching unit definitions with dropin files
+1. Timeouts for service starting
 1. Pruning the set of loaded units to only the needed one to reach the target unit
-1. Socket activation in inted style
-1. signal handling in a PID1 specific way
+1. Socket activation in inetd style
 1. Socket options like MaxConnections=/KeepAlive=
 1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
 1. The whole dbus shenanigans (besides waiting on dbus services, which is implemented)
 1. More socket types 
     1. Netlink is missing for example
 1. The rest of the sd_notify API (with storing filedescriptors and such)
-1. A systemctl equivalent to control/query rustysd (some querying has been implemented using serde-json but its just a concept right now)
+1. A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
 
 ## Community
 There has been a request for a place to talk about this project, so I opened a gitter community for this project. Feel free to come over and have a chat [on this page](https://gitter.im/rustysd/community?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
