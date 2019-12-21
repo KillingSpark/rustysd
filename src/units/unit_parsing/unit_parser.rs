@@ -16,7 +16,14 @@ pub struct ParsingError {
 
 impl std::fmt::Display for ParsingError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self)
+        if let Some(msg) = &self.msg {
+            write!(f, "{}", msg)?;
+        }
+        if let Some(err) = &self.reason {
+            write!(f, "source error:_{}", err)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -111,15 +118,24 @@ fn parse_all_units(
             if entry.path().to_str().unwrap().ends_with(".service") {
                 *last_id += 1;
                 trace!("{:?}, {}", entry.path(), last_id);
-                services.insert(*last_id, parse_service(parsed_file, &entry.path(), *last_id)?);
+                services.insert(
+                    *last_id,
+                    parse_service(parsed_file, &entry.path(), *last_id)?,
+                );
             } else if entry.path().to_str().unwrap().ends_with(".socket") {
                 *last_id += 1;
                 trace!("{:?}, {}", entry.path(), last_id);
-                sockets.insert(*last_id, parse_socket(parsed_file, &entry.path(), *last_id)?);
+                sockets.insert(
+                    *last_id,
+                    parse_socket(parsed_file, &entry.path(), *last_id)?,
+                );
             } else if entry.path().to_str().unwrap().ends_with(".target") {
                 *last_id += 1;
                 trace!("{:?}, {}", entry.path(), last_id);
-                targets.insert(*last_id, parse_target(parsed_file, &entry.path(), *last_id)?);
+                targets.insert(
+                    *last_id,
+                    parse_target(parsed_file, &entry.path(), *last_id)?,
+                );
             }
         }
     }
