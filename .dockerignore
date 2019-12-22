@@ -1,0 +1,14 @@
+#./target/rls
+#./target/dock
+#./target/release
+#./target/debug
+#./target/x86_64-unknown-linux-musl/debug/deps
+#./target/x86_64-unknown-linux-musl/debug/incremental
+#./target/x86_64-unknown-linux-musl/debug/build
+#.git
+*
+
+!target/x86_64-unknown-linux-musl/debug/rustysd
+!target/x86_64-unknown-linux-musl/debug/testservice
+!target/x86_64-unknown-linux-musl/debug/testserviceclient
+!test_units
