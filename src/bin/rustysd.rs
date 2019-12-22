@@ -86,6 +86,7 @@ fn main() {
 
     // TODO make configurable
     use std::os::unix::net::UnixListener;
+    std::fs::create_dir_all(&conf.notification_sockets_dir).unwrap();
     let unixsock = UnixListener::bind(&control_sock_path).unwrap();
     control::accept_control_connections_unix_socket(
         unit_table.clone(),
@@ -93,7 +94,7 @@ fn main() {
         conf.notification_sockets_dir.clone(),
         unixsock,
     );
-    let tcpsock = std::net::TcpListener::bind("0.0.0.0:8080").unwrap();
+    let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
     control::accept_control_connections_tcp(
         unit_table.clone(),
         pid_table.clone(),
