@@ -8,7 +8,10 @@
 #.git
 *
 
-!target/x86_64-unknown-linux-musl/debug/rustysd
-!target/x86_64-unknown-linux-musl/debug/testservice
-!target/x86_64-unknown-linux-musl/debug/testserviceclient
+#!target/x86_64-unknown-linux-musl/debug/rustysd
+#!target/x86_64-unknown-linux-musl/debug/testservice
+#!target/x86_64-unknown-linux-musl/debug/testserviceclient
+!target/x86_64-unknown-linux-musl/release/rustysd
+!target/x86_64-unknown-linux-musl/release/testservice
+!target/x86_64-unknown-linux-musl/release/testserviceclient
 !test_units
