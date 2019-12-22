@@ -40,3 +40,6 @@ extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
 extern crate toml;
+
+#[cfg(test)]
+mod tests;

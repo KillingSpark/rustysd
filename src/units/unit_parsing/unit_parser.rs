@@ -64,7 +64,10 @@ fn parse_all_units(
                 reason: Some(Box::new(e)),
             })?;
 
-            let parsed_file = parse_file(&raw);
+            let parsed_file = parse_file(&raw).map_err(|err| ParsingError {
+                reason: Some(Box::new(err)),
+                msg: Some(format!("In file: {:?}", path)),
+            })?;
 
             if entry.path().to_str().unwrap().ends_with(".service") {
                 *last_id += 1;
@@ -93,14 +96,15 @@ fn parse_all_units(
     Ok(())
 }
 
-pub fn parse_file(content: &str) -> ParsedFile {
+pub fn parse_file(content: &str) -> Result<ParsedFile, ParsingError> {
     let mut sections = HashMap::new();
     let lines: Vec<&str> = content.split('\n').collect();
+    let lines: Vec<_> = lines.iter().map(|s| s.trim()).collect();
 
     let mut lines_left = &lines[..];
 
     // remove lines before the first section
-    while !lines_left[0].starts_with('[') {
+    while !lines_left.is_empty() && !lines_left[0].starts_with('[') {
         lines_left = &lines_left[1..];
     }
     let mut current_section_name: String = lines_left[0].into();
@@ -112,10 +116,17 @@ pub fn parse_file(content: &str) -> ParsedFile {
         let line = lines_left[0];
 
         if line.starts_with('[') {
-            sections.insert(
-                current_section_name.clone(),
-                parse_section(&current_section_lines),
-            );
+            if sections.contains_key(&current_section_name) {
+                return Err(ParsingError::from(format!(
+                    "Section {} occured mutliple times",
+                    current_section_name
+                )));
+            } else {
+                sections.insert(
+                    current_section_name.clone(),
+                    parse_section(&current_section_lines),
+                );
+            }
             current_section_name = line.into();
             current_section_lines.clear();
         } else {
@@ -125,9 +136,16 @@ pub fn parse_file(content: &str) -> ParsedFile {
     }
 
     // insert last section
-    sections.insert(current_section_name, parse_section(&current_section_lines));
+    if sections.contains_key(&current_section_name) {
+        return Err(ParsingError::from(format!(
+            "Section {} occured mutliple times",
+            current_section_name
+        )));
+    } else {
+        sections.insert(current_section_name, parse_section(&current_section_lines));
+    }
 
-    sections
+    Ok(sections)
 }
 
 pub fn map_tupels_to_second<X, Y: Clone>(v: Vec<(X, Y)>) -> Vec<Y> {
