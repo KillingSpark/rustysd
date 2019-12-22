@@ -1,5 +1,5 @@
 #[test]
-fn test_some_stuff() {
+fn test_service_parsing() {
     let descr = "This is a description";
     let unit_before1 = "unit_before2";
     let unit_before2 = "unit_before1";
