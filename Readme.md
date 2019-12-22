@@ -47,6 +47,11 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Send SIGKILL to whole processgroup when killing a service
 1. Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
 
+1. Running in a docker container as PID1. The image that is built by the scripts in the dockerfiles directory result in a 2MB image that contains
+    1. Rustysd (stripped binary built with musl to be completely static)
+    1. The testservice and testserviceclient (stripped binaries built with musl to be completely static)
+    1. The unit files in test_units
+
 ### See for yourself
 Running `./build_all.sh && cargo run --bin rustysd` will build the test services and run rustysd which will start them.
 Currently there are two services, one that gets passed some sockets and one that uses them to send some text over those sockets.
