@@ -218,7 +218,7 @@ pub fn service_exit_handler(
         };
         if restart_unit {
             trace!("Restart service {} because keepalive was to true", name);
-            crate::units::activate_unit::activate_unit(
+            crate::units::activate_unit(
                 srvc_id,
                 None,
                 unit_table,

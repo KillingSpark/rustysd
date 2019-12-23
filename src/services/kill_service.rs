@@ -37,7 +37,7 @@ pub fn restart_service(
     eventfds: Arc<Vec<EventFd>>,
 ) -> std::result::Result<(), std::string::String> {
     kill_service(id_to_restart, unit_table.clone(), pid_table.clone());
-    crate::units::activate_unit::activate_unit(
+    crate::units::activate_unit(
         id_to_restart,
         None,
         unit_table,

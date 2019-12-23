@@ -150,7 +150,7 @@ fn main() {
                             }
                         }
                         if let Some(srvc_unit_id) = srvc_unit_id {
-                            match crate::units::activate_unit::activate_unit(
+                            match crate::units::activate_unit(
                                 srvc_unit_id,
                                 None,
                                 unit_table_clone.clone(),
@@ -198,7 +198,7 @@ fn main() {
     });
 
     // parallel startup of all services
-    units::activate_unit::activate_units(
+    units::activate_units(
         unit_table.clone(),
         conf.notification_sockets_dir.clone(),
         eventfds.clone(),
