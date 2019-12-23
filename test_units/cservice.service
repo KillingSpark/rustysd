@@ -4,3 +4,6 @@ Sockets= cservice.socket
 NotifyAccess= all
 Type= notify
 keep_alive = true
+
+[Install]
+#WantedBy= default.target

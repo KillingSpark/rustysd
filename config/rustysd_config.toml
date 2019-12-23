@@ -3,4 +3,4 @@ log_to_stdout = true
 log_to_disk = false
 notifications_dir = "./notifications"
 unit_dirs = [ "./test_units" ]
-target_unit = "test2.service"
+target_unit = "default.target"

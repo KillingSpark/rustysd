@@ -7,3 +7,6 @@ keep_alive = true
 [Unit]
 After= test.service
 Requires= test.service
+
+[Install]
+WantedBy= default.target
