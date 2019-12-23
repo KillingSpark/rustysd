@@ -1,4 +1,4 @@
-pub use crate::units::*;
+use crate::units::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -37,12 +37,12 @@ pub fn load_all_units(paths: &[PathBuf]) -> Result<HashMap<InternalId, Unit>, Pa
         }
     }
 
-    crate::units::apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)?;
+    apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)?;
     let mut unit_table = std::collections::HashMap::new();
     unit_table.extend(service_unit_table);
     unit_table.extend(socket_unit_table);
     unit_table.extend(target_unit_table);
-    crate::units::fill_dependencies(&mut unit_table);
+    fill_dependencies(&mut unit_table);
     Ok(unit_table)
 }
 
