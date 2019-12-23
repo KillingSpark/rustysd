@@ -46,6 +46,7 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Target units to synchronize the startup
 1. Send SIGKILL to whole processgroup when killing a service
 1. Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
+1. Pruning the set of loaded units to only the needed one to reach the target unit (right now it's not pruned to the actual minimum, but no needed units are removed. Sockets for example are all being kept around right now)
 
 1. Running in a docker container as PID1. The image that is built by the scripts in the dockerfiles directory result in a 2MB image that contains
     1. Rustysd (stripped binary built with musl to be completely static)
@@ -58,9 +59,10 @@ Currently there are two services, one that gets passed some sockets and one that
 
 ## What does not work
 Just some stuff I know does not work but would be cool to have.
+1. Better pruning of the units to reach the target unit
+1. Get all the meta-targets and default dependencies right
 1. Patching unit definitions with dropin files
 1. Timeouts for service starting
-1. Pruning the set of loaded units to only the needed one to reach the target unit
 1. Socket activation in inetd style
 1. Socket options like MaxConnections=/KeepAlive=
 1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....

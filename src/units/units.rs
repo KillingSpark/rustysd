@@ -33,6 +33,10 @@ pub enum UnitSpecialized {
 }
 
 #[derive(Debug, Default)]
+/// These vecs are meant like this:
+/// Install::after: this unit should start after these units have been started
+/// Install::before: this unit should start before these units have been started
+/// ....
 pub struct Install {
     pub wants: Vec<InternalId>,
     pub requires: Vec<InternalId>,
