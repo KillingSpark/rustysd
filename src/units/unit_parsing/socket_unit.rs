@@ -43,7 +43,15 @@ pub fn parse_socket(parsed_file: ParsedFile, path: &PathBuf, chosen_id: Internal
     Ok(Unit {
         conf,
         id: chosen_id,
-        install: Install::default(),
+        install: Install {
+            install_config: install_config,
+            wants: Vec::new(),
+            wanted_by: Vec::new(),
+            requires: Vec::new(),
+            required_by: Vec::new(),
+            before: Vec::new(),
+            after: Vec::new(),
+        },
         specialized: UnitSpecialized::Socket(Socket {
             activated: false,
             name: sock_name,
