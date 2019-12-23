@@ -65,6 +65,11 @@ fn main() {
     units::prune_units("test2.service", &mut unit_table).unwrap();
     let unit_table = unit_table;
 
+    if std::env::args().collect::<Vec<_>>().contains(&"--dry-run".to_owned()) {
+        warn!("Exit after loading because --dry-run was passed");
+        return;
+    }
+
     use std::sync::{Arc, Mutex, RwLock};
     //let service_table = Arc::new(Mutex::new(service_table));
     //let socket_table = Arc::new(Mutex::new(socket_table));
