@@ -61,13 +61,8 @@ fn main() {
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let (service_table, socket_table, target_table) =
-        units::load_all_units(&conf.unit_dirs).unwrap();
+    let unit_table = units::load_all_units(&conf.unit_dirs).unwrap();
 
-    let mut unit_table = std::collections::HashMap::new();
-    unit_table.extend(service_table);
-    unit_table.extend(socket_table);
-    unit_table.extend(target_table);
     use std::sync::{Arc, Mutex, RwLock};
     //let service_table = Arc::new(Mutex::new(service_table));
     //let socket_table = Arc::new(Mutex::new(socket_table));

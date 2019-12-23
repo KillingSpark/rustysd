@@ -166,6 +166,12 @@ impl UnitConfig {
             .unwrap()
             .to_owned();
 
+        //let split: Vec<_> = name.split('.').collect();
+        //split[0..split.len() - 1].join(".")
+        name
+    }
+    pub fn name_without_suffix(&self) -> String {
+        let name = self.name();
         let split: Vec<_> = name.split('.').collect();
         split[0..split.len() - 1].join(".")
     }
@@ -225,82 +231,4 @@ pub struct ServiceConfig {
     pub dbus_name: Option<String>,
 
     pub sockets: Vec<String>,
-}
-
-pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
-    let mut name_to_id = HashMap::new();
-
-    for (id, unit) in &*units {
-        let name = unit.conf.name();
-        name_to_id.insert(name, *id);
-    }
-
-    let mut required_by = Vec::new();
-    let mut wanted_by: Vec<(InternalId, InternalId)> = Vec::new();
-    let mut before = Vec::new();
-    let mut after = Vec::new();
-
-    for unit in (*units).values_mut() {
-        let conf = &unit.conf;
-        for name in &conf.wants {
-            let id = name_to_id[name.as_str()];
-            unit.install.wants.push(id);
-            wanted_by.push((id, unit.id));
-        }
-        for name in &conf.requires {
-            let id = name_to_id[name.as_str()];
-            unit.install.requires.push(id);
-            required_by.push((id, unit.id));
-        }
-        for name in &conf.before {
-            let id = name_to_id[name.as_str()];
-            unit.install.before.push(id);
-            after.push((unit.id, id))
-        }
-        for name in &conf.after {
-            let id = name_to_id[name.as_str()];
-            unit.install.after.push(id);
-            before.push((unit.id, id))
-        }
-
-        if let Some(conf) = &unit.install.install_config {
-            for name in &conf.wanted_by {
-                let id = name_to_id[name.as_str()];
-                wanted_by.push((unit.id, id));
-            }
-        }
-        if let Some(conf) = &unit.install.install_config {
-            for name in &conf.required_by {
-                let id = name_to_id[name.as_str()];
-                required_by.push((unit.id, id));
-            }
-        }
-    }
-
-    for (wanted, wanting) in wanted_by {
-        let unit = units.get_mut(&wanting).unwrap();
-        unit.install.wants.push(wanted);
-        let unit = units.get_mut(&wanted).unwrap();
-        unit.install.wanted_by.push(wanting);
-    }
-
-    for (required, requiring) in required_by {
-        let unit = units.get_mut(&requiring).unwrap();
-        unit.install.requires.push(required);
-        let unit = units.get_mut(&required).unwrap();
-        unit.install.required_by.push(requiring);
-    }
-
-    for (before, after) in before {
-        let unit = units.get_mut(&after).unwrap();
-        unit.install.before.push(before);
-    }
-    for (after, before) in after {
-        let unit = units.get_mut(&before).unwrap();
-        unit.install.after.push(after);
-    }
-
-    for srvc in units.values_mut() {
-        srvc.dedup_dependencies();
-    }
 }

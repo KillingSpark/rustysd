@@ -5,5 +5,5 @@ Type= simple
 keep_alive = true
 
 [Unit]
-After= test
-Requires= test
+After= test.service
+Requires= test.service

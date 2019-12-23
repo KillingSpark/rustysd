@@ -10,7 +10,7 @@ ListenStream= ./sockets/servicelog_alt_stream
 ListenDatagram= ./sockets/servicelog_alt_datagram
 ListenSequentialPacket= ./sockets/servicelog_alt_sequential
 
-#Service= test
+#Service= test.service
 
 [Install]
 WantedBy=sockets.target
