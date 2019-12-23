@@ -27,7 +27,7 @@ pub fn load_all_units(
 
     let mut socket_target_unit = None;
     for target in target_unit_table.values_mut() {
-        if target.conf.name() == "sockets" {
+        if target.conf.name() == "sockets.target" {
             socket_target_unit = Some(target);
             break;
         }
@@ -39,16 +39,20 @@ pub fn load_all_units(
             sock.install.before.push(socket_target_unit.id);
             socket_target_unit.install.after.push(sock.id);
         }
+        for srvc in service_unit_table.values_mut() {
+            srvc.install.after.push(socket_target_unit.id);
+            socket_target_unit.install.before.push(srvc.id);
+        }
     }
 
-    super::dependency_resolving::apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)?;
+    crate::units::apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)?;
     
     let mut unit_table = std::collections::HashMap::new();
     unit_table.extend(service_unit_table);
     unit_table.extend(socket_unit_table);
     unit_table.extend(target_unit_table);
     
-    super::dependency_resolving::fill_dependencies(&mut unit_table);
+    crate::units::fill_dependencies(&mut unit_table);
     
     Ok(unit_table)
 }

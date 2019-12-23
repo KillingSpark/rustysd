@@ -1,11 +1,14 @@
 //! Config can be loaded either from env vars, toml, or json.
 //!
 //! Currently configurable:
+//! ### Logging
 //! 1. Wether or not to log to disk (and the dir to put the logs in)
 //! 1. Wether or not to log to stdout
 //!
+//! ### General config
 //! 1. Where to find the units (one or more directories)
 //! 1. notification-socket directory (where the unix-domain sockets are placed on which services can notify rustysd)
+//! 1. Which unit is the target that should be started
 
 use std::{collections::HashMap, fs::File, io::Read, path::PathBuf};
 use toml;
@@ -20,6 +23,7 @@ pub struct LoggingConfig {
 #[derive(Debug)]
 pub struct Config {
     pub unit_dirs: Vec<PathBuf>,
+    pub target_unit: String,
     pub notification_sockets_dir: PathBuf,
 }
 
@@ -40,7 +44,7 @@ fn load_toml(
     file.read_to_string(&mut config).unwrap();
 
     let toml_conf =
-        toml::from_str(&config).map_err(|e| format!("Error while decoding config json: {}", e))?;
+        toml::from_str(&config).map_err(|e| format!("Error while decoding config toml: {}", e))?;
 
     if let toml::Value::Table(map) = &toml_conf {
         if let Some(toml::Value::Array(elems)) = map.get("unit_dirs") {
@@ -65,10 +69,13 @@ fn load_toml(
             settings.insert("logging.dir".to_owned(), SettingValue::Str(val.clone()));
         }
         if let Some(toml::Value::Boolean(val)) = map.get("log_to_disk") {
-            settings.insert("logging.to_disk".to_owned(), SettingValue::Boolean(*val));
+            settings.insert("logging.to.disk".to_owned(), SettingValue::Boolean(*val));
         }
         if let Some(toml::Value::Boolean(val)) = map.get("log_to_stdout") {
-            settings.insert("logging.to_stdout".to_owned(), SettingValue::Boolean(*val));
+            settings.insert("logging.to.stdout".to_owned(), SettingValue::Boolean(*val));
+        }
+        if let Some(toml::Value::String(val)) = map.get("target_unit") {
+            settings.insert("target.unit".to_owned(), SettingValue::Str(val.clone()));
         }
         if let Some(toml::Value::String(val)) = map.get("notifications_dir") {
             settings.insert(
@@ -116,6 +123,9 @@ fn load_json(
         }
         if let Some(serde_json::Value::Bool(val)) = map.get("log_to_stdout") {
             settings.insert("logging.to_stdout".to_owned(), SettingValue::Boolean(*val));
+        }
+        if let Some(serde_json::Value::String(val)) = map.get("target_unit") {
+            settings.insert("target.unit".to_owned(), SettingValue::Str(val.clone()));
         }
         if let Some(serde_json::Value::String(val)) = map.get("notifications_dir") {
             settings.insert(
@@ -185,6 +195,10 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
         SettingValue::Str(s) => Some(PathBuf::from(s)),
         _ => None,
     });
+    let target_unit = settings.get("target.unit").map(|name| match name {
+        SettingValue::Str(s) => Some(s.clone()),
+        _ => None,
+    });
 
     let unit_dirs = settings.get("unit.dirs").map(|dir| match dir {
         SettingValue::Str(s) => vec![PathBuf::from(s)],
@@ -207,10 +221,11 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
 
     let config = Config {
         unit_dirs: unit_dirs.unwrap_or_else(|| vec![PathBuf::from("./test_units")]),
+        target_unit: target_unit.unwrap_or(Some("".to_owned())).unwrap(),
 
         notification_sockets_dir: notification_sockets_dir
             .unwrap_or_else(|| Some(PathBuf::from("./notifications")))
-            .unwrap_or_else(|| PathBuf::from("./notifications")),
+            .unwrap(),
     };
 
     let conf = if let Some(json_conf) = json_conf {

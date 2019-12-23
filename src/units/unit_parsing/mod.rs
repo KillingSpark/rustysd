@@ -2,7 +2,6 @@ mod service_unit;
 mod socket_unit;
 mod target_unit;
 mod unit_parser;
-mod dependency_resolving;
 
 pub use service_unit::*;
 pub use socket_unit::*;

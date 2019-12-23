@@ -1,7 +1,109 @@
 use crate::units::*;
 use std::collections::HashMap;
 
-pub fn prune_units(target_unit_name: &str, unit_table: &mut HashMap<InternalId, Unit>) {}
+#[allow(dead_code)]
+pub fn prune_units(
+    target_unit_name: &str,
+    unit_table: &mut HashMap<InternalId, Unit>,
+) -> Result<(), String> {
+    let mut ids_to_keep = Vec::new();
+    let startunit = unit_table.values().fold(None, |mut result, unit| {
+        if unit.conf.name() == target_unit_name {
+            result = Some(unit.id);
+        }
+        result
+    });
+    let startunit_id = if let Some(startunit) = startunit {
+        startunit
+    } else {
+        return Err(format!("Target unit {} not found", target_unit_name));
+    };
+
+    find_needed_units_recursive(startunit_id, unit_table, &mut ids_to_keep);
+
+    let mut ids_to_remove = Vec::new();
+    for id in unit_table.keys() {
+        if !ids_to_keep.contains(id) {
+            ids_to_remove.push(*id);
+        }
+    }
+    for id in &ids_to_remove {
+        let unit = unit_table.remove(id).unwrap();
+        trace!("Pruning unit: {}", unit.conf.name());
+    }
+    for unit in unit_table.values_mut() {
+        unit.install.before = unit
+            .install
+            .before
+            .iter()
+            .filter(|id| ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+            unit.install.after = unit
+            .install
+            .after
+            .iter()
+            .filter(|id| ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+            unit.install.requires = unit
+            .install
+            .requires
+            .iter()
+            .filter(|id| ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+            unit.install.wants = unit
+            .install
+            .wants
+            .iter()
+            .filter(|id| ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+            unit.install.required_by = unit
+            .install
+            .required_by
+            .iter()
+            .filter(|id| ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+            unit.install.wanted_by = unit
+            .install
+            .wanted_by
+            .iter()
+            .filter(|id| ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+    }
+    Ok(())
+}
+
+fn find_needed_units_recursive(
+    needed_id: InternalId,
+    unit_table: &HashMap<InternalId, Unit>,
+    visited_ids: &mut Vec<InternalId>,
+) {
+    if visited_ids.contains(&needed_id) {
+        return;
+    }
+    visited_ids.push(needed_id);
+
+    let unit = unit_table.get(&needed_id).unwrap();
+    let mut new_needed_ids = Vec::new();
+
+    for new_id in &unit.install.after {
+        new_needed_ids.push(*new_id);
+    }
+
+    for new_id in &new_needed_ids {
+        find_needed_units_recursive(*new_id, unit_table, visited_ids);
+    }
+}
 
 pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     let mut name_to_id = HashMap::new();
