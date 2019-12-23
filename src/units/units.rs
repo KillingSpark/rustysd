@@ -82,6 +82,14 @@ impl Unit {
     }
 
     pub fn dedup_dependencies(&mut self) {
+        self.install.wants.sort();
+        self.install.wanted_by.sort();
+        self.install.required_by.sort();
+        self.install.before.sort();
+        self.install.after.sort();
+        self.install.requires.sort();
+        
+        // dedup after sorting
         self.install.wants.dedup();
         self.install.requires.dedup();
         self.install.wanted_by.dedup();
