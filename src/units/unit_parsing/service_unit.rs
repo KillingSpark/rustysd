@@ -2,8 +2,11 @@ use crate::services::{Service, ServiceRuntimeInfo, ServiceStatus};
 use crate::units::*;
 use std::path::PathBuf;
 
-pub fn parse_service(parsed_file: ParsedFile, path: &PathBuf, chosen_id: InternalId) -> Result<Unit, ParsingError> {
-
+pub fn parse_service(
+    parsed_file: ParsedFile,
+    path: &PathBuf,
+    chosen_id: InternalId,
+) -> Result<Unit, ParsingError> {
     let mut service_config = None;
     let mut install_config = None;
     let mut unit_config = None;
@@ -11,7 +14,7 @@ pub fn parse_service(parsed_file: ParsedFile, path: &PathBuf, chosen_id: Interna
     for (name, section) in parsed_file {
         match name.as_str() {
             "[Service]" => {
-                service_config = Some(parse_service_section(section));
+                service_config = Some(parse_service_section(section)?);
             }
             "[Unit]" => {
                 unit_config = Some(parse_unit_section(section, path));
@@ -69,7 +72,7 @@ pub fn parse_service(parsed_file: ParsedFile, path: &PathBuf, chosen_id: Interna
     })
 }
 
-fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
+fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingError> {
     let exec = section.remove("EXEC");
     let stop = section.remove("STOP");
     let keep_alive = section.remove("KEEP_ALIVE");
@@ -103,7 +106,13 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
                 match vec[0].1.as_str() {
                     "simple" => ServiceType::Simple,
                     "notify" => ServiceType::Notify,
-                    "dbus" => ServiceType::Dbus,
+                    "dbus" => {
+                        if cfg!(feature = "dbus_support") {
+                            ServiceType::Dbus
+                        } else {
+                            return Err(ParsingError::from(format!("Dbus service found but rustysd was built without the feature dbus_support")));
+                        }
+                    }
                     _ => panic!("Unknown service type: {}", vec[0].1),
                 }
             } else {
@@ -178,7 +187,7 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
         }
     }
 
-    ServiceConfig {
+    Ok(ServiceConfig {
         srcv_type,
         notifyaccess,
         keep_alive,
@@ -187,5 +196,5 @@ fn parse_service_section(mut section: ParsedSection) -> ServiceConfig {
         exec,
         stop,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),
-    }
+    })
 }
