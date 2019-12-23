@@ -62,7 +62,7 @@ fn main() {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let mut unit_table = units::load_all_units(&conf.unit_dirs).unwrap();
-    units::prune_units("test2.service", &mut unit_table).unwrap();
+    units::prune_units(&conf.target_unit, &mut unit_table).unwrap();
     let unit_table = unit_table;
 
     if std::env::args().collect::<Vec<_>>().contains(&"--dry-run".to_owned()) {
