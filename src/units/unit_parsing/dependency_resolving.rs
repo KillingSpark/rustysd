@@ -1,6 +1,8 @@
 use crate::units::*;
 use std::collections::HashMap;
 
+pub fn prune_units(target_unit_name: &str, unit_table: &mut HashMap<InternalId, Unit>) {}
+
 pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     let mut name_to_id = HashMap::new();
 
@@ -41,12 +43,14 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
             for name in &conf.wanted_by {
                 let id = name_to_id[name.as_str()];
                 wanted_by.push((unit.id, id));
+                before.push((id, unit.id));
+                after.push((unit.id, id));
             }
-        }
-        if let Some(conf) = &unit.install.install_config {
             for name in &conf.required_by {
                 let id = name_to_id[name.as_str()];
                 required_by.push((unit.id, id));
+                before.push((id, unit.id));
+                after.push((unit.id, id));
             }
         }
     }
@@ -79,7 +83,6 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     }
 }
 
-
 pub fn apply_sockets_to_services(
     service_table: &mut ServiceTable,
     socket_table: &mut SocketTable,
@@ -93,7 +96,8 @@ pub fn apply_sockets_to_services(
                 let srvc = &mut srvc_unit.specialized;
                 if let UnitSpecialized::Service(srvc) = srvc {
                     // add sockets for services with the exact same name
-                    if (srvc_unit.conf.name_without_suffix() == sock_unit.conf.name_without_suffix())
+                    if (srvc_unit.conf.name_without_suffix()
+                        == sock_unit.conf.name_without_suffix())
                         && !srvc.socket_ids.contains(&sock_unit.id)
                     {
                         trace!(
