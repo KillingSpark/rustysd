@@ -268,5 +268,11 @@ pub fn apply_sockets_to_services(
         }
     }
 
+    for srvc_unit in service_table.values_mut() {
+        if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
+            srvc.socket_ids.sort();
+        }
+    }
+
     Ok(())
 }
