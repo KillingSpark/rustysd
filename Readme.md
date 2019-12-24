@@ -79,6 +79,7 @@ Just some stuff I know does not work but would be cool to have.
 1. The whole dbus shenanigans (besides waiting on dbus services, which is implemented)
 1. More socket types 
     1. Netlink is missing for example
+    1. Abstract namespace for unix sockets (but thats linux specific anyways and rust stdlib doesnt support it.....)
 1. More Service types 
     1. forking is missing
     1. oneshot is missing
