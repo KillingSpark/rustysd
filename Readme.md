@@ -70,6 +70,7 @@ Currently there are two services, one that gets passed some sockets and one that
 Just some stuff I know does not work but would be cool to have.
 1. Better pruning of the units to reach the target unit
 1. Get all the meta-targets and default dependencies right
+1. Unit templates
 1. Patching unit definitions with dropin files
 1. Timeouts for service starting
 1. Socket activation in inetd style
@@ -78,8 +79,19 @@ Just some stuff I know does not work but would be cool to have.
 1. The whole dbus shenanigans (besides waiting on dbus services, which is implemented)
 1. More socket types 
     1. Netlink is missing for example
+1. More Service types 
+    1. forking is missing
+    1. oneshot is missing
+    1. idle is missing
 1. The rest of the sd_notify API (with storing filedescriptors and such)
 1. A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
+
+## How does it work
+Generally rustysd has two phases:
+1. Bring up all units with as much concurrency as possible, and as lazily (with socket activation) as possible
+2. Wait for events from the services, and reat to these
+    1. Data from either stdout/err or the notification sockets
+    2. Signals from the kernel
 
 ## Community
 There has been a request for a place to talk about this project, so I opened a gitter community for this project. Feel free to come over and have a chat [on this page](https://gitter.im/rustysd/community?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
