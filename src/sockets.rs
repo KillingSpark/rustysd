@@ -5,6 +5,7 @@ use std::{
     net::UdpSocket,
     os::unix::io::AsRawFd,
     os::unix::io::FromRawFd,
+    os::unix::io::RawFd,
     os::unix::net::{UnixDatagram, UnixListener},
     sync::Arc,
 };
@@ -34,6 +35,14 @@ impl SpecializedSocketConfig {
             SpecializedSocketConfig::TcpSocket(conf) => conf.open(),
             SpecializedSocketConfig::UdpSocket(conf) => conf.open(),
             SpecializedSocketConfig::Fifo(conf) => conf.open(),
+        }
+    }
+    fn close(&self, rawfd: RawFd) -> Result<(), String> {
+        match self {
+            SpecializedSocketConfig::UnixSocket(conf) => conf.close(rawfd),
+            SpecializedSocketConfig::TcpSocket(conf) => conf.close(rawfd),
+            SpecializedSocketConfig::UdpSocket(conf) => conf.close(rawfd),
+            SpecializedSocketConfig::Fifo(conf) => conf.close(rawfd),
         }
     }
 }
@@ -68,6 +77,13 @@ impl FifoConfig {
         let fifo = unsafe { std::fs::File::from_raw_fd(fifo_fd) };
         Ok(Arc::new(Box::new(fifo)))
     }
+
+    fn close(&self, rawfd: RawFd) -> Result<(), String> {
+        std::fs::remove_file(&self.path)
+            .map_err(|e| format!("Error removing file {:?}: {}", self.path, e))?;
+        nix::unistd::close(rawfd).unwrap();
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -97,6 +113,20 @@ impl UnixSeqPacket {
 }
 
 impl UnixSocketConfig {
+    fn close(&self, rawfd: RawFd) -> Result<(), String> {
+        let strpath = match self {
+            UnixSocketConfig::Stream(s) => s,
+            UnixSocketConfig::Datagram(s) => s,
+            UnixSocketConfig::Sequential(s) => s,
+        };
+        let path = std::path::PathBuf::from(strpath);
+        std::fs::remove_file(&path)
+            .map_err(|e| format!("Error removing file {:?}: {}", path, e))?;
+        nix::unistd::close(rawfd)
+            .map_err(|e| format!("Error closing raw fd for socket {}: {}", strpath, e))?;
+        Ok(())
+    }
+
     fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
         match self {
             UnixSocketConfig::Stream(path) => {
@@ -187,6 +217,10 @@ impl TcpSocketConfig {
         //need to stop the listener to drop which would close the filedescriptor
         Ok(Arc::new(Box::new(listener)))
     }
+    fn close(&self, rawfd: RawFd) -> Result<(), String> {
+        nix::unistd::close(rawfd)
+            .map_err(|e| format!("Error closing raw fd for socket {}: {}", self.addr, e))
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -200,6 +234,11 @@ impl UdpSocketConfig {
         let listener = UdpSocket::bind(self.addr).unwrap();
         //need to stop the listener to drop which would close the filedescriptor
         Ok(Arc::new(Box::new(listener)))
+    }
+
+    fn close(&self, rawfd: RawFd) -> Result<(), String> {
+        nix::unistd::close(rawfd)
+            .map_err(|e| format!("Error closing raw fd for socket {}: {}", self.addr, e))
     }
 }
 
@@ -238,6 +277,15 @@ impl Socket {
             .unwrap();
             conf.fd = Some(as_raw_fd);
             //need to stop the listener to drop which would close the filedescriptor
+        }
+        Ok(())
+    }
+
+    pub fn close_all(&mut self) -> Result<(), String> {
+        for conf in &self.sockets {
+            if let Some(fd) = &conf.fd {
+                conf.specialized.close(fd.as_raw_fd())?;
+            }
         }
         Ok(())
     }

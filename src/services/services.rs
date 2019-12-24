@@ -17,6 +17,7 @@ pub enum ServiceStatus {
     Starting,
     Running,
     Stopped,
+    StoppedFinal,
 }
 
 impl ToString for ServiceStatus {
@@ -26,6 +27,7 @@ impl ToString for ServiceStatus {
             ServiceStatus::Running => "Running".into(),
             ServiceStatus::Starting => "Starting".into(),
             ServiceStatus::Stopped => "Stopped".into(),
+            ServiceStatus::StoppedFinal => "StoppedFinal".into(),
         }
     }
 }
@@ -99,8 +101,7 @@ impl Service {
         Ok(())
     }
 
-    pub fn kill(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
-        self.status = ServiceStatus::Stopped;
+    fn stop(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
         self.run_stop_cmd(id, name, pid_table);
 
         if let Some(proc_group) = self.process_group {
@@ -109,6 +110,15 @@ impl Service {
                 Err(e) => error!("Error killing process group for service {}: {}", name, e,),
             }
         }
+    }
+
+    pub fn kill(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
+        self.status = ServiceStatus::Stopped;
+        self.stop(id, name, pid_table);
+    }
+    pub fn kill_final(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
+        self.status = ServiceStatus::StoppedFinal;
+        self.stop(id, name, pid_table);
     }
 
     pub fn run_stop_cmd(&self, id: InternalId, name: &str, pid_table: &mut PidTable) {
@@ -199,15 +209,19 @@ pub fn service_exit_handler(
                     pid,
                     code
                 );
-                srvc.status = ServiceStatus::Stopped;
-                if let Some(conf) = &srvc.service_config {
-                    if conf.keep_alive {
-                        true
+                if srvc.status == ServiceStatus::StoppedFinal {
+                    false
+                } else {
+                    srvc.status = ServiceStatus::Stopped;
+                    if let Some(conf) = &srvc.service_config {
+                        if conf.keep_alive {
+                            true
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
-                } else {
-                    false
                 }
             } else {
                 false

@@ -39,9 +39,44 @@ pub fn handle_signals(
                         });
                 }
                 signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
-                    // TODO kill all services
-                    // TODO close all notification sockets
-                    // TODO close all other sockets
+                    for unit in unit_table.read().unwrap().values() {
+                        let unit_locked = &mut *unit.lock().unwrap();
+                        match &mut unit_locked.specialized {
+                            UnitSpecialized::Service(srvc) => {
+                                trace!("Kill service unit: {}", unit_locked.conf.name());
+                                let pid_table_locked = &mut *pid_table.lock().unwrap();
+                                srvc.kill_final(
+                                    unit_locked.id,
+                                    &unit_locked.conf.name(),
+                                    pid_table_locked,
+                                );
+                            }
+                            UnitSpecialized::Socket(_) => {
+                                // closed below
+                            }
+                            UnitSpecialized::Target => {
+                                // Nothing to do
+                            }
+                        }
+                    }
+                    for unit in unit_table.read().unwrap().values() {
+                        let unit_locked = &mut *unit.lock().unwrap();
+                        match &mut unit_locked.specialized {
+                            UnitSpecialized::Service(_) => {
+                                // killed above
+                            }
+                            UnitSpecialized::Socket(sock) => {
+                                trace!("Close socket unit: {}", unit_locked.conf.name());
+                                match sock.close_all() {
+                                    Err(e) => error!("Error while closing sockets: {}", e),
+                                    Ok(()) => {}
+                                }
+                            }
+                            UnitSpecialized::Target => {
+                                // Nothing to do
+                            }
+                        }
+                    }
                     println!("Received termination signal. Rustysd checking out.");
                     break 'outer;
                 }
