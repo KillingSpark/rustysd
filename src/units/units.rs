@@ -19,6 +19,23 @@ pub type ArcMutUnitTable = Arc<RwLock<UnitTable>>;
 pub type PidTable = HashMap<Pid, PidEntry>;
 pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
 
+pub fn lock_all(
+    units: &mut Vec<(InternalId, Arc<Mutex<Unit>>)>,
+) -> HashMap<InternalId, std::sync::MutexGuard<'_, Unit>> {
+    let mut units_locked = HashMap::new();
+    // sort to make sure units always get locked in the same ordering
+    units.sort_by(|(lid, _), (rid, _)| lid.cmp(rid));
+
+    for (id, unit) in units {
+        trace!("Lock unit: {}", id);
+        let other_unit_locked = unit.lock().unwrap();
+        trace!("Locked unit: {}", id);
+        units_locked.insert(*id, other_unit_locked);
+    }
+
+    units_locked
+}
+
 #[derive(Eq, PartialEq, Hash)]
 pub enum PidEntry {
     Service(InternalId),
@@ -88,7 +105,6 @@ impl Unit {
         self.install.before.sort();
         self.install.after.sort();
         self.install.requires.sort();
-        
         // dedup after sorting
         self.install.wants.dedup();
         self.install.requires.dedup();

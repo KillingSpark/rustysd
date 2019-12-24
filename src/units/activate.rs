@@ -87,72 +87,58 @@ pub fn activate_unit(
 ) -> std::result::Result<StartResult, std::string::String> {
     trace!("Activate id: {}", id_to_start);
 
-    // first lock
-    // 1) the unit itself
-    // 2) the needed sockets if it is a service unit
-    // this all needs to happen under the unit_table lock because there is a deadlock
-    // hazard when taking the unit_table lock after already holding a unit lock
-    let mut socket_units = Vec::new();
-    let mut socket_units_locked = HashMap::new();
-    let mut socket_units_refs = HashMap::new();
-    let unit = {
-        let units_locked = unit_table.read().unwrap();
-        let unit = match units_locked.get(&id_to_start) {
-            Some(unit) => Arc::clone(unit),
-            None => {
-                panic!("Tried to run a unit that has been removed from the map");
-            }
-        };
-        {
-            let unit_locked = unit.lock().unwrap();
-
-            if let Some(started_ids) = started_ids {
-                let started_ids_locked = started_ids.lock().unwrap();
-
-                // if not all dependencies are yet started ignore this call. THis unit will be activated again when
-                // the next dependency gets ready
-                let all_deps_ready = unit_locked
-                    .install
-                    .after
-                    .iter()
-                    .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
-                if !all_deps_ready {
-                    trace!(
-                        "Unit: {} ignores activation. Not all dependencies have been started",
-                        unit_locked.conf.name()
-                    );
-                    return Ok(StartResult::Ignored);
-                }
-            }
-
-            let name = unit_locked.conf.name();
-            trace!("Lock required units for unit {}", name);
-            socket_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
-
-            // sort to make sure units always get locked in the same ordering
-            socket_units.sort_by(|(lid, _), (rid, _)| lid.cmp(rid));
-
-            for (id, unit) in &socket_units {
-                trace!("Lock unit: {}", id);
-                let unit_locked = unit.lock().unwrap();
-                trace!("Locked unit: {}", id);
-                socket_units_locked.insert(*id, unit_locked);
-            }
-            for (id, unit_locked) in &mut socket_units_locked {
-                let unit_ref: &mut Unit = &mut (*unit_locked);
-                socket_units_refs.insert(*id, unit_ref);
-            }
-            trace!("Done locking required units for unit {}", name);
+    // 1) First lock the unit itself
+    // 1.5) Check if this unit should be started right now
+    // 2) Then lock the needed other units (only for sockets of services right now)
+    // With that we always maintain a consistent order between locks so deadlocks shouldnt occur
+    let units_locked = unit_table.read().unwrap();
+    let unit = match units_locked.get(&id_to_start) {
+        Some(unit) => Arc::clone(unit),
+        None => {
+            panic!("Tried to run a unit that has been removed from the map");
         }
-        unit
     };
 
-    let unit_locked = &mut *unit.lock().unwrap();
+    let mut unit_locked = unit.lock().unwrap();
+
+    if let Some(started_ids) = started_ids {
+        let started_ids_locked = started_ids.lock().unwrap();
+
+        // if not all dependencies are yet started ignore this call. This unit will be activated again when
+        // the next dependency gets ready
+        let all_deps_ready = unit_locked
+            .install
+            .after
+            .iter()
+            .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
+        if !all_deps_ready {
+            trace!(
+                "Unit: {} ignores activation. Not all dependencies have been started",
+                unit_locked.conf.name()
+            );
+            return Ok(StartResult::Ignored);
+        }
+    }
+
+    let name = unit_locked.conf.name();
     let next_services_ids = unit_locked.install.before.clone();
+    
+    trace!("Lock required units for unit {}", name);
+    let mut other_needed_units = Vec::new();
+    other_needed_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
+    let mut other_needed_units_locked = crate::units::lock_all(&mut other_needed_units);
+    
+    let mut other_needed_units_refs = HashMap::new();
+    for (id, other_unit_locked) in &mut other_needed_units_locked {
+        let other_unit_locked: &mut Unit = &mut (*other_unit_locked);
+        other_needed_units_refs.insert(*id, other_unit_locked);
+    }
+    trace!("Done locking required units for unit {}", name);
+
 
     unit_locked
         .activate(
-            &mut socket_units_refs,
+            &mut other_needed_units_refs,
             pids.clone(),
             notification_socket_path.clone(),
             &eventfds,
@@ -166,6 +152,8 @@ pub fn activate_unit(
                 e
             )
         })
+
+    // drop all the locks "at once". Ordering of dropping should be irrelevant?
 }
 
 pub fn activate_units(
