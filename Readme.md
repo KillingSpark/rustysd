@@ -33,6 +33,8 @@ brought up that seem sensible. None of this is definitive though.
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested
 
+### General features
+
 1. Parsing of service files (a subset of the settings are recognized)
 1. Parsing of socket files (a subset of the settings are recognized)
 1. Ordering of services according to the before/after relations
@@ -48,10 +50,17 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
 1. Pruning the set of loaded units to only the needed one to reach the target unit (right now it's not pruned to the actual minimum, but no needed units are removed. Sockets for example are all being kept around right now)
 
-1. Running in a docker container as PID1. The image that is built by the scripts in the dockerfiles directory result in a 2MB image that contains
-    1. Rustysd (stripped binary built with musl to be completely static)
-    1. The testservice and testserviceclient (stripped binaries built with musl to be completely static)
-    1. The unit files in test_units
+### Optional build features
+There are some features behind flags because they are either platform dependent or not necessarily needed for most of the use-cases
+1. dbus_support: Activate support for services of type dbus (not needed for many services and probably a dumb idea in a container anyways)
+1. linux_eventfd: Use eventfds instead of pipes to interrupt select() calls (because they only exist on linux)
+
+### Docker
+Running in a docker container as PID1 works. The image that is built by the scripts in the dockerfiles directory result in a 2MB image that contains
+1. Rustysd (stripped binary built with musl to be completely static)
+1. The testservice and testserviceclient (stripped binaries built with musl to be completely static)
+1. The unit files in test_units
+
 
 ### See for yourself
 Running `./build_all.sh && cargo run --bin rustysd` will build the test services and run rustysd which will start them.
