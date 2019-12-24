@@ -80,8 +80,6 @@ impl Service {
                             pids.insert(new_pid, PidEntry::Service(id));
                         }
                         crate::platform::notify_event_fds(&eventfds)
-                    } else {
-                        // TODO dont even start services that require this one
                     }
                 } else {
                     trace!(
@@ -91,7 +89,6 @@ impl Service {
                     for sock in sockets.values_mut() {
                         sock.activated = false;
                     }
-                    crate::platform::notify_event_fds(&eventfds);
                 }
             }
             _ => error!(

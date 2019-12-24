@@ -27,9 +27,6 @@ pub fn parse_socket(parsed_file: ParsedFile, path: &PathBuf, chosen_id: Internal
         }
     }
 
-    // TODO handle install configs for sockets
-    let _ = install_config;
-
     let (sock_name, services, sock_configs) = match socket_configs {
         Some(triple) => triple,
         None => return Err(format!("Didn't find socket config in file: {:?}", path)),
