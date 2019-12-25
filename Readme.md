@@ -93,7 +93,7 @@ Just some stuff I know does not work but would be cool to have.
 ## How does it work
 Generally rustysd has two phases:
 1. Bring up all units with as much concurrency as possible, and as lazily (with socket activation) as possible
-2. Wait for events from the services, and reat to these
+2. Wait for events from the services, and react to these
     1. Data from either stdout/err or the notification sockets
     2. Signals from the kernel
 
