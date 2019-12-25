@@ -73,6 +73,9 @@ Just some stuff I know does not work but would be cool to have.
 1. Unit templates
 1. Patching unit definitions with dropin files
 1. Timeouts for service starting
+1. An optional journald logging. (Maybe thats not something that is actually something that is wanted)
+    1. Positive: Better compatibility
+    1. Negative: Weird dependency between rustysd and a service managed by rustysd (could be less of a pain point if rustysd itself handled logging in a journald way)
 1. Socket activation in inetd style
 1. Socket options like MaxConnections=/KeepAlive=
 1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
