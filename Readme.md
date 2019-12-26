@@ -90,6 +90,13 @@ Just some stuff I know does not work but would be cool to have.
 1. The rest of the sd_notify API (with storing filedescriptors and such)
 1. A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
 
+## What could be done better
+Some stuff where I chose something along the way where there might be better/other choices
+
+1. Use mio instead of nix::select to get events from the stdout/stderr/notification-sockets
+    1. Pro: uses more modern/efficient APIs (epoll/kqeueu)
+    1. Con: Probably less portable to more exotic unices (like redox)
+
 ## How does it work
 Generally rustysd has two phases:
 1. Bring up all units with as much concurrency as possible, and as lazily (with socket activation) as possible
