@@ -68,7 +68,7 @@ Currently there are two services, one that gets passed some sockets and one that
 
 ## What does not work
 Just some stuff I know does not work but would be cool to have.
-1. Better pruning of the units to reach the target unit
+1. Better pruning of the units to reach the target unit (need to filter out units that are just before/after but not wanted/required)
 1. Get all the meta-targets and default dependencies right
 1. Unit templates
 1. Patching unit definitions with dropin files
