@@ -60,6 +60,26 @@ brought up that seem sensible. None of this is definitive though.
 1. Provide full init capabilities so this can be used for OS's like redox os or debian/kFreeBSD
 1. Be platform agnostic as long as it's unix (I develop on linux but I'll try to test it on FreeBSD when I add new platform specific stuff)
 
+### About platform independence
+Here is a list of features rustysd currently assumes the platform to provide. The list also contains suggestions about which features
+could be cut and which consequence that would have (e.g. see the filedescriptor point). Everything here is written in unix terms but it should not be too much work
+to write a compatibility shim if an equivalents exist on the target platform. It's not too many features that must exist for the port to work in a usable way (and they are mostly basic OS functionality anyways).
+1. forking
+1. getting the current process id
+1. file descriptors that can be passed to child processes when forking
+    * Maybe we dont have to have this. We could just make sockets and socket-activation an optional feature for unixy platforms
+    * Then forking would be optional too, just having the ability to launch new executables in a new process would suffice
+1. (Un-)Mark file descriptors for closing on exec()'ing if forking with passed fds is supported
+1. Select()'ing on filedescriptors (not just for socket activation but for listening on stdout/err of child processes)
+1. Creating a pipe/eventfd/... for interrupting the selects (also a way to activate/reset those, write(/read() for pipes for example)
+1. dup2()'ing filedescriptors for providing fds at fd index 3,4,5,...
+1. Creating process-groups
+1. signals from the platform when a child exits / gets terminated in any way
+1. waitpid()'ing for the exited children
+1. sending (kill/terminating) signals to whole process groups (as long as we care about cleanup after killing, maybe the platform handles this in another smart way?)
+1. setting env variables (currently handled with libc because the rust std contains locks which currently break on forking)
+1. setting the current process as a subprocess reaper (might not be that important, other platforms might handle reparenting of orphaned processes differently than unix)
+
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested. If you find anything does actually not work
 please file me an issue!
