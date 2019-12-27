@@ -67,27 +67,34 @@ Running `./build_all.sh && cargo run --bin rustysd` will build the test services
 Currently there are two services, one that gets passed some sockets and one that uses them to send some text over those sockets.
 
 ## What does not work
-Just some stuff I know does not work but would be cool to have.
-1. Get all the meta-targets and default dependencies right
-1. Unit templates
-1. Patching unit definitions with dropin files
-1. Timeouts for service starting
-1. An optional journald logging. (Maybe thats not something that is actually something that is wanted)
+Just some stuff I know does not work but would be cool to have. I tried to categorize them by how much work the seem to be, but otherwise they
+are without a particular oder.
+
+Requiring bigger changes or seem complicated:
+* Unit templates
+* Timeouts for service starting
+* An optional journald logging. (Maybe thats not something that is actually something that is wanted)
     1. Positive: Better compatibility
     1. Negative: Weird dependency between rustysd and a service managed by rustysd (could be less of a pain point if rustysd itself handled logging in a journald way)
-1. Socket activation in inetd style
-1. Socket options like MaxConnections=/KeepAlive=
-1. Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
-1. The whole dbus shenanigans (besides waiting on dbus services, which is implemented)
-1. More socket types 
+* Socket activation in inetd style
+* The whole dbus shenanigans (besides waiting on dbus services, which is implemented)
+* Service type forking is missing
+* The rest of the sd_notify API (with storing filedescriptors and such)
+
+Requiring small changes / additions transparent to the other modules:
+* Patching unit definitions with dropin files
+* Socket options like MaxConnections=/KeepAlive=
+* Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
+* More socket types 
     1. Netlink is missing for example
     1. Abstract namespace for unix sockets (but thats linux specific anyways and rust stdlib doesnt support it.....)
-1. More Service types 
-    1. forking is missing
-    1. oneshot is missing
-    1. idle is missing
-1. The rest of the sd_notify API (with storing filedescriptors and such)
-1. A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
+* Service type oneshot is missing
+* Service type idle is missing (not even sure if its a good idea to support this)
+* A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
+
+Unclear how much work it is:
+* Get all the meta-targets and default dependencies right
+
 
 ## What could be done better
 Some stuff where I chose something along the way where there might be better/other choices
