@@ -1,14 +1,44 @@
 # rustysd
 Rustysd is a service manager that tries to replicate systemd behaviour for a subset of the configuration possibilities. It focuses on the core functionality of a service manager.
 
+## Will this replace systemd?
+TLDR: No, rustysd is no dedicated replacement. It is an opportunity for the niches where systemd could not get it's foot down to profit (more easily) from the 
+ecosystem around systemd.
+
+Very likely no. There are a lot of reasons, but most importantly: it works and provides features that rustysd will likely never provide. 
+
+This project might be whats needed to show that the core systemd functionality is not very hard to replicate and that all the advantages of 
+having a systemd-like service manager can be brought to many other platforms is very much feasible without having to port all of systemd. There are 
+some (a lot?) platforms that rust does not (yet) fully support so the maintainers will understandably 
+reject using rustysd as their main service manager. But having rustysd as an example might help other efforts in more portable languages.
+
+Rustysd also opens up usage of systemd services outside of systemd based linux distros (like alpine linux, commonly used in docker containers and small vms) and 
+freebsd.
+
+
+## General info
+
 For now this project is just out of interest how far I could come with this 
 and what would be needed to get a somewhat working system. It is very much a proof of concept / work in progress. For the love of god do not use this
 in anything that is important.
 It does look somewhat promising, the core parts are "working" (not thoroughly tested) but there is a lot of cleanup to be done. There is a whole lot of unwrap() calling
 where error handling should be done properly. It would be a bit unhelpful if your service-manager starts panicing.
 
+### Short intro to systemd / rustysd
+Systemd/rustysd operate on so called "units". These are smallish separate entities in the system like a single service. These units can be handled independently but 
+can specify relations to other units that they "need". The unit of service-abc can say "I need the unit of service-xyz to be started before I do".
+
+The second thing systemd/rustysd bring to the table is socket activation. Services that specify sockets do not need to be started immediately, but rather when there is 
+activity on their socket(s). This enables faster startup times by starting services lazily when they are needed.
+
+Additionally systemd provices a lot more unit-types besides services and sockets which rustysd does not (and for most will likely never) support. 
+
+
+## Scope of rustysd
+
 What is explicitly in scope of this project
-1. Startup sorted by dependencies (parallel if possible for unrelated services)
+1. Startup sorted by dependencies (parallel if possible for unrelated units)
+1. Startup synchronization via *.target units
 1. Socket activation of services
 1. Kill services that have dependencies on failed services
 
@@ -31,7 +61,8 @@ brought up that seem sensible. None of this is definitive though.
 1. Be platform agnostic as long as it's unix (I develop on linux but I'll try to test it on FreeBSD when I add new platform specific stuff)
 
 ## What works
-This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested
+This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested. If you find anything does actually not work
+please file me an issue!
 
 ### General features
 
