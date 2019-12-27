@@ -48,7 +48,7 @@ This section should be somewhat up to date with what parts are (partly?) impleme
 1. Target units to synchronize the startup
 1. Send SIGKILL to whole processgroup when killing a service
 1. Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
-1. Pruning the set of loaded units to only the needed one to reach the target unit (right now it's not pruned to the actual minimum, but no needed units are removed. Sockets for example are all being kept around right now)
+1. Pruning the set of loaded units to only the needed ones to reach the target unit
 
 ### Optional build features
 There are some features behind flags because they are either platform dependent or not necessarily needed for most of the use-cases
@@ -68,7 +68,6 @@ Currently there are two services, one that gets passed some sockets and one that
 
 ## What does not work
 Just some stuff I know does not work but would be cool to have.
-1. Better pruning of the units to reach the target unit (need to filter out units that are just before/after but not wanted/required)
 1. Get all the meta-targets and default dependencies right
 1. Unit templates
 1. Patching unit definitions with dropin files
