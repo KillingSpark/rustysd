@@ -81,6 +81,8 @@ pub fn prune_units(
             .filter(|id| ids_to_keep.contains(id))
             .map(|id| *id)
             .collect();
+
+        unit.dedup_dependencies();
     }
     Ok(())
 }
@@ -129,13 +131,71 @@ fn prune_sockets(unit_table: &mut HashMap<InternalId, Unit>) {
         }
     }
     for unit in unit_table.values() {
-        if unit.is_socket() && !socket_ids_to_keep.contains(&unit.id){
+        if unit.is_socket() && !socket_ids_to_keep.contains(&unit.id) {
             socket_ids_to_remove.push(unit.id);
         }
     }
     for id in &socket_ids_to_remove {
         let unit = unit_table.remove(id).unwrap();
         trace!("Pruning socket: {}", unit.conf.name());
+    }
+
+    let mut socket_target_unit = None;
+    for unit in unit_table.values_mut() {
+        if unit.conf.name() == "sockets.target" {
+            socket_target_unit = Some(unit);
+            break;
+        }
+    }
+    if let Some(socket_target_unit) = socket_target_unit {
+        trace!("Cleaning sockets.target dependencies");
+        socket_target_unit.install.before = socket_target_unit
+            .install
+            .before
+            .iter()
+            .filter(|id| socket_ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+        socket_target_unit.install.after = socket_target_unit
+            .install
+            .after
+            .iter()
+            .filter(|id| socket_ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+        socket_target_unit.install.requires = socket_target_unit
+            .install
+            .requires
+            .iter()
+            .filter(|id| socket_ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+        socket_target_unit.install.wants = socket_target_unit
+            .install
+            .wants
+            .iter()
+            .filter(|id| socket_ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+        socket_target_unit.install.required_by = socket_target_unit
+            .install
+            .required_by
+            .iter()
+            .filter(|id| socket_ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
+
+        socket_target_unit.install.wanted_by = socket_target_unit
+            .install
+            .wanted_by
+            .iter()
+            .filter(|id| socket_ids_to_keep.contains(id))
+            .map(|id| *id)
+            .collect();
     }
 }
 

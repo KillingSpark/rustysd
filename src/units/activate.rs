@@ -113,8 +113,9 @@ pub fn activate_unit(
             .fold(true, |acc, elem| acc && started_ids_locked.contains(elem));
         if !all_deps_ready {
             trace!(
-                "Unit: {} ignores activation. Not all dependencies have been started",
-                unit_locked.conf.name()
+                "Unit: {} ignores activation. Not all dependencies have been started (needs: {:?})",
+                unit_locked.conf.name(),
+                unit_locked.install.after,
             );
             return Ok(StartResult::Ignored);
         }
@@ -122,19 +123,16 @@ pub fn activate_unit(
 
     let name = unit_locked.conf.name();
     let next_services_ids = unit_locked.install.before.clone();
-    
     trace!("Lock required units for unit {}", name);
     let mut other_needed_units = Vec::new();
     other_needed_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
     let mut other_needed_units_locked = crate::units::lock_all(&mut other_needed_units);
-    
     let mut other_needed_units_refs = HashMap::new();
     for (id, other_unit_locked) in &mut other_needed_units_locked {
         let other_unit_locked: &mut Unit = &mut (*other_unit_locked);
         other_needed_units_refs.insert(*id, other_unit_locked);
     }
     trace!("Done locking required units for unit {}", name);
-
 
     unit_locked
         .activate(

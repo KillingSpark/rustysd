@@ -33,10 +33,6 @@ pub fn load_all_units(paths: &[PathBuf]) -> Result<HashMap<InternalId, Unit>, Pa
             socket_target_unit.install.after.push(sock.id);
             socket_target_unit.install.requires.push(sock.id);
         }
-        for srvc in service_unit_table.values_mut() {
-            srvc.install.after.push(socket_target_unit.id);
-            socket_target_unit.install.before.push(srvc.id);
-        }
     }
 
     apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)?;
