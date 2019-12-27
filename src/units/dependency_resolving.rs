@@ -31,6 +31,7 @@ pub fn prune_units(
         let unit = unit_table.remove(id).unwrap();
         trace!("Pruning unit: {}", unit.conf.name());
     }
+    add_implicit_before_after(unit_table);
     for unit in unit_table.values_mut() {
         unit.install.before = unit
             .install
@@ -40,7 +41,7 @@ pub fn prune_units(
             .map(|id| *id)
             .collect();
 
-            unit.install.after = unit
+        unit.install.after = unit
             .install
             .after
             .iter()
@@ -48,7 +49,7 @@ pub fn prune_units(
             .map(|id| *id)
             .collect();
 
-            unit.install.requires = unit
+        unit.install.requires = unit
             .install
             .requires
             .iter()
@@ -56,7 +57,7 @@ pub fn prune_units(
             .map(|id| *id)
             .collect();
 
-            unit.install.wants = unit
+        unit.install.wants = unit
             .install
             .wants
             .iter()
@@ -64,7 +65,7 @@ pub fn prune_units(
             .map(|id| *id)
             .collect();
 
-            unit.install.required_by = unit
+        unit.install.required_by = unit
             .install
             .required_by
             .iter()
@@ -72,7 +73,7 @@ pub fn prune_units(
             .map(|id| *id)
             .collect();
 
-            unit.install.wanted_by = unit
+        unit.install.wanted_by = unit
             .install
             .wanted_by
             .iter()
@@ -96,15 +97,57 @@ fn find_needed_units_recursive(
     let unit = unit_table.get(&needed_id).unwrap();
     let mut new_needed_ids = Vec::new();
 
-    for new_id in &unit.install.after {
+    for new_id in &unit.install.requires {
         new_needed_ids.push(*new_id);
     }
+    for new_id in &unit.install.wants {
+        new_needed_ids.push(*new_id);
+    }
+
+    trace!("Id {} needs ids: {:?}", needed_id, new_needed_ids);
 
     for new_id in &new_needed_ids {
         find_needed_units_recursive(*new_id, unit_table, visited_ids);
     }
 }
 
+// add after/before relations for required_by/wanted_by relations after pruning
+pub fn add_implicit_before_after(units: &mut HashMap<InternalId, Unit>) {
+    let mut name_to_id = HashMap::new();
+
+    for (id, unit) in &*units {
+        let name = unit.conf.name();
+        name_to_id.insert(name, *id);
+    }
+
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    for unit in (*units).values_mut() {
+        if let Some(conf) = &unit.install.install_config {
+            for name in &conf.wanted_by {
+                let id = name_to_id[name.as_str()];
+                before.push((id, unit.id));
+                after.push((unit.id, id));
+            }
+            for name in &conf.required_by {
+                let id = name_to_id[name.as_str()];
+                before.push((id, unit.id));
+                after.push((unit.id, id));
+            }
+        }
+    }
+
+    for (before, after) in before {
+        let unit = units.get_mut(&after).unwrap();
+        unit.install.before.push(before);
+    }
+    for (after, before) in after {
+        let unit = units.get_mut(&before).unwrap();
+        unit.install.after.push(after);
+    }
+}
+
+// make edges between units visible on bot sides: required <-> required_by  after <-> before
 pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     let mut name_to_id = HashMap::new();
 
@@ -145,14 +188,10 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
             for name in &conf.wanted_by {
                 let id = name_to_id[name.as_str()];
                 wanted_by.push((unit.id, id));
-                before.push((id, unit.id));
-                after.push((unit.id, id));
             }
             for name in &conf.required_by {
                 let id = name_to_id[name.as_str()];
                 required_by.push((unit.id, id));
-                before.push((id, unit.id));
-                after.push((unit.id, id));
             }
         }
     }
@@ -185,6 +224,18 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     }
 }
 
+fn add_sock_srvc_relations(
+    srvc_id: InternalId,
+    srvc_install: &mut Install,
+    sock_id: InternalId,
+    sock_install: &mut Install,
+) {
+    srvc_install.after.push(sock_id);
+    srvc_install.requires.push(sock_id);
+    sock_install.before.push(srvc_id);
+    srvc_install.required_by.push(sock_id);
+}
+
 pub fn apply_sockets_to_services(
     service_table: &mut ServiceTable,
     socket_table: &mut SocketTable,
@@ -209,8 +260,12 @@ pub fn apply_sockets_to_services(
                         );
 
                         srvc.socket_ids.push(sock_unit.id);
-                        srvc_unit.install.after.push(sock_unit.id);
-                        sock_unit.install.before.push(srvc_unit.id);
+                        add_sock_srvc_relations(
+                            srvc_unit.id,
+                            &mut srvc_unit.install,
+                            sock_unit.id,
+                            &mut sock_unit.install,
+                        );
                         counter += 1;
                     }
 
@@ -225,8 +280,12 @@ pub fn apply_sockets_to_services(
                                 srvc_unit.conf.name()
                             );
                             srvc.socket_ids.push(sock_unit.id);
-                            srvc_unit.install.after.push(sock_unit.id);
-                            sock_unit.install.before.push(srvc_unit.id);
+                            add_sock_srvc_relations(
+                                srvc_unit.id,
+                                &mut srvc_unit.install,
+                                sock_unit.id,
+                                &mut sock_unit.install,
+                            );
                             counter += 1;
                         }
                     }
@@ -248,8 +307,12 @@ pub fn apply_sockets_to_services(
                             );
 
                             srvc.socket_ids.push(sock_unit.id);
-                            srvc_unit.install.after.push(sock_unit.id);
-                            sock_unit.install.before.push(srvc_unit.id);
+                            add_sock_srvc_relations(
+                                srvc_unit.id,
+                                &mut srvc_unit.install,
+                                sock_unit.id,
+                                &mut sock_unit.install,
+                            );
                             counter += 1;
                         }
                     }
