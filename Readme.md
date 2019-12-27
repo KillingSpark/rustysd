@@ -87,7 +87,7 @@ There are some features behind flags because they are either platform dependent 
 1. linux_eventfd: Use eventfds instead of pipes to interrupt select() calls (because they only exist on linux)
 
 ### Docker
-Running in a docker container as PID1 works. The image that is built by the scripts in the dockerfiles directory result in a 2MB image that contains
+Running in a docker container as PID1 works. The image that is built by the scripts in the dockerfiles directory results in a 2MB image that contains
 1. Rustysd (stripped binary built with musl to be completely static)
 1. The testservice and testserviceclient (stripped binaries built with musl to be completely static)
 1. The unit files in test_units
@@ -96,6 +96,8 @@ Running in a docker container as PID1 works. The image that is built by the scri
 ### See for yourself
 Running `./build_all.sh && cargo run --bin rustysd` will build the test services and run rustysd which will start them.
 Currently there are two services, one that gets passed some sockets and one that uses them to send some text over those sockets.
+
+There are some scripts to run this in a docker container. Have a look at the scripts in the dockerfiles directory.
 
 ## What does not work
 Just some stuff I know does not work but would be cool to have. I tried to categorize them by how much work the seem to be, but otherwise they
