@@ -221,7 +221,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Conf
 
     let config = Config {
         unit_dirs: unit_dirs.unwrap_or_else(|| vec![PathBuf::from("./test_units")]),
-        target_unit: target_unit.unwrap_or(Some("".to_owned())).unwrap(),
+        target_unit: target_unit.unwrap_or(Some("default.target".to_owned())).unwrap(),
 
         notification_sockets_dir: notification_sockets_dir
             .unwrap_or_else(|| Some(PathBuf::from("./notifications")))
