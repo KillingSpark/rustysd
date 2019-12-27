@@ -31,6 +31,7 @@ pub fn prune_units(
         let unit = unit_table.remove(id).unwrap();
         trace!("Pruning unit: {}", unit.conf.name());
     }
+    prune_sockets(unit_table);
     add_implicit_before_after(unit_table);
     for unit in unit_table.values_mut() {
         unit.install.before = unit
@@ -103,11 +104,38 @@ fn find_needed_units_recursive(
     for new_id in &unit.install.wants {
         new_needed_ids.push(*new_id);
     }
+    for new_id in &unit.install.required_by {
+        new_needed_ids.push(*new_id);
+    }
+    for new_id in &unit.install.wanted_by {
+        new_needed_ids.push(*new_id);
+    }
+    new_needed_ids.sort();
+    new_needed_ids.dedup();
 
-    trace!("Id {} needs ids: {:?}", needed_id, new_needed_ids);
+    trace!("Id {} references ids: {:?}", needed_id, new_needed_ids);
 
     for new_id in &new_needed_ids {
         find_needed_units_recursive(*new_id, unit_table, visited_ids);
+    }
+}
+
+fn prune_sockets(unit_table: &mut HashMap<InternalId, Unit>) {
+    let mut socket_ids_to_keep = Vec::new();
+    let mut socket_ids_to_remove = Vec::new();
+    for unit in unit_table.values() {
+        if let UnitSpecialized::Service(srvc) = &unit.specialized {
+            socket_ids_to_keep.extend(srvc.socket_ids.iter().copied());
+        }
+    }
+    for unit in unit_table.values() {
+        if unit.is_socket() && !socket_ids_to_keep.contains(&unit.id){
+            socket_ids_to_remove.push(unit.id);
+        }
+    }
+    for id in &socket_ids_to_remove {
+        let unit = unit_table.remove(id).unwrap();
+        trace!("Pruning socket: {}", unit.conf.name());
     }
 }
 

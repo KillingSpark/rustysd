@@ -29,7 +29,9 @@ pub fn load_all_units(paths: &[PathBuf]) -> Result<HashMap<InternalId, Unit>, Pa
         trace!("Adding sockets.target");
         for sock in socket_unit_table.values_mut() {
             sock.install.before.push(socket_target_unit.id);
+            sock.install.required_by.push(socket_target_unit.id);
             socket_target_unit.install.after.push(sock.id);
+            socket_target_unit.install.requires.push(sock.id);
         }
         for srvc in service_unit_table.values_mut() {
             srvc.install.after.push(socket_target_unit.id);
