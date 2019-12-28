@@ -60,18 +60,6 @@ pub fn activate_unit(
     eventfds: Arc<Vec<EventFd>>,
     allow_ignore: bool,
 ) -> std::result::Result<StartResult, std::string::String> {
-    {
-        let status_table_locked = run_info.status_table.read().unwrap();
-        let status = status_table_locked.get(&id_to_start).unwrap();
-        let status_locked = status.lock().unwrap();
-        if !(*status_locked == UnitStatus::NeverStarted || *status_locked == UnitStatus::Stopped) {
-            trace!(
-                "Don't activate id: {:?}. Has status: {:?}",
-                id_to_start,
-                *status_locked
-            );
-        }
-    }
     trace!("Activate id: {:?}", id_to_start);
 
     // 1) First lock the unit itself
@@ -108,12 +96,25 @@ pub fn activate_unit(
         return Ok(StartResult::Ignored);
     }
 
-    // Update the status to starting
     {
+        // Check if the unit is currently starting. Update the status to starting if not
         let status_table_locked = run_info.status_table.read().unwrap();
-        let status = status_table_locked.get(&unit_locked.id).unwrap();
+        let status = status_table_locked.get(&id_to_start).unwrap();
         let mut status_locked = status.lock().unwrap();
-        *status_locked = UnitStatus::Starting;
+
+        // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
+        // TODO make this relation less weird. Maybe add a separate code path for socket activation
+        if *status_locked == UnitStatus::Started && allow_ignore {
+            if !(*status_locked == UnitStatus::NeverStarted || *status_locked == UnitStatus::Stopped) {
+                trace!(
+                    "Don't activate Unit: {:?}. Has status: {:?}",
+                    unit_locked.conf.name(),
+                    *status_locked
+                );
+                return Ok(StartResult::Ignored);
+            }
+            *status_locked = UnitStatus::Starting;
+        }
     }
 
     let name = unit_locked.conf.name();
