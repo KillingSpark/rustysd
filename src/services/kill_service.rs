@@ -2,7 +2,7 @@ use crate::platform::EventFd;
 use crate::units::*;
 use std::sync::Arc;
 
-pub fn kill_service(id_to_kill: InternalId, run_info: ArcRuntimeInfo) {
+pub fn kill_service(id_to_kill: UnitId, run_info: ArcRuntimeInfo) {
     let unit_table_locked = run_info.unit_table.read().unwrap();
     let mut pid_table_locked = run_info.pid_table.lock().unwrap();
     let status_table_locked = run_info.status_table.read().unwrap();
@@ -21,7 +21,7 @@ pub fn kill_service(id_to_kill: InternalId, run_info: ArcRuntimeInfo) {
     }
 }
 
-pub fn kill_services(ids_to_kill: Vec<InternalId>, run_info: ArcRuntimeInfo) {
+pub fn kill_services(ids_to_kill: Vec<UnitId>, run_info: ArcRuntimeInfo) {
     //TODO killall services that require this service
     for id in ids_to_kill {
         kill_service(id, run_info.clone());
@@ -29,7 +29,7 @@ pub fn kill_services(ids_to_kill: Vec<InternalId>, run_info: ArcRuntimeInfo) {
 }
 
 pub fn restart_service(
-    id_to_restart: InternalId,
+    id_to_restart: UnitId,
     run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 pub fn parse_service(
     parsed_file: ParsedFile,
     path: &PathBuf,
-    chosen_id: InternalId,
+    chosen_id: UnitId,
 ) -> Result<Unit, ParsingError> {
     let mut service_config = None;
     let mut install_config = None;

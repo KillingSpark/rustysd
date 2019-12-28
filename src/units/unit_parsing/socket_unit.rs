@@ -5,7 +5,7 @@ use std::path::PathBuf;
 pub fn parse_socket(
     parsed_file: ParsedFile,
     path: &PathBuf,
-    chosen_id: InternalId,
+    chosen_id: UnitId,
 ) -> Result<Unit, String> {
     let mut socket_configs = None;
     let mut install_config = None;

@@ -22,7 +22,7 @@ pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
     pub service_config: Option<ServiceConfig>,
 
-    pub socket_ids: Vec<InternalId>,
+    pub socket_ids: Vec<UnitId>,
 
     pub status_msgs: Vec<String>,
 
@@ -40,9 +40,9 @@ pub struct Service {
 impl Service {
     pub fn start(
         &mut self,
-        id: InternalId,
+        id: UnitId,
         name: &String,
-        sockets: &mut HashMap<InternalId, &mut Socket>,
+        sockets: &mut HashMap<UnitId, &mut Socket>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
@@ -73,7 +73,7 @@ impl Service {
         Ok(())
     }
 
-    fn stop(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
+    fn stop(&mut self, id: UnitId, name: &str, pid_table: &mut PidTable) {
         self.run_stop_cmd(id, name, pid_table);
 
         if let Some(proc_group) = self.process_group {
@@ -86,7 +86,7 @@ impl Service {
 
     pub fn kill(
         &mut self,
-        id: InternalId,
+        id: UnitId,
         name: &str,
         pid_table: &mut PidTable,
         status_table: &StatusTable,
@@ -106,7 +106,7 @@ impl Service {
 
     pub fn kill_final(
         &mut self,
-        id: InternalId,
+        id: UnitId,
         name: &str,
         pid_table: &mut PidTable,
         status_table: &StatusTable,
@@ -124,7 +124,7 @@ impl Service {
         }
     }
 
-    pub fn run_stop_cmd(&self, id: InternalId, name: &str, pid_table: &mut PidTable) {
+    pub fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: &mut PidTable) {
         let split: Vec<&str> = match &self.service_config {
             Some(conf) => {
                 if conf.stop.is_empty() {
@@ -205,7 +205,7 @@ pub fn service_exit_handler(
             let unit_locked = &mut *unit.lock().unwrap();
             if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
                 trace!(
-                    "Service with id: {}, name: {} pid: {} exited with code: {}",
+                    "Service with id: {:?}, name: {} pid: {} exited with code: {}",
                     srvc_id,
                     unit_locked.conf.name(),
                     pid,

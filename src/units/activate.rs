@@ -7,7 +7,7 @@ use std::sync::Arc;
 use threadpool::ThreadPool;
 
 fn activate_units_recursive(
-    ids_to_start: Vec<InternalId>,
+    ids_to_start: Vec<UnitId>,
     run_info: ArcRuntimeInfo,
     tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
@@ -49,12 +49,12 @@ fn activate_units_recursive(
 }
 
 pub enum StartResult {
-    Started(Vec<InternalId>),
+    Started(Vec<UnitId>),
     Ignored,
 }
 
 pub fn activate_unit(
-    id_to_start: InternalId,
+    id_to_start: UnitId,
     run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
@@ -66,13 +66,13 @@ pub fn activate_unit(
         let status_locked = status.lock().unwrap();
         if !(*status_locked == UnitStatus::NeverStarted || *status_locked == UnitStatus::Stopped) {
             trace!(
-                "Don't activate id: {}. Has status: {:?}",
+                "Don't activate id: {:?}. Has status: {:?}",
                 id_to_start,
                 *status_locked
             );
         }
     }
-    trace!("Activate id: {}", id_to_start);
+    trace!("Activate id: {:?}", id_to_start);
 
     // 1) First lock the unit itself
     // 1.5) Check if this unit should be started right now

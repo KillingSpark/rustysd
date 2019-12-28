@@ -1,11 +1,11 @@
 use crate::platform::setenv;
 use crate::services::Service;
 use crate::sockets::Socket;
-use crate::units::InternalId;
+use crate::units::UnitId;
 use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 
-fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<InternalId, &mut Socket>) {
+fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<UnitId, &mut Socket>) {
     // This is not really necessary since we mark all fds with FD_CLOEXEC but just to be safe...
     for (id, sock) in sockets.iter() {
         //trace!("[FORK_CHILD {}] CLOSE FDS FOR SOCKET: {}", name, sock.name);
@@ -26,7 +26,7 @@ fn close_all_unneeded_fds(srvc: &mut Service, sockets: &HashMap<InternalId, &mut
     }
 }
 
-fn setup_env_vars(sockets: &HashMap<InternalId, &mut Socket>, notify_socket_env_var: &str) {
+fn setup_env_vars(sockets: &HashMap<UnitId, &mut Socket>, notify_socket_env_var: &str) {
     // The following two lines do deadlock after fork and before exec... I would have loved to just use these
     // This has probably something to do with the global env_lock() that is being used in the std
     // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
@@ -103,7 +103,7 @@ fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
     }
 }
 
-fn dup_fds(name: &str, sockets: &HashMap<InternalId, &mut Socket>) {
+fn dup_fds(name: &str, sockets: &HashMap<UnitId, &mut Socket>) {
     // start at 3. 0,1,2 are stdin,stdout,stderr
     let file_desc_offset = 3;
     let mut fd_idx = 0;
@@ -175,7 +175,7 @@ fn move_into_new_process_group() {
 pub fn after_fork_child(
     srvc: &mut Service,
     name: &str,
-    sockets: &HashMap<InternalId, &mut Socket>,
+    sockets: &HashMap<UnitId, &mut Socket>,
     notify_socket_env_var: &str,
     new_stdout: RawFd,
     new_stderr: RawFd,

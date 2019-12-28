@@ -8,9 +8,9 @@ use crate::services::Service;
 use crate::units::*;
 use std::{collections::HashMap, io::Write, os::unix::io::AsRawFd};
 
-fn collect_from_srvc<F>(unit_table: ArcMutUnitTable, f: F) -> HashMap<i32, u64>
+fn collect_from_srvc<F>(unit_table: ArcMutUnitTable, f: F) -> HashMap<i32, UnitId>
 where
-    F: Fn(&mut HashMap<i32, u64>, &Service, u64),
+    F: Fn(&mut HashMap<i32, UnitId>, &Service, UnitId),
 {
     unit_table
         .read()
@@ -19,7 +19,7 @@ where
         .fold(HashMap::new(), |mut map, (id, srvc_unit)| {
             let srvc_unit_locked = srvc_unit.lock().unwrap();
             if let UnitSpecialized::Service(srvc) = &srvc_unit_locked.specialized {
-                f(&mut map, &srvc, *id);
+                f(&mut map, &srvc, id.clone());
             }
             map
         })

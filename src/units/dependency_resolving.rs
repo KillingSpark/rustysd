@@ -1,13 +1,13 @@
 use crate::units::*;
 use std::collections::HashMap;
 
-type SocketTable = HashMap<InternalId, Unit>;
-type ServiceTable = HashMap<InternalId, Unit>;
+type SocketTable = HashMap<UnitId, Unit>;
+type ServiceTable = HashMap<UnitId, Unit>;
 
 #[allow(dead_code)]
 pub fn prune_units(
     target_unit_name: &str,
-    unit_table: &mut HashMap<InternalId, Unit>,
+    unit_table: &mut HashMap<UnitId, Unit>,
 ) -> Result<(), String> {
     let mut ids_to_keep = Vec::new();
     let startunit = unit_table.values().fold(None, |mut result, unit| {
@@ -91,9 +91,9 @@ pub fn prune_units(
 }
 
 fn find_needed_units_recursive(
-    needed_id: InternalId,
-    unit_table: &HashMap<InternalId, Unit>,
-    visited_ids: &mut Vec<InternalId>,
+    needed_id: UnitId,
+    unit_table: &HashMap<UnitId, Unit>,
+    visited_ids: &mut Vec<UnitId>,
 ) {
     if visited_ids.contains(&needed_id) {
         return;
@@ -118,19 +118,19 @@ fn find_needed_units_recursive(
     new_needed_ids.sort();
     new_needed_ids.dedup();
 
-    trace!("Id {} references ids: {:?}", needed_id, new_needed_ids);
+    trace!("Id {:?} references ids: {:?}", needed_id, new_needed_ids);
 
     for new_id in &new_needed_ids {
         find_needed_units_recursive(*new_id, unit_table, visited_ids);
     }
 }
 
-fn prune_sockets(unit_table: &mut HashMap<InternalId, Unit>) {
+fn prune_sockets(unit_table: &mut HashMap<UnitId, Unit>) {
     let mut socket_ids_to_keep = Vec::new();
     let mut socket_ids_to_remove = Vec::new();
     for unit in unit_table.values() {
         if let UnitSpecialized::Service(srvc) = &unit.specialized {
-            socket_ids_to_keep.extend(srvc.socket_ids.iter().copied());
+            socket_ids_to_keep.extend(srvc.socket_ids.iter().cloned());
         }
     }
     for unit in unit_table.values() {
@@ -203,7 +203,7 @@ fn prune_sockets(unit_table: &mut HashMap<InternalId, Unit>) {
 }
 
 // add after/before relations for required_by/wanted_by relations after pruning
-pub fn add_implicit_before_after(units: &mut HashMap<InternalId, Unit>) {
+pub fn add_implicit_before_after(units: &mut HashMap<UnitId, Unit>) {
     let mut name_to_id = HashMap::new();
 
     for (id, unit) in &*units {
@@ -239,7 +239,7 @@ pub fn add_implicit_before_after(units: &mut HashMap<InternalId, Unit>) {
 }
 
 // make edges between units visible on bot sides: required <-> required_by  after <-> before
-pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
+pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
     let mut name_to_id = HashMap::new();
 
     for (id, unit) in &*units {
@@ -248,7 +248,7 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
     }
 
     let mut required_by = Vec::new();
-    let mut wanted_by: Vec<(InternalId, InternalId)> = Vec::new();
+    let mut wanted_by: Vec<(UnitId, UnitId)> = Vec::new();
     let mut before = Vec::new();
     let mut after = Vec::new();
 
@@ -316,9 +316,9 @@ pub fn fill_dependencies(units: &mut HashMap<InternalId, Unit>) {
 }
 
 fn add_sock_srvc_relations(
-    srvc_id: InternalId,
+    srvc_id: UnitId,
     srvc_install: &mut Install,
-    sock_id: InternalId,
+    sock_id: UnitId,
     sock_install: &mut Install,
 ) {
     srvc_install.after.push(sock_id);

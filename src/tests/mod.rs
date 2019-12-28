@@ -48,7 +48,7 @@ fn test_service_parsing() {
     let service = crate::units::parse_service(
         parsed_file,
         &std::path::PathBuf::from("/path/to/unitfile.service"),
-        10,
+        crate::units::UnitId(crate::units::UnitIdKind::Service, 10),
     )
     .unwrap();
 
@@ -158,7 +158,7 @@ fn test_socket_parsing() {
     let socket_unit = crate::units::parse_socket(
         parsed_file,
         &std::path::PathBuf::from("/path/to/unitfile.socket"),
-        10,
+        crate::units::UnitId(crate::units::UnitIdKind::Socket, 10),
     )
     .unwrap();
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 pub fn parse_target(
     parsed_file: ParsedFile,
     path: &PathBuf,
-    chosen_id: InternalId,
+    chosen_id: UnitId,
 ) -> Result<Unit, String> {
     let mut install_config = None;
     let mut unit_config = None;

@@ -6,7 +6,7 @@ use crate::units::*;
 pub fn wait_for_socket(
     eventfd: EventFd,
     unit_table: ArcMutUnitTable,
-) -> Result<Vec<InternalId>, String> {
+) -> Result<Vec<UnitId>, String> {
     let unit_table_locked = unit_table.read().unwrap();
     let fd_to_srvc_id = unit_table_locked
         .iter()

@@ -8,12 +8,44 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::{fmt, path::PathBuf};
 
-pub type InternalId = u64;
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub enum UnitIdKind {
+    Target,
+    Socket,
+    Service,
+}
 
-pub type UnitTable = HashMap<InternalId, Arc<Mutex<Unit>>>;
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub struct UnitId(pub UnitIdKind, pub u64);
+
+impl fmt::Debug for UnitId {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.write_str(format!("{}", self.1).as_str())
+    }
+}
+
+impl fmt::Display for UnitId {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.write_str(format!("{:?}", self).as_str())
+    }
+}
+
+impl std::cmp::PartialOrd for UnitId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.1.partial_cmp(&other.1)
+    }
+}
+
+impl std::cmp::Ord for UnitId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.1.cmp(&other.1)
+    }
+}
+
+pub type UnitTable = HashMap<UnitId, Arc<Mutex<Unit>>>;
 pub type ArcMutUnitTable = Arc<RwLock<UnitTable>>;
 
-pub type StatusTable = HashMap<InternalId, Arc<Mutex<UnitStatus>>>;
+pub type StatusTable = HashMap<UnitId, Arc<Mutex<UnitStatus>>>;
 pub type ArcMutStatusTable = Arc<RwLock<StatusTable>>;
 
 pub type PidTable = HashMap<Pid, PidEntry>;
@@ -29,17 +61,17 @@ pub struct RuntimeInfo {
 pub type ArcRuntimeInfo = Arc<RuntimeInfo>;
 
 pub fn lock_all(
-    units: &mut Vec<(InternalId, Arc<Mutex<Unit>>)>,
-) -> HashMap<InternalId, std::sync::MutexGuard<'_, Unit>> {
+    units: &mut Vec<(UnitId, Arc<Mutex<Unit>>)>,
+) -> HashMap<UnitId, std::sync::MutexGuard<'_, Unit>> {
     let mut units_locked = HashMap::new();
     // sort to make sure units always get locked in the same ordering
     units.sort_by(|(lid, _), (rid, _)| lid.cmp(rid));
 
     for (id, unit) in units {
-        trace!("Lock unit: {}", id);
+        trace!("Lock unit: {:?}", id);
         let other_unit_locked = unit.lock().unwrap();
-        trace!("Locked unit: {}", id);
-        units_locked.insert(*id, other_unit_locked);
+        trace!("Locked unit: {:?}", id);
+        units_locked.insert(id.clone(), other_unit_locked);
     }
 
     units_locked
@@ -47,8 +79,8 @@ pub fn lock_all(
 
 #[derive(Eq, PartialEq, Hash)]
 pub enum PidEntry {
-    Service(InternalId),
-    Stop(InternalId),
+    Service(UnitId),
+    Stop(UnitId),
 }
 
 #[derive(Eq, PartialEq, Hash, Debug)]
@@ -74,20 +106,20 @@ pub enum UnitSpecialized {
 /// Install::before: this unit should start before these units have been started
 /// ....
 pub struct Install {
-    pub wants: Vec<InternalId>,
-    pub requires: Vec<InternalId>,
+    pub wants: Vec<UnitId>,
+    pub requires: Vec<UnitId>,
 
-    pub wanted_by: Vec<InternalId>,
-    pub required_by: Vec<InternalId>,
+    pub wanted_by: Vec<UnitId>,
+    pub required_by: Vec<UnitId>,
 
-    pub before: Vec<InternalId>,
-    pub after: Vec<InternalId>,
+    pub before: Vec<UnitId>,
+    pub after: Vec<UnitId>,
 
     pub install_config: Option<InstallConfig>,
 }
 
 pub struct Unit {
-    pub id: InternalId,
+    pub id: UnitId,
     pub conf: UnitConfig,
     pub specialized: UnitSpecialized,
 
@@ -133,7 +165,7 @@ impl Unit {
         self.install.after.dedup();
     }
 
-    fn ids_needed_for_activation(&self) -> Vec<InternalId> {
+    fn ids_needed_for_activation(&self) -> Vec<UnitId> {
         match &self.specialized {
             UnitSpecialized::Target => Vec::new(),
             UnitSpecialized::Socket(_) => Vec::new(),
@@ -157,7 +189,7 @@ impl Unit {
 
     pub fn activate(
         &mut self,
-        required_units: &mut HashMap<InternalId, &mut Unit>,
+        required_units: &mut HashMap<UnitId, &mut Unit>,
         pids: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
@@ -170,7 +202,7 @@ impl Unit {
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
-                let mut sockets: HashMap<InternalId, &mut Socket> = HashMap::new();
+                let mut sockets: HashMap<UnitId, &mut Socket> = HashMap::new();
                 for (id, unit_locked) in required_units {
                     if let UnitSpecialized::Socket(sock) = &mut unit_locked.specialized {
                         sockets.insert(*id, sock);

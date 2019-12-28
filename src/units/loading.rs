@@ -2,11 +2,11 @@ use crate::units::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub fn load_all_units(paths: &[PathBuf]) -> Result<HashMap<InternalId, Unit>, ParsingError> {
+pub fn load_all_units(paths: &[PathBuf]) -> Result<HashMap<UnitId, Unit>, ParsingError> {
     let mut base_id = 0;
     let mut service_unit_table = HashMap::new();
     let mut socket_unit_table = HashMap::new();
-    let mut target_unit_table: HashMap<u64, Unit> = HashMap::new();
+    let mut target_unit_table = HashMap::new();
     for path in paths {
         parse_all_units(
             &mut service_unit_table,
@@ -45,11 +45,11 @@ pub fn load_all_units(paths: &[PathBuf]) -> Result<HashMap<InternalId, Unit>, Pa
 }
 
 fn parse_all_units(
-    services: &mut std::collections::HashMap<InternalId, Unit>,
-    sockets: &mut std::collections::HashMap<InternalId, Unit>,
-    targets: &mut std::collections::HashMap<InternalId, Unit>,
+    services: &mut std::collections::HashMap<UnitId, Unit>,
+    sockets: &mut std::collections::HashMap<UnitId, Unit>,
+    targets: &mut std::collections::HashMap<UnitId, Unit>,
     path: &PathBuf,
-    last_id: &mut InternalId,
+    last_id: &mut u64,
 ) -> Result<(), ParsingError> {
     let files = get_file_list(path)?;
     for entry in files {
@@ -69,23 +69,26 @@ fn parse_all_units(
             if entry.path().to_str().unwrap().ends_with(".service") {
                 *last_id += 1;
                 trace!("{:?}, {}", entry.path(), last_id);
+                let new_id = UnitId(UnitIdKind::Service, *last_id);
                 services.insert(
-                    *last_id,
-                    parse_service(parsed_file, &entry.path(), *last_id)?,
+                    new_id,
+                    parse_service(parsed_file, &entry.path(), new_id.clone())?,
                 );
             } else if entry.path().to_str().unwrap().ends_with(".socket") {
                 *last_id += 1;
                 trace!("{:?}, {}", entry.path(), last_id);
+                let new_id = UnitId(UnitIdKind::Service, *last_id);
                 sockets.insert(
-                    *last_id,
-                    parse_socket(parsed_file, &entry.path(), *last_id)?,
+                    new_id,
+                    parse_socket(parsed_file, &entry.path(), new_id.clone())?,
                 );
             } else if entry.path().to_str().unwrap().ends_with(".target") {
                 *last_id += 1;
                 trace!("{:?}, {}", entry.path(), last_id);
+                let new_id = UnitId(UnitIdKind::Service, *last_id);
                 targets.insert(
-                    *last_id,
-                    parse_target(parsed_file, &entry.path(), *last_id)?,
+                    new_id,
+                    parse_target(parsed_file, &entry.path(), new_id.clone())?,
                 );
             }
         }
