@@ -5,19 +5,25 @@ use std::sync::Arc;
 pub fn kill_service(id_to_kill: UnitId, run_info: ArcRuntimeInfo) {
     let unit_table_locked = run_info.unit_table.read().unwrap();
     let mut pid_table_locked = run_info.pid_table.lock().unwrap();
-    let status_table_locked = run_info.status_table.read().unwrap();
-
     let srvc_unit = unit_table_locked.get(&id_to_kill).unwrap();
     let mut unit_locked = srvc_unit.lock().unwrap();
     let srvc_id = unit_locked.id;
     let srvc_name = unit_locked.conf.name();
+
     if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
-        srvc.kill(
-            srvc_id,
-            &srvc_name,
-            &mut *pid_table_locked,
-            &status_table_locked,
-        );
+        {
+            let status_table_locked = run_info.status_table.read().unwrap();
+            let status = status_table_locked.get(&id_to_kill).unwrap();
+            let mut status_locked = status.lock().unwrap();
+            *status_locked = UnitStatus::Stopping;
+        }
+        srvc.kill(srvc_id, &srvc_name, &mut *pid_table_locked);
+        {
+            let status_table_locked = run_info.status_table.read().unwrap();
+            let status = status_table_locked.get(&id_to_kill).unwrap();
+            let mut status_locked = status.lock().unwrap();
+            *status_locked = UnitStatus::Stopped;
+        }
     }
 }
 

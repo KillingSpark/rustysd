@@ -81,7 +81,9 @@ impl Service {
                 Ok(_) => trace!("Success killing process group for service {}", name,),
                 Err(e) => error!("Error killing process group for service {}: {}", name, e,),
             }
-        }
+        }        
+        self.pid = None;
+        self.process_group = None;
     }
 
     pub fn kill(
@@ -89,39 +91,8 @@ impl Service {
         id: UnitId,
         name: &str,
         pid_table: &mut PidTable,
-        status_table: &StatusTable,
     ) {
-        {
-            let status = status_table.get(&id).unwrap();
-            let mut status_locked = status.lock().unwrap();
-            *status_locked = UnitStatus::Stopping;
-        }
         self.stop(id, name, pid_table);
-        {
-            let status = status_table.get(&id).unwrap();
-            let mut status_locked = status.lock().unwrap();
-            *status_locked = UnitStatus::Stopped;
-        }
-    }
-
-    pub fn kill_final(
-        &mut self,
-        id: UnitId,
-        name: &str,
-        pid_table: &mut PidTable,
-        status_table: &StatusTable,
-    ) {
-        {
-            let status = status_table.get(&id).unwrap();
-            let mut status_locked = status.lock().unwrap();
-            *status_locked = UnitStatus::Stopping;
-        }
-        self.stop(id, name, pid_table);
-        {
-            let status = status_table.get(&id).unwrap();
-            let mut status_locked = status.lock().unwrap();
-            *status_locked = UnitStatus::Stopped;
-        }
     }
 
     pub fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: &mut PidTable) {

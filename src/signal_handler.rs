@@ -51,13 +51,23 @@ pub fn handle_signals(
                             UnitSpecialized::Service(srvc) => {
                                 trace!("Kill service unit: {}", unit_locked.conf.name());
                                 let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-                                let status_table_locked = &*run_info.status_table.read().unwrap();
-                                srvc.kill_final(
+                                {
+                                    let status_table_locked = run_info.status_table.read().unwrap();
+                                    let status = status_table_locked.get(&unit_locked.id).unwrap();
+                                    let mut status_locked = status.lock().unwrap();
+                                    *status_locked = UnitStatus::Stopping;
+                                }
+                                srvc.kill(
                                     unit_locked.id,
                                     &unit_locked.conf.name(),
                                     pid_table_locked,
-                                    status_table_locked,
                                 );
+                                {
+                                    let status_table_locked = run_info.status_table.read().unwrap();
+                                    let status = status_table_locked.get(&unit_locked.id).unwrap();
+                                    let mut status_locked = status.lock().unwrap();
+                                    *status_locked = UnitStatus::Stopping;
+                                }
                             }
                             UnitSpecialized::Socket(_) => {
                                 // closed below
