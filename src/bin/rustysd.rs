@@ -222,7 +222,7 @@ fn main() {
     let eventfds_clone = eventfds.clone();
     let handle = std::thread::spawn(move || {
         // listen on signals from the child processes
-        signal_handler::handle_signals(signals, run_info_clone, note_dir_clone, &eventfds_clone);
+        signal_handler::handle_signals(signals, run_info_clone, note_dir_clone, eventfds_clone);
     });
 
     // parallel startup of all services

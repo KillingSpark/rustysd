@@ -9,8 +9,9 @@ pub fn handle_signals(
     signals: Signals,
     run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
-    eventfds: &[EventFd],
+    eventfds: Vec<EventFd>,
 ) {
+    let tpool = threadpool::ThreadPool::new(6);
     'outer: loop {
         // Pick up new signals
         for signal in signals.forever() {
@@ -18,22 +19,29 @@ pub fn handle_signals(
                 signal_hook::SIGCHLD => {
                     std::iter::from_fn(get_next_exited_child)
                         .take_while(Result::is_ok)
-                        .for_each(|val| match val {
-                            Ok((pid, code)) => match services::service_exit_handler(
-                                pid,
-                                code,
-                                run_info.clone(),
-                                notification_socket_path.clone(),
-                                eventfds,
-                            ) {
-                                Ok(()) => { /* Happy */ }
-                                Err(e) => {
-                                    error!("{}", e);
+                        .for_each(|val| {
+                            let note_sock_path = notification_socket_path.clone();
+                            let eventfds_clone =eventfds.clone();
+                            let run_info_clone =run_info.clone();
+                            tpool.execute(move || {
+                                match val {
+                                    Ok((pid, code)) => match services::service_exit_handler(
+                                        pid,
+                                        code,
+                                        run_info_clone,
+                                        note_sock_path,
+                                        &eventfds_clone,
+                                    ) {
+                                        Ok(()) => { /* Happy */ }
+                                        Err(e) => {
+                                            error!("{}", e);
+                                        }
+                                    },
+                                    Err(e) => {
+                                        error!("{}", e);
+                                    }
                                 }
-                            },
-                            Err(e) => {
-                                error!("{}", e);
-                            }
+                            });
                         });
                 }
                 signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
