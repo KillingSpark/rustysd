@@ -65,7 +65,10 @@ fn main() {
     units::prune_units(&conf.target_unit, &mut unit_table).unwrap();
     let unit_table = unit_table;
 
-    if std::env::args().collect::<Vec<_>>().contains(&"--dry-run".to_owned()) {
+    if std::env::args()
+        .collect::<Vec<_>>()
+        .contains(&"--dry-run".to_owned())
+    {
         warn!("Exit after loading because --dry-run was passed");
         return;
     }
@@ -202,6 +205,24 @@ fn main() {
         }
     });
 
+    platform::notify_event_fds(&eventfds);
+
+    // listen to signals
+    let unit_table_clone = unit_table.clone();
+    let pid_table_clone = pid_table.clone();
+    let note_dir_clone = conf.notification_sockets_dir.clone();
+    let eventfds_clone = eventfds.clone();
+    let handle = std::thread::spawn(move || {
+        // listen on signals from the child processes
+        signal_handler::handle_signals(
+            signals,
+            unit_table_clone,
+            pid_table_clone,
+            note_dir_clone,
+            &eventfds_clone,
+        );
+    });
+
     // parallel startup of all services
     units::activate_units(
         unit_table.clone(),
@@ -210,14 +231,5 @@ fn main() {
         pid_table.clone(),
     );
 
-    platform::notify_event_fds(&eventfds);
-
-    // listen on signals from the child processes
-    signal_handler::handle_signals(
-        signals,
-        unit_table,
-        pid_table,
-        conf.notification_sockets_dir.clone(),
-        &eventfds,
-    );
+    handle.join().unwrap();
 }
