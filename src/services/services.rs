@@ -198,12 +198,11 @@ pub fn service_exit_handler(
         };
         if restart_unit {
             trace!("Restart service {} after it died", name);
-            crate::units::activate_unit(
+            crate::services::restart_service(
                 srvc_id,
                 run_info,
                 notification_socket_path,
                 Arc::new(eventfds.to_vec()),
-                true,
             )?;
         } else {
             let unit_locked = unit.lock().unwrap();
