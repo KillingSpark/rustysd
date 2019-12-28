@@ -1,4 +1,4 @@
-use crate::services::{Service, ServiceRuntimeInfo, ServiceStatus};
+use crate::services::{Service, ServiceRuntimeInfo};
 use crate::units::*;
 use std::path::PathBuf;
 
@@ -50,7 +50,7 @@ pub fn parse_service(
         },
         specialized: UnitSpecialized::Service(Service {
             pid: None,
-            status: ServiceStatus::NeverRan,
+            signaled_ready: false,
 
             service_config,
             socket_ids: Vec::new(),
@@ -156,7 +156,9 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
                 match vec[0].1.to_uppercase().as_str() {
                     "ALWAYS" => ServiceRestart::Always,
                     "NO" => ServiceRestart::No,
-                    unknown_setting => panic!("Restart had to unknown setting: {}", unknown_setting),
+                    unknown_setting => {
+                        panic!("Restart had to unknown setting: {}", unknown_setting)
+                    }
                 }
             } else {
                 panic!("Restart had to many entries: {:?}", vec);

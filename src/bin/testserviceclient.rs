@@ -6,7 +6,7 @@ extern crate nix;
 
 fn main() {
     match nix::unistd::fork() {
-        Ok(nix::unistd::ForkResult::Parent{..}) => loop {
+        Ok(nix::unistd::ForkResult::Parent { .. }) => loop {
             let mut stream = UnixStream::connect("./sockets/servicelog_stream").unwrap();
             stream.write_all(b"AAAA\n").unwrap();
             stream.write_all(b"BBBB\n").unwrap();

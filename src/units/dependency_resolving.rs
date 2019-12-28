@@ -1,6 +1,9 @@
 use crate::units::*;
 use std::collections::HashMap;
 
+type SocketTable = HashMap<InternalId, Unit>;
+type ServiceTable = HashMap<InternalId, Unit>;
+
 #[allow(dead_code)]
 pub fn prune_units(
     target_unit_name: &str,

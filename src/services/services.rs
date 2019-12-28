@@ -11,27 +11,6 @@ use crate::platform::EventFd;
 use crate::sockets::Socket;
 use crate::units::*;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum ServiceStatus {
-    NeverRan,
-    Starting,
-    Running,
-    Stopped,
-    StoppedFinal,
-}
-
-impl ToString for ServiceStatus {
-    fn to_string(&self) -> String {
-        match *self {
-            ServiceStatus::NeverRan => "NeverRan".into(),
-            ServiceStatus::Running => "Running".into(),
-            ServiceStatus::Starting => "Starting".into(),
-            ServiceStatus::Stopped => "Stopped".into(),
-            ServiceStatus::StoppedFinal => "StoppedFinal".into(),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct ServiceRuntimeInfo {
     pub restarted: u64,
@@ -43,7 +22,6 @@ pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
     pub service_config: Option<ServiceConfig>,
 
-    pub status: ServiceStatus,
     pub socket_ids: Vec<InternalId>,
 
     pub status_msgs: Vec<String>,
@@ -51,6 +29,7 @@ pub struct Service {
     pub process_group: Option<nix::unistd::Pid>,
 
     pub runtime_info: ServiceRuntimeInfo,
+    pub signaled_ready: bool,
 
     pub notifications: Option<Arc<Mutex<UnixDatagram>>>,
     pub stdout_dup: Option<(RawFd, RawFd)>,
@@ -71,33 +50,25 @@ impl Service {
     ) -> Result<(), String> {
         trace!("Start service {}", name);
 
-        match self.status {
-            ServiceStatus::NeverRan | ServiceStatus::Stopped => {
-                if !allow_ignore || self.socket_ids.is_empty() {
-                    start_service(self, name.clone(), &sockets, notification_socket_path)?;
+        if !allow_ignore || self.socket_ids.is_empty() {
+            start_service(self, name.clone(), &sockets, notification_socket_path)?;
 
-                    if let Some(new_pid) = self.pid {
-                        {
-                            let mut pids = pids.lock().unwrap();
-                            pids.insert(new_pid, PidEntry::Service(id));
-                        }
-                        crate::platform::notify_event_fds(&eventfds)
-                    }
-                } else {
-                    trace!(
-                        "Ignore service {} start, waiting for socket activation instead",
-                        name,
-                    );
-                    for sock in sockets.values_mut() {
-                        sock.activated = false;
-                    }
-                    crate::platform::notify_event_fds(&eventfds)
+            if let Some(new_pid) = self.pid {
+                {
+                    let mut pids = pids.lock().unwrap();
+                    pids.insert(new_pid, PidEntry::Service(id));
                 }
+                crate::platform::notify_event_fds(&eventfds)
             }
-            _ => error!(
-                "Tried to start service {} after it was already running",
-                name
-            ),
+        } else {
+            trace!(
+                "Ignore service {} start, waiting for socket activation instead",
+                name,
+            );
+            for sock in sockets.values_mut() {
+                sock.activated = false;
+            }
+            crate::platform::notify_event_fds(&eventfds)
         }
         Ok(())
     }
@@ -113,13 +84,44 @@ impl Service {
         }
     }
 
-    pub fn kill(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
-        self.status = ServiceStatus::Stopped;
+    pub fn kill(
+        &mut self,
+        id: InternalId,
+        name: &str,
+        pid_table: &mut PidTable,
+        status_table: &StatusTable,
+    ) {
+        {
+            let status = status_table.get(&id).unwrap();
+            let mut status_locked = status.lock().unwrap();
+            *status_locked = UnitStatus::Stopping;
+        }
         self.stop(id, name, pid_table);
+        {
+            let status = status_table.get(&id).unwrap();
+            let mut status_locked = status.lock().unwrap();
+            *status_locked = UnitStatus::Stopped;
+        }
     }
-    pub fn kill_final(&mut self, id: InternalId, name: &str, pid_table: &mut PidTable) {
-        self.status = ServiceStatus::StoppedFinal;
+
+    pub fn kill_final(
+        &mut self,
+        id: InternalId,
+        name: &str,
+        pid_table: &mut PidTable,
+        status_table: &StatusTable,
+    ) {
+        {
+            let status = status_table.get(&id).unwrap();
+            let mut status_locked = status.lock().unwrap();
+            *status_locked = UnitStatus::Stopping;
+        }
         self.stop(id, name, pid_table);
+        {
+            let status = status_table.get(&id).unwrap();
+            let mut status_locked = status.lock().unwrap();
+            *status_locked = UnitStatus::Stopped;
+        }
     }
 
     pub fn run_stop_cmd(&self, id: InternalId, name: &str, pid_table: &mut PidTable) {
@@ -155,14 +157,13 @@ impl Service {
 pub fn service_exit_handler(
     pid: nix::unistd::Pid,
     code: i32,
-    unit_table: ArcMutUnitTable,
-    pid_table: ArcMutPidTable,
+    run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: &[EventFd],
 ) -> Result<(), String> {
     let srvc_id = {
-        let unit_table_locked = unit_table.read().unwrap();
-        let pid_table_locked = &mut *pid_table.lock().unwrap();
+        let unit_table_locked = run_info.unit_table.read().unwrap();
+        let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
         *(match pid_table_locked.get(&pid) {
             Some(entry) => match entry {
                 PidEntry::Service(id) => id,
@@ -190,7 +191,7 @@ pub fn service_exit_handler(
     };
 
     let unit = {
-        let units_locked = unit_table.read().unwrap();
+        let units_locked = run_info.unit_table.read().unwrap();
         match units_locked.get(&srvc_id) {
             Some(unit) => Arc::clone(unit),
             None => {
@@ -210,19 +211,15 @@ pub fn service_exit_handler(
                     pid,
                     code
                 );
-                if srvc.status == ServiceStatus::StoppedFinal {
-                    false
-                } else {
-                    srvc.status = ServiceStatus::Stopped;
-                    if let Some(conf) = &srvc.service_config {
-                        if conf.restart == ServiceRestart::Always {
-                            true
-                        } else {
-                            false
-                        }
+
+                if let Some(conf) = &srvc.service_config {
+                    if conf.restart == ServiceRestart::Always {
+                        true
                     } else {
                         false
                     }
+                } else {
+                    false
                 }
             } else {
                 false
@@ -232,9 +229,7 @@ pub fn service_exit_handler(
             trace!("Restart service {} after it died", name);
             crate::units::activate_unit(
                 srvc_id,
-                None,
-                unit_table,
-                pid_table,
+                run_info,
                 notification_socket_path,
                 Arc::new(eventfds.to_vec()),
                 true,
@@ -248,8 +243,7 @@ pub fn service_exit_handler(
             );
             super::kill_service::kill_services(
                 unit_locked.install.required_by.clone(),
-                unit_table,
-                pid_table,
+                run_info.clone(),
             );
         }
     }

@@ -1,4 +1,4 @@
-use crate::services::{Service, ServiceStatus};
+use crate::services::Service;
 use crate::units::*;
 use std::os::unix::net::UnixDatagram;
 
@@ -29,7 +29,6 @@ pub fn after_fork_parent(
                 let start_time = std::time::Instant::now();
                 //let duration_timeout = Some(std::time::Duration::from_nanos(1_000_000_000_000));
                 let duration_timeout = None;
-                
                 let mut buf = [0u8; 512];
                 loop {
                     if let Some(duration_timeout) = duration_timeout {
@@ -38,24 +37,25 @@ pub fn after_fork_parent(
                             //TODO handle timeout correctly
                             trace!("[FORK_PARENT] Service {} notification timed out", name);
                             break;
-                        }else{
+                        } else {
                             let duration_till_timeout = duration_timeout - duration_elapsed;
-                            stream.set_read_timeout(Some(duration_till_timeout)).unwrap();
+                            stream
+                                .set_read_timeout(Some(duration_till_timeout))
+                                .unwrap();
                         }
                     }
                     let bytes = match stream.recv(&mut buf[..]) {
                         Ok(bytes) => bytes,
-                        Err(e) => {
-                            match e.kind() {
-                                std::io::ErrorKind::WouldBlock => 0,
-                                _ => panic!("{}", e),
-                            }
-                        }
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::WouldBlock => 0,
+                            _ => panic!("{}", e),
+                        },
                     };
                     srvc.notifications_buffer
-                    .push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
+                        .push_str(&String::from_utf8(buf[..bytes].to_vec()).unwrap());
                     crate::notification_handler::handle_notifications_from_buffer(srvc, &name);
-                    if let ServiceStatus::Running = srvc.status {
+                    if srvc.signaled_ready {
+                        srvc.signaled_ready = false;
                         trace!("[FORK_PARENT] Service {} sent READY=1 notification", name);
                         break;
                     } else {
@@ -66,7 +66,6 @@ pub fn after_fork_parent(
             }
             ServiceType::Simple => {
                 trace!("[FORK_PARENT] service {} doesnt notify", name);
-                srvc.status = ServiceStatus::Running;
             }
             ServiceType::Dbus => {
                 if let Some(dbus_name) = &conf.dbus_name {

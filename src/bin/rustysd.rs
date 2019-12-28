@@ -74,14 +74,27 @@ fn main() {
     }
 
     use std::sync::{Arc, Mutex, RwLock};
-    //let service_table = Arc::new(Mutex::new(service_table));
-    //let socket_table = Arc::new(Mutex::new(socket_table));
+    // wrap units into mutexes
     let unit_table: std::collections::HashMap<_, _> = unit_table
         .into_iter()
         .map(|(id, unit)| (id, Arc::new(Mutex::new(unit))))
         .collect();
     let unit_table = Arc::new(RwLock::new(unit_table));
+
+    // init the status map
+    let mut status_table = std::collections::HashMap::new();
+    for id in unit_table.read().unwrap().keys() {
+        status_table.insert(*id, Arc::new(Mutex::new(units::UnitStatus::NeverStarted)));
+    }
+    let status_table = Arc::new(RwLock::new(status_table));
+
     let pid_table = Arc::new(Mutex::new(std::collections::HashMap::new()));
+
+    let run_info = Arc::new(units::RuntimeInfo {
+        unit_table: unit_table.clone(),
+        pid_table: pid_table.clone(),
+        status_table: status_table.clone(),
+    });
 
     // listen on user commands like listunits/kill/restart...
     let control_sock_path = conf.notification_sockets_dir.join("control.socket");
@@ -94,15 +107,13 @@ fn main() {
     std::fs::create_dir_all(&conf.notification_sockets_dir).unwrap();
     let unixsock = UnixListener::bind(&control_sock_path).unwrap();
     control::accept_control_connections_unix_socket(
-        unit_table.clone(),
-        pid_table.clone(),
+        run_info.clone(),
         conf.notification_sockets_dir.clone(),
         unixsock,
     );
     let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
     control::accept_control_connections_tcp(
-        unit_table.clone(),
-        pid_table.clone(),
+        run_info.clone(),
         conf.notification_sockets_dir.clone(),
         tcpsock,
     );
@@ -134,7 +145,7 @@ fn main() {
     });
 
     let unit_table_clone = unit_table.clone();
-    let pid_table_clone = pid_table.clone();
+    let run_info_clone = run_info.clone();
     let note_sock_path_clone = conf.notification_sockets_dir.clone();
     let eventfds_clone = Arc::new(eventfds.clone());
     std::thread::spawn(move || loop {
@@ -160,9 +171,7 @@ fn main() {
                         if let Some(srvc_unit_id) = srvc_unit_id {
                             match crate::units::activate_unit(
                                 srvc_unit_id,
-                                None,
-                                unit_table_clone.clone(),
-                                pid_table_clone.clone(),
+                                run_info_clone.clone(),
                                 note_sock_path_clone.clone(),
                                 eventfds_clone.clone(),
                                 false,
@@ -208,27 +217,19 @@ fn main() {
     platform::notify_event_fds(&eventfds);
 
     // listen to signals
-    let unit_table_clone = unit_table.clone();
-    let pid_table_clone = pid_table.clone();
+    let run_info_clone = run_info.clone();
     let note_dir_clone = conf.notification_sockets_dir.clone();
     let eventfds_clone = eventfds.clone();
     let handle = std::thread::spawn(move || {
         // listen on signals from the child processes
-        signal_handler::handle_signals(
-            signals,
-            unit_table_clone,
-            pid_table_clone,
-            note_dir_clone,
-            &eventfds_clone,
-        );
+        signal_handler::handle_signals(signals, run_info_clone, note_dir_clone, &eventfds_clone);
     });
 
     // parallel startup of all services
     units::activate_units(
-        unit_table.clone(),
+        run_info.clone(),
         conf.notification_sockets_dir.clone(),
         eventfds.clone(),
-        pid_table.clone(),
     );
 
     handle.join().unwrap();

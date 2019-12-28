@@ -7,8 +7,7 @@ use signal_hook::iterator::Signals;
 
 pub fn handle_signals(
     signals: Signals,
-    unit_table: ArcMutUnitTable,
-    pid_table: ArcMutPidTable,
+    run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: &[EventFd],
 ) {
@@ -23,8 +22,7 @@ pub fn handle_signals(
                             Ok((pid, code)) => match services::service_exit_handler(
                                 pid,
                                 code,
-                                unit_table.clone(),
-                                pid_table.clone(),
+                                run_info.clone(),
                                 notification_socket_path.clone(),
                                 eventfds,
                             ) {
@@ -39,16 +37,18 @@ pub fn handle_signals(
                         });
                 }
                 signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
-                    for unit in unit_table.read().unwrap().values() {
+                    for unit in run_info.unit_table.read().unwrap().values() {
                         let unit_locked = &mut *unit.lock().unwrap();
                         match &mut unit_locked.specialized {
                             UnitSpecialized::Service(srvc) => {
                                 trace!("Kill service unit: {}", unit_locked.conf.name());
-                                let pid_table_locked = &mut *pid_table.lock().unwrap();
+                                let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
+                                let status_table_locked = &*run_info.status_table.read().unwrap();
                                 srvc.kill_final(
                                     unit_locked.id,
                                     &unit_locked.conf.name(),
                                     pid_table_locked,
+                                    status_table_locked,
                                 );
                             }
                             UnitSpecialized::Socket(_) => {
@@ -59,7 +59,7 @@ pub fn handle_signals(
                             }
                         }
                     }
-                    for unit in unit_table.read().unwrap().values() {
+                    for unit in run_info.unit_table.read().unwrap().values() {
                         let unit_locked = &mut *unit.lock().unwrap();
                         match &mut unit_locked.specialized {
                             UnitSpecialized::Service(_) => {

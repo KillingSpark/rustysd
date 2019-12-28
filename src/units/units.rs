@@ -9,15 +9,24 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::{fmt, path::PathBuf};
 
 pub type InternalId = u64;
-pub type SocketTable = HashMap<InternalId, Unit>;
-pub type ServiceTable = HashMap<InternalId, Unit>;
-pub type TargetTable = HashMap<InternalId, Unit>;
 
 pub type UnitTable = HashMap<InternalId, Arc<Mutex<Unit>>>;
 pub type ArcMutUnitTable = Arc<RwLock<UnitTable>>;
 
+pub type StatusTable = HashMap<InternalId, Arc<Mutex<UnitStatus>>>;
+pub type ArcMutStatusTable = Arc<RwLock<StatusTable>>;
+
 pub type PidTable = HashMap<Pid, PidEntry>;
 pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
+
+pub struct RuntimeInfo {
+    pub unit_table: ArcMutUnitTable,
+    pub status_table: ArcMutStatusTable,
+    pub pid_table: ArcMutPidTable,
+}
+
+// This will be passed through to all the different threads as a central state struct
+pub type ArcRuntimeInfo = Arc<RuntimeInfo>;
 
 pub fn lock_all(
     units: &mut Vec<(InternalId, Arc<Mutex<Unit>>)>,
@@ -40,6 +49,16 @@ pub fn lock_all(
 pub enum PidEntry {
     Service(InternalId),
     Stop(InternalId),
+}
+
+#[derive(Eq, PartialEq, Hash, Debug)]
+pub enum UnitStatus {
+    NeverStarted,
+    Starting,
+    Started,
+    Stopping,
+    Stopped,
+    StoppedFinal,
 }
 
 #[derive(Debug)]

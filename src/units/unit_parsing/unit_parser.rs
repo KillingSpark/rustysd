@@ -179,5 +179,3 @@ pub fn parse_section(lines: &[&str]) -> ParsedSection {
 
     entries
 }
-
-

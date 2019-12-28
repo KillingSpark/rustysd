@@ -4,7 +4,7 @@
 
 use crate::platform::reset_event_fd;
 use crate::platform::EventFd;
-use crate::services::{Service, ServiceStatus};
+use crate::services::Service;
 use crate::units::*;
 use std::{collections::HashMap, io::Write, os::unix::io::AsRawFd};
 
@@ -230,7 +230,7 @@ pub fn handle_notification_message(msg: &str, srvc: &mut Service, name: &str) {
             );
         }
         "READY" => {
-            srvc.status = ServiceStatus::Running;
+            srvc.signaled_ready = true;
         }
         _ => {
             warn!("Unknown notification name{}", split[0]);

@@ -101,7 +101,6 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
                     .collect(),
             ),
         );
-        map.insert("Status".into(), Value::String(srvc.status.to_string()));
         if let Some(instant) = srvc.runtime_info.up_since {
             map.insert(
                 "UpSince".into(),
@@ -118,8 +117,7 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
 
 pub fn execute_command(
     cmd: Command,
-    unit_table: ArcMutUnitTable,
-    pid_table: ArcMutPidTable,
+    run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
 ) -> Result<serde_json::Value, String> {
     let mut result_vec = Value::Array(Vec::new());
@@ -127,7 +125,7 @@ pub fn execute_command(
         Command::Restart(unit_name) => {
             trace!("Find unit for name: {}", unit_name);
             let id = {
-                let unit_table_locked = unit_table.read().unwrap();
+                let unit_table_locked = run_info.unit_table.read().unwrap();
                 trace!("Find unit for name: {}", unit_name);
                 let mut srvc: Vec<_> = unit_table_locked
                     .iter()
@@ -145,8 +143,7 @@ pub fn execute_command(
 
             crate::services::restart_service(
                 id,
-                unit_table,
-                pid_table,
+                run_info,
                 notification_socket_path,
                 std::sync::Arc::new(Vec::new()),
             )?;
@@ -157,7 +154,7 @@ pub fn execute_command(
                     //list specific
                     if name.ends_with(".service") {
                         let name = name.trim_end_matches(".service");
-                        let unit_table_locked = unit_table.read().unwrap();
+                        let unit_table_locked = run_info.unit_table.read().unwrap();
                         let mut srvc: Vec<_> = unit_table_locked
                             .iter()
                             .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
@@ -170,7 +167,7 @@ pub fn execute_command(
                         result_vec.as_array_mut().unwrap().push(srvc.remove(0));
                     } else if name.ends_with(".socket") {
                         let name = name.trim_end_matches(".socket");
-                        let unit_table_locked = unit_table.read().unwrap();
+                        let unit_table_locked = run_info.unit_table.read().unwrap();
                         let mut sock: Vec<_> = unit_table_locked
                             .iter()
                             .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
@@ -183,7 +180,7 @@ pub fn execute_command(
                         result_vec.as_array_mut().unwrap().push(sock.remove(0));
                     } else {
                         // name was already short
-                        let unit_table_locked = unit_table.read().unwrap();
+                        let unit_table_locked = run_info.unit_table.read().unwrap();
                         let mut unit: Vec<_> = unit_table_locked
                             .iter()
                             .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
@@ -205,7 +202,7 @@ pub fn execute_command(
                 }
                 None => {
                     //list all
-                    let unit_table_locked = unit_table.read().unwrap();
+                    let unit_table_locked = run_info.unit_table.read().unwrap();
                     let strings: Vec<_> = unit_table_locked
                         .iter()
                         .map(|(_id, unit)| {
@@ -235,8 +232,7 @@ use std::io::Read;
 use std::io::Write;
 pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     mut source: Box<T>,
-    unit_table: ArcMutUnitTable,
-    pid_table: ArcMutPidTable,
+    run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
 ) {
     std::thread::spawn(move || loop {
@@ -289,8 +285,7 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
                                 trace!("Execute command: {:?}", cmd);
                                 let msg = match execute_command(
                                     cmd,
-                                    unit_table.clone(),
-                                    pid_table.clone(),
+                                    run_info.clone(),
                                     notification_socket_path.clone(),
                                 ) {
                                     Err(e) => {
@@ -317,35 +312,23 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
 }
 
 pub fn accept_control_connections_unix_socket(
-    unit_table: ArcMutUnitTable,
-    pid_table: ArcMutPidTable,
+    run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     source: std::os::unix::net::UnixListener,
 ) {
     std::thread::spawn(move || {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(
-            stream,
-            unit_table.clone(),
-            pid_table.clone(),
-            notification_socket_path.clone(),
-        )
+        listen_on_commands(stream, run_info, notification_socket_path.clone())
     });
 }
 
 pub fn accept_control_connections_tcp(
-    unit_table: ArcMutUnitTable,
-    pid_table: ArcMutPidTable,
+    run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     source: std::net::TcpListener,
 ) {
     std::thread::spawn(move || loop {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(
-            stream,
-            unit_table.clone(),
-            pid_table.clone(),
-            notification_socket_path.clone(),
-        )
+        listen_on_commands(stream, run_info.clone(), notification_socket_path.clone())
     });
 }

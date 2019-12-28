@@ -1,4 +1,4 @@
-use crate::services::{Service, ServiceStatus};
+use crate::services::Service;
 use crate::sockets::Socket;
 use crate::units::InternalId;
 
@@ -26,16 +26,20 @@ fn start_service_with_filedescriptors(
             "The service {} specified an executable that does not exist: {:?}",
             name, &cmd
         );
-        srvc.status = ServiceStatus::Stopped;
-        return Ok(());
+        return Err(format!(
+            "The service {} specified an executable that does not exist: {:?}",
+            name, &cmd
+        ));
     }
     if !cmd.is_file() {
         error!(
             "The service {} specified an executable that is not a file: {:?}",
             name, &cmd
         );
-        srvc.status = ServiceStatus::Stopped;
-        return Ok(());
+        return Err(format!(
+            "The service {} specified an executable that is not a file: {:?}",
+            name, &cmd
+        ));
     }
 
     // 1. fork
@@ -82,10 +86,8 @@ pub fn start_service(
     if let Some(conf) = &srvc.service_config {
         if conf.accept {
             warn!("Inetd style accepting is not supported");
-            srvc.status = ServiceStatus::Stopped;
-            Ok(())
+            Err("Inetd style accepting is not supported".into())
         } else {
-            srvc.status = ServiceStatus::Starting;
             start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path)?;
             srvc.runtime_info.up_since = Some(std::time::Instant::now());
             Ok(())
