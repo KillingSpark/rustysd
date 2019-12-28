@@ -141,7 +141,7 @@ pub fn execute_command(
                 *srvc.remove(0).0
             };
 
-            crate::services::restart_service(
+            crate::units::reactivate_unit(
                 id,
                 run_info,
                 notification_socket_path,

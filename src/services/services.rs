@@ -198,7 +198,7 @@ pub fn service_exit_handler(
         };
         if restart_unit {
             trace!("Restart service {} after it died", name);
-            crate::services::restart_service(
+            crate::units::reactivate_unit(
                 srvc_id,
                 run_info,
                 notification_socket_path,
@@ -211,7 +211,7 @@ pub fn service_exit_handler(
                 name,
                 unit_locked.install.required_by
             );
-            super::kill_service::kill_services(
+            crate::units::deactivate_units(
                 unit_locked.install.required_by.clone(),
                 run_info.clone(),
             );

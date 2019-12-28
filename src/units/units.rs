@@ -221,6 +221,19 @@ impl Unit {
         }
         Ok(())
     }
+    pub fn deactivate(&mut self, pids: ArcMutPidTable) -> Result<(), String> {
+        match &mut self.specialized {
+            UnitSpecialized::Target => trace!("Deactivated target {}", self.conf.name()),
+            UnitSpecialized::Socket(sock) => {
+                sock.close_all()
+                    .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
+            }
+            UnitSpecialized::Service(srvc) => {
+                srvc.kill(self.id, &self.conf.name(), &mut *pids.lock().unwrap());
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
