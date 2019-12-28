@@ -125,7 +125,6 @@ are without a particular oder.
 
 Requiring bigger changes or seem complicated:
 * Unit templates
-* Timeouts for service starting
 * An optional journald logging. (Maybe thats not something that is actually something that is wanted)
     1. Positive: Better compatibility
     1. Negative: Weird dependency between rustysd and a service managed by rustysd (could be less of a pain point if rustysd itself handled logging in a journald way)
@@ -135,6 +134,7 @@ Requiring bigger changes or seem complicated:
 * The rest of the sd_notify API (with storing filedescriptors and such)
 
 Requiring small changes / additions transparent to the other modules:
+* Timeouts for service starting (should be easy for the current service types. might get complicated for type forking)
 * Patching unit definitions with dropin files
 * Socket options like MaxConnections=/KeepAlive=
 * Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
