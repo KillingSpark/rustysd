@@ -2,7 +2,7 @@
 Exec= ./target/debug/testserviceclient
 NotifyAccess= all
 Type= simple
-keep_alive = true
+Restart= always
 
 [Unit]
 After= test.service

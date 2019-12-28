@@ -4,4 +4,4 @@ Before= ls2
 
 [Service]
 Exec= /usr/bin/ls /etc
-keep_alive = false
+Restart= no

@@ -248,8 +248,14 @@ pub enum NotifyKind {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ServiceRestart {
+    Always,
+    No,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {
-    pub keep_alive: bool,
+    pub restart: ServiceRestart,
     pub accept: bool,
     pub notifyaccess: NotifyKind,
     pub exec: String,

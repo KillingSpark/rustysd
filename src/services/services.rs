@@ -91,6 +91,7 @@ impl Service {
                     for sock in sockets.values_mut() {
                         sock.activated = false;
                     }
+                    crate::platform::notify_event_fds(&eventfds)
                 }
             }
             _ => error!(
@@ -214,7 +215,7 @@ pub fn service_exit_handler(
                 } else {
                     srvc.status = ServiceStatus::Stopped;
                     if let Some(conf) = &srvc.service_config {
-                        if conf.keep_alive {
+                        if conf.restart == ServiceRestart::Always {
                             true
                         } else {
                             false
@@ -228,7 +229,7 @@ pub fn service_exit_handler(
             }
         };
         if restart_unit {
-            trace!("Restart service {} because keepalive was to true", name);
+            trace!("Restart service {} after it died", name);
             crate::units::activate_unit(
                 srvc_id,
                 None,

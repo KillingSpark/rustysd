@@ -75,7 +75,7 @@ pub fn parse_service(
 fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingError> {
     let exec = section.remove("EXEC");
     let stop = section.remove("STOP");
-    let keep_alive = section.remove("KEEP_ALIVE");
+    let restart = section.remove("RESTART");
     let sockets = section.remove("SOCKETS");
     let notify_access = section.remove("NOTIFYACCESS");
     let srcv_type = section.remove("TYPE");
@@ -150,15 +150,19 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         None => "".to_string(),
     };
 
-    let keep_alive = match keep_alive {
+    let restart = match restart {
         Some(vec) => {
             if vec.len() == 1 {
-                string_to_bool(&vec[0].1)
+                match vec[0].1.to_uppercase().as_str() {
+                    "ALWAYS" => ServiceRestart::Always,
+                    "NO" => ServiceRestart::No,
+                    unknown_setting => panic!("Restart had to unknown setting: {}", unknown_setting),
+                }
             } else {
-                panic!("Keepalive had to many entries: {:?}", vec);
+                panic!("Restart had to many entries: {:?}", vec);
             }
         }
-        None => false,
+        None => ServiceRestart::No,
     };
     let accept = match accept {
         Some(vec) => {
@@ -190,7 +194,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     Ok(ServiceConfig {
         srcv_type,
         notifyaccess,
-        keep_alive,
+        restart,
         accept,
         dbus_name,
         exec,

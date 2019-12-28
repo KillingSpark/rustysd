@@ -1,6 +1,6 @@
 [Service]
 Exec= /usr/bin/sleep 2
-keep_alive = false
+Restart= no
 
 [Install]
 WantedBy= ls3

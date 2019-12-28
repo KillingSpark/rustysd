@@ -3,7 +3,7 @@ Exec= ./test_c_service/test_service  arg1 arg2
 Sockets= cservice.socket
 NotifyAccess= all
 Type= notify
-keep_alive = true
+Restart= always
 
 [Install]
 #WantedBy= default.target
