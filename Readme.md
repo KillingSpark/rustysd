@@ -79,6 +79,7 @@ to write a compatibility shim if an equivalents exist on the target platform. It
 1. sending (kill/terminating) signals to whole process groups (as long as we care about cleanup after killing, maybe the platform handles this in another smart way?)
 1. setting env variables (currently handled with libc because the rust std contains locks which currently break on forking)
 1. setting the current process as a subprocess reaper (might not be that important, other platforms might handle reparenting of orphaned processes differently than unix)
+1. chnaging the user id to drop privileges
 
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested. If you find anything does actually not work
@@ -134,6 +135,7 @@ Requiring bigger changes or seem complicated:
 * The rest of the sd_notify API (with storing filedescriptors and such)
 
 Requiring small changes / additions transparent to the other modules:
+* Change user to drop privileges
 * Timeouts for service starting (should be easy for the current service types. might get complicated for type forking)
 * Patching unit definitions with dropin files
 * Socket options like MaxConnections=/KeepAlive=
