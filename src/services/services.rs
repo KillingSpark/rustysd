@@ -126,6 +126,7 @@ pub fn service_exit_handler(
     notification_socket_path: std::path::PathBuf,
     eventfds: &[EventFd],
 ) -> Result<(), String> {
+    trace!("Exit handler with pid: {}", pid);
     let srvc_id = {
         let unit_table_locked = run_info.unit_table.read().unwrap();
         let entry = {
