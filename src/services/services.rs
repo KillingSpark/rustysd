@@ -43,17 +43,17 @@ impl Service {
         id: UnitId,
         name: &String,
         sockets: &mut HashMap<UnitId, &mut Socket>,
-        pids: ArcMutPidTable,
+        pid_table: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<(), String> {
         trace!("Start service {}", name);
         if !allow_ignore || self.socket_ids.is_empty() {
-            let mut pids = pids.lock().unwrap();
+            let mut pid_table = pid_table.lock().unwrap();
             start_service(self, name.clone(), &sockets, notification_socket_path)?;
             if let Some(new_pid) = self.pid {
-                pids.insert(new_pid, PidEntry::Service(id));
+                pid_table.insert(new_pid, PidEntry::Service(id));
                 for sock in sockets.values_mut() {
                     sock.activated = true;
                 }
@@ -128,15 +128,21 @@ pub fn service_exit_handler(
 ) -> Result<(), String> {
     let srvc_id = {
         let unit_table_locked = run_info.unit_table.read().unwrap();
-        let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-        *(match pid_table_locked.get(&pid) {
+        let entry = {
+            let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
+            pid_table_locked.get(&pid).map(|x| {
+                let y: PidEntry = *x;
+                y
+            })
+        };
+        match entry {
             Some(entry) => match entry {
                 PidEntry::Service(id) => id,
                 PidEntry::Stop(id) => {
                     trace!(
                         "Stop process for service: {} exited with code: {}",
                         unit_table_locked
-                            .get(id)
+                            .get(&id)
                             .unwrap()
                             .lock()
                             .unwrap()
@@ -144,6 +150,7 @@ pub fn service_exit_handler(
                             .name(),
                         code
                     );
+                    let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
                     pid_table_locked.remove(&pid);
                     return Ok(());
                 }
@@ -152,7 +159,7 @@ pub fn service_exit_handler(
                 warn!("All spawned processes should have a pid entry");
                 return Ok(());
             }
-        })
+        }
     };
 
     let unit = {

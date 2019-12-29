@@ -66,15 +66,17 @@ pub fn handle_signals(
                                     let mut status_locked = status.lock().unwrap();
                                     *status_locked = UnitStatus::Stopping;
                                 }
-                                trace!("Get pid lock");
-                                let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-                                trace!("Kill service unit: {}", unit_locked.conf.name());
-                                srvc.kill(
-                                    unit_locked.id,
-                                    &unit_locked.conf.name(),
-                                    pid_table_locked,
-                                );
-                                trace!("Killed service unit: {}", unit_locked.conf.name());
+                                {
+                                    trace!("Get pid lock");
+                                    let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
+                                    trace!("Kill service unit: {}", unit_locked.conf.name());
+                                    srvc.kill(
+                                        unit_locked.id,
+                                        &unit_locked.conf.name(),
+                                        pid_table_locked,
+                                    );
+                                    trace!("Killed service unit: {}", unit_locked.conf.name());
+                                }
                                 {
                                     trace!("Get status lock");
                                     let status_table_locked =

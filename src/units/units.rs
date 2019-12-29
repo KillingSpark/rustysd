@@ -77,7 +77,7 @@ pub fn lock_all(
     units_locked
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum PidEntry {
     Service(UnitId),
     Stop(UnitId),
@@ -190,7 +190,7 @@ impl Unit {
     pub fn activate(
         &mut self,
         required_units: &mut HashMap<UnitId, &mut Unit>,
-        pids: ArcMutPidTable,
+        pid_table: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
@@ -212,7 +212,7 @@ impl Unit {
                     self.id,
                     &self.conf.name(),
                     &mut sockets,
-                    pids,
+                    pid_table,
                     notification_socket_path,
                     eventfds,
                     allow_ignore,
@@ -221,7 +221,7 @@ impl Unit {
         }
         Ok(())
     }
-    pub fn deactivate(&mut self, pids: ArcMutPidTable) -> Result<(), String> {
+    pub fn deactivate(&mut self, pid_table: ArcMutPidTable) -> Result<(), String> {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Deactivated target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
@@ -229,7 +229,7 @@ impl Unit {
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
-                srvc.kill(self.id, &self.conf.name(), &mut *pids.lock().unwrap());
+                srvc.kill(self.id, &self.conf.name(), &mut *pid_table.lock().unwrap());
             }
         }
         Ok(())
