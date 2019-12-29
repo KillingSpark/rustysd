@@ -127,20 +127,23 @@ pub fn handle_signals(
     }
 }
 
-fn get_next_exited_child() -> Option<Result<(nix::unistd::Pid, i32), nix::Error>> {
+#[derive(Debug)]
+pub enum ChildTermination {
+    Signal(nix::sys::signal::Signal),
+    Exit(i32),
+}
+type ChildIterElem = Result<(nix::unistd::Pid, ChildTermination), nix::Error>;
+
+fn get_next_exited_child() -> Option<ChildIterElem> {
     let wait_any_pid = nix::unistd::Pid::from_raw(-1);
     match nix::sys::wait::waitpid(wait_any_pid, Some(nix::sys::wait::WaitPidFlag::WNOHANG)) {
         Ok(exit_status) => match exit_status {
-            nix::sys::wait::WaitStatus::Exited(pid, code) => Some(Ok((pid, code))),
+            nix::sys::wait::WaitStatus::Exited(pid, code) => Some(Ok((pid, ChildTermination::Exit(code)))),
             nix::sys::wait::WaitStatus::Signaled(pid, signal, _dumped_core) => {
                 // signals get handed to the parent if the child got killed by it but didnt handle the
                 // signal itself
-                if signal == nix::sys::signal::SIGTERM {
-                    // we dont care if the service dumped it's core
-                    Some(Ok((pid, 0)))
-                } else {
-                    None
-                }
+                // we dont care if the service dumped it's core
+                Some(Ok((pid, ChildTermination::Signal(signal))))
             }
             nix::sys::wait::WaitStatus::StillAlive => {
                 trace!("No more state changes to poll");

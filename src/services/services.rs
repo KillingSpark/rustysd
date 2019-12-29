@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use crate::platform::EventFd;
 use crate::sockets::Socket;
 use crate::units::*;
+use crate::signal_handler::ChildTermination;
 
 #[derive(Debug)]
 pub struct ServiceRuntimeInfo {
@@ -123,7 +124,7 @@ impl Service {
 
 pub fn service_exit_handler(
     pid: nix::unistd::Pid,
-    code: i32,
+    code: ChildTermination,
     run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: &[EventFd],
@@ -143,7 +144,7 @@ pub fn service_exit_handler(
                 PidEntry::Service(id) => id,
                 PidEntry::Stop(id) => {
                     trace!(
-                        "Stop process for service: {} exited with code: {}",
+                        "Stop process for service: {} exited with: {:?}",
                         unit_table_locked
                             .get(&id)
                             .unwrap()
@@ -180,7 +181,7 @@ pub fn service_exit_handler(
         let name = unit_locked.conf.name();
         if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
             trace!(
-                "Service with id: {:?}, name: {} pid: {} exited with code: {}",
+                "Service with id: {:?}, name: {} pid: {} exited with: {:?}",
                 srvc_id,
                 unit_locked.conf.name(),
                 pid,
