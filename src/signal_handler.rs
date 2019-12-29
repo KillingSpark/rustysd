@@ -47,9 +47,6 @@ pub fn handle_signals(
                     let unit_table_locked = run_info.unit_table.write().unwrap();
                     trace!("Kill all services");
                     for (id, unit) in unit_table_locked.iter() {
-                        if id.1 == 5 {
-                            continue;
-                        }
                         if id.0 != UnitIdKind::Service {
                             continue;
                         }
@@ -97,9 +94,6 @@ pub fn handle_signals(
                     }
                     trace!("Killed all services");
                     for (id, unit) in unit_table_locked.iter() {
-                        if id.1 == 5 {
-                            continue;
-                        }
                         if id.0 != UnitIdKind::Socket {
                             continue;
                         }
