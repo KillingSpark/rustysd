@@ -147,6 +147,8 @@ Requiring small changes / additions transparent to the other modules:
 
 Unclear how much work it is:
 * Get all the meta-targets and default dependencies right
+    * Individually these are probably small parts. But as a whole task it seems like much
+* Adding new units while running
 
 
 ## What could be done better
