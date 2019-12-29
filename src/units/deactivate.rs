@@ -3,8 +3,10 @@ use crate::units::*;
 use std::sync::Arc;
 
 pub fn deactivate_unit(id_to_kill: UnitId, run_info: ArcRuntimeInfo) {
-    let unit_table_locked = run_info.unit_table.read().unwrap();
-    let srvc_unit = unit_table_locked.get(&id_to_kill).unwrap();
+    let srvc_unit = {
+        let unit_table_locked = run_info.unit_table.read().unwrap();
+        unit_table_locked.get(&id_to_kill).unwrap().clone()
+    };
     let unit_locked = &mut *srvc_unit.lock().unwrap();
 
     {

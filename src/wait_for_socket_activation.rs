@@ -7,22 +7,24 @@ pub fn wait_for_socket(
     eventfd: EventFd,
     unit_table: ArcMutUnitTable,
 ) -> Result<Vec<UnitId>, String> {
-    let unit_table_locked = unit_table.read().unwrap();
-    let fd_to_srvc_id = unit_table_locked
-        .iter()
-        .fold(Vec::new(), |mut acc, (id, unit)| {
-            let unit_locked = unit.lock().unwrap();
-            if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
-                if !sock.activated {
-                    for conf in &sock.sockets {
-                        if let Some(sock) = &conf.fd {
-                            acc.push((sock.as_raw_fd(), *id));
+    let fd_to_srvc_id =
+        unit_table
+            .read()
+            .unwrap()
+            .iter()
+            .fold(Vec::new(), |mut acc, (id, unit)| {
+                let unit_locked = unit.lock().unwrap();
+                if let UnitSpecialized::Socket(sock) = &unit_locked.specialized {
+                    if !sock.activated {
+                        for conf in &sock.sockets {
+                            if let Some(sock) = &conf.fd {
+                                acc.push((sock.as_raw_fd(), *id));
+                            }
                         }
                     }
                 }
-            }
-            acc
-        });
+                acc
+            });
 
     let mut fdset = nix::sys::select::FdSet::new();
     for (fd, _) in &fd_to_srvc_id {

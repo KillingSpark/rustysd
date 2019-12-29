@@ -163,8 +163,8 @@ pub fn service_exit_handler(
     };
 
     let unit = {
-        let units_locked = run_info.unit_table.read().unwrap();
-        match units_locked.get(&srvc_id) {
+        let unit_table_locked = run_info.unit_table.read().unwrap();
+        match unit_table_locked.get(&srvc_id) {
             Some(unit) => Arc::clone(unit),
             None => {
                 panic!("Tried to run a unit that has been removed from the map");
