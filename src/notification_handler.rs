@@ -58,7 +58,34 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                 &mut srvc_unit_locked.specialized
                             {
                                 if let Some(socket) = &srvc.notifications {
-                                    let bytes = socket.lock().unwrap().recv(&mut buf[..]).unwrap();
+                                    let old_flags =
+                                        nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL)
+                                            .unwrap();
+
+                                    let old_flags =
+                                        nix::fcntl::OFlag::from_bits(old_flags).unwrap();
+                                    let mut new_flags = old_flags.clone();
+                                    new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                                    nix::fcntl::fcntl(
+                                        *fd,
+                                        nix::fcntl::FcntlArg::F_SETFL(new_flags),
+                                    )
+                                    .unwrap();
+                                    let bytes = {
+                                        let socket_locked = socket.lock().unwrap();
+                                        match socket_locked.recv(&mut buf[..]) {
+                                            Ok(b) => b,
+                                            Err(e) => match e.kind() {
+                                                std::io::ErrorKind::WouldBlock => 0,
+                                                _ => panic!("{}", e),
+                                            },
+                                        }
+                                    };
+                                    nix::fcntl::fcntl(
+                                        *fd,
+                                        nix::fcntl::FcntlArg::F_SETFL(old_flags),
+                                    )
+                                    .unwrap();
                                     let note_str =
                                         String::from_utf8(buf[..bytes].to_vec()).unwrap();
                                     srvc.notifications_buffer.push_str(&note_str);
@@ -118,7 +145,24 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                             prefix.push(' ');
                             buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
 
-                            let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
+                            let old_flags =
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
+                            let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
+                            let mut new_flags = old_flags.clone();
+                            new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
+                                .unwrap();
+
+                            ////
+                            let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
+                                Ok(b) => b,
+                                Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                Err(e) => panic!("{}", e),
+                            };
+                            ////
+
+                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
+                                .unwrap();
                             let lines = buf[..bytes].split(|x| *x == b'\n');
                             let mut outbuf: Vec<u8> = Vec::new();
 
@@ -192,7 +236,24 @@ pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                             prefix.push(' ');
                             buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
 
-                            let bytes = nix::unistd::read(*fd, &mut buf[..]).unwrap();
+                            let old_flags =
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
+                            let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
+                            let mut new_flags = old_flags.clone();
+                            new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
+                                .unwrap();
+
+                            ////
+                            let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
+                                Ok(b) => b,
+                                Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                Err(e) => panic!("{}", e),
+                            };
+                            ////
+                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
+                                .unwrap();
+
                             let lines = buf[..bytes].split(|x| *x == b'\n');
                             let mut outbuf: Vec<u8> = Vec::new();
 
