@@ -49,16 +49,15 @@ impl Service {
         allow_ignore: bool,
     ) -> Result<(), String> {
         trace!("Start service {}", name);
-
         if !allow_ignore || self.socket_ids.is_empty() {
+            let mut pids = pids.lock().unwrap();
             start_service(self, name.clone(), &sockets, notification_socket_path)?;
-
             if let Some(new_pid) = self.pid {
-                {
-                    let mut pids = pids.lock().unwrap();
-                    pids.insert(new_pid, PidEntry::Service(id));
+                pids.insert(new_pid, PidEntry::Service(id));
+                for sock in sockets.values_mut() {
+                    sock.activated = true;
                 }
-                crate::platform::notify_event_fds(&eventfds)
+                crate::platform::notify_event_fds(&eventfds);
             }
         } else {
             trace!(
@@ -81,17 +80,12 @@ impl Service {
                 Ok(_) => trace!("Success killing process group for service {}", name,),
                 Err(e) => error!("Error killing process group for service {}: {}", name, e,),
             }
-        }        
+        }
         self.pid = None;
         self.process_group = None;
     }
 
-    pub fn kill(
-        &mut self,
-        id: UnitId,
-        name: &str,
-        pid_table: &mut PidTable,
-    ) {
+    pub fn kill(&mut self, id: UnitId, name: &str, pid_table: &mut PidTable) {
         self.stop(id, name, pid_table);
     }
 
@@ -170,52 +164,48 @@ pub fn service_exit_handler(
             }
         }
     };
-    let name = unit.lock().unwrap().conf.name();
-    {
-        let restart_unit = {
-            let unit_locked = &mut *unit.lock().unwrap();
-            if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
-                trace!(
-                    "Service with id: {:?}, name: {} pid: {} exited with code: {}",
-                    srvc_id,
-                    unit_locked.conf.name(),
-                    pid,
-                    code
-                );
 
-                if let Some(conf) = &srvc.service_config {
-                    if conf.restart == ServiceRestart::Always {
-                        true
-                    } else {
-                        false
-                    }
+    let (name, restart_unit) = {
+        let unit_locked = &mut *unit.lock().unwrap();
+        let name = unit_locked.conf.name();
+        if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
+            trace!(
+                "Service with id: {:?}, name: {} pid: {} exited with code: {}",
+                srvc_id,
+                unit_locked.conf.name(),
+                pid,
+                code
+            );
+
+            if let Some(conf) = &srvc.service_config {
+                if conf.restart == ServiceRestart::Always {
+                    (name, true)
                 } else {
-                    false
+                    (name, false)
                 }
             } else {
-                false
+                (name, false)
             }
-        };
-        if restart_unit {
-            trace!("Restart service {} after it died", name);
-            crate::units::reactivate_unit(
-                srvc_id,
-                run_info,
-                notification_socket_path,
-                Arc::new(eventfds.to_vec()),
-            )?;
         } else {
-            let unit_locked = unit.lock().unwrap();
-            trace!(
-                "Killing all services requiring service {}: {:?}",
-                name,
-                unit_locked.install.required_by
-            );
-            crate::units::deactivate_units(
-                unit_locked.install.required_by.clone(),
-                run_info.clone(),
-            );
+            (name, false)
         }
+    };
+    if restart_unit {
+        trace!("Restart service {} after it died", name);
+        crate::units::reactivate_unit(
+            srvc_id,
+            run_info,
+            notification_socket_path,
+            Arc::new(eventfds.to_vec()),
+        )?;
+    } else {
+        let unit_locked = unit.lock().unwrap();
+        trace!(
+            "Killing all services requiring service {}: {:?}",
+            name,
+            unit_locked.install.required_by
+        );
+        crate::units::deactivate_units(unit_locked.install.required_by.clone(), run_info.clone());
     }
     Ok(())
 }

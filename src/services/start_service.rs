@@ -88,6 +88,12 @@ pub fn start_service(
             warn!("Inetd style accepting is not supported");
             Err("Inetd style accepting is not supported".into())
         } else {
+            if srvc.pid.is_some() {
+                return Err(format!("Service {} has already a pid {:?}", name, srvc.pid.unwrap()));
+            }
+            if srvc.process_group.is_some() {
+                return Err(format!("Service {} has already a pid {:?}", name, srvc.process_group.unwrap()));
+            }
             start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path)?;
             srvc.runtime_info.up_since = Some(std::time::Instant::now());
             Ok(())

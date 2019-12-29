@@ -155,6 +155,20 @@ fn tcp_accept(fd: i32) -> std::thread::JoinHandle<()> {
 }
 
 fn main() {
+    //create a child so we can see that orphanes are killed too
+    match nix::unistd::fork() {
+        Ok(nix::unistd::ForkResult::Child) => {
+            std::thread::sleep(std::time::Duration::from_secs(1000000));
+        }
+        _ => {}
+    }
+    let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
+    let stream = UnixDatagram::unbound().unwrap();
+    stream.connect(socket_path).unwrap();
+    stream.send(&b"READY=1\n"[..]).unwrap();
+
+    std::process::exit(1);
+
     println!(
         "STARTED DEAMON WITH PID: {} AND FDS: {}",
         env::var("LISTEN_PID").unwrap(),
@@ -191,7 +205,7 @@ fn main() {
     //unix_seq_pack_accept(8);
 
     // act as if there was a lot of time used for setting up the service
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    //std::thread::sleep(std::time::Duration::from_secs(3));
 
     // send the READY=1 message amongst some other stuff
     let socket_path = std::env::var("NOTIFY_SOCKET").unwrap();
@@ -199,18 +213,10 @@ fn main() {
     stream.connect(socket_path).unwrap();
     stream.send(&b"STATUS=Next message that should be read before the READY message\nREADY=1\nSTATUS=Next message that should not be read directly after the fork\n"[..]).unwrap();
 
-    //create a child so we can see that orphanes are killed too
-    match nix::unistd::fork() {
-        Ok(nix::unistd::ForkResult::Child) => {
-            std::thread::sleep(std::time::Duration::from_secs(1000000));
-        }
-        _ => {}
-    }
-
+    
     // random service failure because we write horrible services that crash constantly
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(3));
-        std::process::exit(1);
+        std::thread::sleep(std::time::Duration::from_millis(10));
     });
 
     let mut counter = 0;

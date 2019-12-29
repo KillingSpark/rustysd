@@ -66,14 +66,15 @@ pub fn activate_unit(
     // 1.5) Check if this unit should be started right now
     // 2) Then lock the needed other units (only for sockets of services right now)
     // With that we always maintain a consistent order between locks so deadlocks shouldnt occur
-    let units_locked = run_info.unit_table.read().unwrap();
-    let unit = match units_locked.get(&id_to_start) {
-        Some(unit) => Arc::clone(unit),
-        None => {
-            panic!("Tried to run a unit that has been removed from the map");
+    let unit = {
+        let units_locked = run_info.unit_table.read().unwrap();
+        match units_locked.get(&id_to_start) {
+            Some(unit) => Arc::clone(unit),
+            None => {
+                panic!("Tried to run a unit that has been removed from the map");
+            }
         }
     };
-
     let mut unit_locked = unit.lock().unwrap();
 
     let status_table_locked = run_info.status_table.read().unwrap();
@@ -96,23 +97,25 @@ pub fn activate_unit(
         return Ok(StartResult::Ignored);
     }
 
+    // Check if the unit is currently starting. Update the status to starting if not
+    let status = status_table_locked.get(&id_to_start).unwrap();
     {
-        // Check if the unit is currently starting. Update the status to starting if not
-        let status_table_locked = run_info.status_table.read().unwrap();
-        let status = status_table_locked.get(&id_to_start).unwrap();
         let mut status_locked = status.lock().unwrap();
 
         // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
         // TODO make this relation less weird. Maybe add a separate code path for socket activation
-        if *status_locked == UnitStatus::Started && allow_ignore {
-            if !(*status_locked == UnitStatus::NeverStarted || *status_locked == UnitStatus::Stopped) {
-                trace!(
-                    "Don't activate Unit: {:?}. Has status: {:?}",
-                    unit_locked.conf.name(),
-                    *status_locked
-                );
-                return Ok(StartResult::Ignored);
-            }
+        let wait_for_socket_act = *status_locked == UnitStatus::Started && allow_ignore;
+        let needs_intial_run =
+            *status_locked == UnitStatus::NeverStarted || *status_locked == UnitStatus::Stopped;
+        if wait_for_socket_act && !needs_intial_run {
+            trace!(
+                "Don't activate Unit: {:?}. Has status: {:?}",
+                unit_locked.conf.name(),
+                *status_locked
+            );
+            return Ok(StartResult::Ignored);
+        }
+        if needs_intial_run {
             *status_locked = UnitStatus::Starting;
         }
     }
@@ -121,7 +124,10 @@ pub fn activate_unit(
     let next_services_ids = unit_locked.install.before.clone();
     trace!("Lock required units for unit {}", name);
     let mut other_needed_units = Vec::new();
-    other_needed_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
+    {
+        let units_locked = run_info.unit_table.read().unwrap();
+        other_needed_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
+    }
     let mut other_needed_units_locked = crate::units::lock_all(&mut other_needed_units);
     let mut other_needed_units_refs = HashMap::new();
     for (id, other_unit_locked) in &mut other_needed_units_locked {
