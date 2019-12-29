@@ -68,6 +68,8 @@ pub fn parse_service(
             stdout_dup: None,
             stderr_dup: None,
             notifications_buffer: String::new(),
+            stdout_buffer: Vec::new(),
+            stderr_buffer: Vec::new(),
         }),
     })
 }

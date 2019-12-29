@@ -35,6 +35,8 @@ pub struct Service {
     pub stdout_dup: Option<(RawFd, RawFd)>,
     pub stderr_dup: Option<(RawFd, RawFd)>,
     pub notifications_buffer: String,
+    pub stdout_buffer: Vec<u8>,
+    pub stderr_buffer: Vec<u8>,
 }
 
 impl Service {

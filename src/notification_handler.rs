@@ -134,7 +134,7 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table_locked.get(id) {
-                            let srvc_unit_locked = srvc_unit.lock().unwrap();
+                            let mut srvc_unit_locked = srvc_unit.lock().unwrap();
                             let name = srvc_unit_locked.conf.name();
 
                             // build the service-unique prefix
@@ -163,18 +163,26 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
 
                             nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
                                 .unwrap();
-                            let lines = buf[..bytes].split(|x| *x == b'\n');
-                            let mut outbuf: Vec<u8> = Vec::new();
 
-                            for line in lines {
-                                if line.is_empty() {
-                                    continue;
+                            if let UnitSpecialized::Service(srvc) =
+                                &mut srvc_unit_locked.specialized
+                            {
+                                srvc.stdout_buffer.extend(&buf[..bytes]);
+                                if srvc.stdout_buffer.contains(&b'\n') {
+                                    let lines = srvc.stdout_buffer.split(|x| *x == b'\n');
+                                    let mut outbuf: Vec<u8> = Vec::new();
+
+                                    for line in lines {
+                                        if line.is_empty() {
+                                            continue;
+                                        }
+                                        outbuf.clear();
+                                        outbuf.extend(prefix.as_bytes());
+                                        outbuf.extend(line);
+                                        outbuf.push(b'\n');
+                                        std::io::stdout().write_all(&outbuf).unwrap();
+                                    }
                                 }
-                                outbuf.clear();
-                                outbuf.extend(prefix.as_bytes());
-                                outbuf.extend(line);
-                                outbuf.push(b'\n');
-                                std::io::stdout().write_all(&outbuf).unwrap();
                             }
                         }
                     }
@@ -224,7 +232,7 @@ pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table_locked.get(id) {
-                            let srvc_unit_locked = srvc_unit.lock().unwrap();
+                            let mut srvc_unit_locked = srvc_unit.lock().unwrap();
                             let name = srvc_unit_locked.conf.name();
 
                             // build the service-unique prefix
@@ -254,18 +262,24 @@ pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                             nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
                                 .unwrap();
 
-                            let lines = buf[..bytes].split(|x| *x == b'\n');
-                            let mut outbuf: Vec<u8> = Vec::new();
-
-                            for line in lines {
-                                if line.is_empty() {
-                                    continue;
+                            if let UnitSpecialized::Service(srvc) =
+                                &mut srvc_unit_locked.specialized
+                            {
+                                srvc.stderr_buffer.extend(&buf[..bytes]);
+                                if srvc.stderr_buffer.contains(&b'\n') {
+                                    let lines = srvc.stderr_buffer.split(|x| *x == b'\n');
+                                    let mut outbuf: Vec<u8> = Vec::new();
+                                    for line in lines {
+                                        if line.is_empty() {
+                                            continue;
+                                        }
+                                        outbuf.clear();
+                                        outbuf.extend(prefix.as_bytes());
+                                        outbuf.extend(line);
+                                        outbuf.push(b'\n');
+                                        std::io::stderr().write_all(&outbuf).unwrap();
+                                    }
                                 }
-                                outbuf.clear();
-                                outbuf.extend(prefix.as_bytes());
-                                outbuf.extend(line);
-                                outbuf.push(b'\n');
-                                std::io::stderr().write_all(&outbuf).unwrap();
                             }
                         }
                     }
