@@ -10,7 +10,7 @@
   </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/sd_notify.html#READY=1">READY=1</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27READY%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -28,7 +28,7 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/sd_notify.html#STATUS=…">STATUS=…</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27STATUS%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -94,9 +94,9 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/sd_notify.html#$NOTIFY_SOCKET">$NOTIFY_SOCKET</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27NOTIFY_SOCKET%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>See sd_notify above for details of which messages are supported</td>
 </tr>
 </table>
 
@@ -873,27 +873,27 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$LISTEN_FDS">$LISTEN_FDS</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27LISTEN_FDS%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$LISTEN_PID">$LISTEN_PID</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27LISTEN_PID%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$LISTEN_FDNAMES">$LISTEN_FDNAMES</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27LISTEN_FDNAMES%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$NOTIFY_SOCKET">$NOTIFY_SOCKET</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27NOTIFY_SOCKET%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>See sd_notify above for details of which messages are supported</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$WATCHDOG_PID">$WATCHDOG_PID</a></td>
@@ -1337,9 +1337,9 @@
   </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#Type=">Type=</a></td>
-  <td>❓</td>
+  <td>Partial</td>
   <td><a href="https://github.com/search?q=%27Type%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Supports "simple", "notify" and "dbus".  Not supported: "exec", "forking", "oneshot"</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#RemainAfterExit=">RemainAfterExit=</a></td>
@@ -1361,7 +1361,7 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#BusName=">BusName=</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27BusName%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -1487,13 +1487,13 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#NotifyAccess=">NotifyAccess=</a></td>
-  <td>❓</td>
+  <td>❌</td>
   <td><a href="https://github.com/search?q=%27NotifyAccess%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#Sockets=">Sockets=</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27Sockets%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -1630,7 +1630,7 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#Accept=">Accept=</a></td>
-  <td>❓</td>
+  <td>❌</td>
   <td><a href="https://github.com/search?q=%27Accept%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -1834,7 +1834,7 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#Service=">Service=</a></td>
-  <td>❓</td>
+  <td>❌</td>
   <td><a href="https://github.com/search?q=%27Service%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -1852,7 +1852,7 @@
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#FileDescriptorName=">FileDescriptorName=</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27FileDescriptorName%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -1976,7 +1976,7 @@
   </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.unit.html#Description=">Description=</a></td>
-  <td>❓</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27Description%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
