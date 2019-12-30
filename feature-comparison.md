@@ -1067,24 +1067,6 @@
     <th>Notes</th>
   </tr>
 <tr>
-  <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.resource-control.html#CPU">CPU</a></td>
-  <td>❌</td>
-  <td><a href="https://github.com/search?q=%27CPU%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
-</tr>
-<tr>
-  <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.resource-control.html#Memory">Memory</a></td>
-  <td>❌</td>
-  <td><a href="https://github.com/search?q=%27Memory%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
-</tr>
-<tr>
-  <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.resource-control.html#IO">IO</a></td>
-  <td>❌</td>
-  <td><a href="https://github.com/search?q=%27IO%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
-</tr>
-<tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.resource-control.html#CPUAccounting=">CPUAccounting=</a></td>
   <td>❌</td>
   <td><a href="https://github.com/search?q=%27CPUAccounting%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
