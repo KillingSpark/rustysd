@@ -1,5 +1,13 @@
 
-# sd_notify
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## sd_notify
 
 <table>
   <tr>
@@ -96,11 +104,19 @@
   <td><a href="https://www.freedesktop.org/software/systemd/man/sd_notify.html#$NOTIFY_SOCKET">$NOTIFY_SOCKET</a></td>
   <td>✔️</td>
   <td><a href="https://github.com/search?q=%27NOTIFY_SOCKET%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Listening to a notification socket is supported. NotifyAccess= is not fully supported though.</td>
+  <td>Listening to a notification socket is supported (see section fd_notifiy for details on which messages are understood). NotifyAccess= is not fully supported though.</td>
 </tr>
 </table>
 
-# systemd.exec
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.exec
 
 <table>
   <tr>
@@ -893,7 +909,7 @@
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$NOTIFY_SOCKET">$NOTIFY_SOCKET</a></td>
   <td>✔️</td>
   <td><a href="https://github.com/search?q=%27NOTIFY_SOCKET%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Listening to a notification socket is supported. NotifyAccess= is not fully supported though.</td>
+  <td>Listening to a notification socket is supported (see section fd_notifiy for details on which messages are understood). NotifyAccess= is not fully supported though.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$WATCHDOG_PID">$WATCHDOG_PID</a></td>
@@ -945,7 +961,15 @@
 </tr>
 </table>
 
-# systemd.kill
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.kill
 
 <table>
   <tr>
@@ -998,7 +1022,15 @@
 </tr>
 </table>
 
-# systemd.path
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.path
 
 <table>
   <tr>
@@ -1057,7 +1089,15 @@
 </tr>
 </table>
 
-# systemd.resource-control
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.resource-control
 
 <table>
   <tr>
@@ -1344,7 +1384,15 @@
 </tr>
 </table>
 
-# systemd.service
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.service
 
 <table>
   <tr>
@@ -1541,7 +1589,15 @@
 </tr>
 </table>
 
-# systemd.socket
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.socket
 
 <table>
   <tr>
@@ -1888,7 +1944,15 @@
 </tr>
 </table>
 
-# systemd.timer
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.timer
 
 <table>
   <tr>
@@ -1983,7 +2047,15 @@
 </tr>
 </table>
 
-# systemd.unit
+# Feature comparison
+This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+of crosses. This can have two reasons: 
+1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+## systemd.unit
 
 <table>
   <tr>

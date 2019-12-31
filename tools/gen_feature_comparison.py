@@ -63,7 +63,15 @@ def main():
 
     for page in RELEVANT_PAGES:
         out.write(dedent("""
-            # {page}
+            # Feature comparison
+            This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
+            in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
+            of crosses. This can have two reasons: 
+            1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
+            1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
+
+            This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+            ## {page}
 
             <table>
               <tr>
