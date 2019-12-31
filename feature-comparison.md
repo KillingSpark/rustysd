@@ -7,6 +7,7 @@ of crosses. This can have two reasons:
 1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
 
 This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
+
 ## sd_notify
 
 <table>
@@ -108,14 +109,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.exec
 
 <table>
@@ -961,14 +954,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.kill
 
 <table>
@@ -1022,14 +1007,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.path
 
 <table>
@@ -1089,14 +1066,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.resource-control
 
 <table>
@@ -1384,14 +1353,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.service
 
 <table>
@@ -1589,14 +1550,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.socket
 
 <table>
@@ -1944,14 +1897,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.timer
 
 <table>
@@ -2047,14 +1992,6 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 </table>
 
-# Feature comparison
-This document is auto-generated. It pulls all features from the xml-doc from systemd and checks whether the features is supported
-in rustysd. (shoutout to [wmanley](https://github.com/wmanley) who wrote the initial script!). Note that this shows a lot 
-of crosses. This can have two reasons: 
-1. The most likely case is that the feature is not (and will likely never) be supported because it is out of scope of this project (see Readme on how that is determined)
-1. The feature is not yet supported but should be. If thats the case please file an issue and I will push it to the top of the priority list.
-
-This document is meant as a simple way of checking whether all features you need from systemd are supported in rustysd.
 ## systemd.unit
 
 <table>
