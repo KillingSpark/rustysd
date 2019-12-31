@@ -26,6 +26,9 @@ ICON_TICK = "✔️"
 ICON_CROSS = "❌"
 ICON_QMARK = "❓"
 
+# tracks which features have actually been inserted to find cases where names change / features get removed in the future.
+USED_FEATURES = {}
+
 SUPPORTED_FEATURES = {
     "READY": {"icon": ICON_TICK, "text": "Waiting for ready notification for service-type notify is supported"},
     "STATUS": {"icon": ICON_TICK, "text": "Sending free-text status updates to be displayed for the user is supported"},
@@ -99,6 +102,7 @@ def main():
             if term_noeq in SUPPORTED_FEATURES:
                 icon = SUPPORTED_FEATURES[term_noeq]["icon"]
                 text = SUPPORTED_FEATURES[term_noeq]["text"]
+                USED_FEATURES[term_noeq] = True
             
             else:
                 if present:
@@ -118,6 +122,11 @@ def main():
 
     out.close()
 
+def assert_all_features_used():
+    for name in SUPPORTED_FEATURES:
+        if not name in USED_FEATURES:
+            print("Feature supported but not mentioned in doc: " + name)
 
 if __name__ == '__main__':
     main()
+    assert_all_features_used()
