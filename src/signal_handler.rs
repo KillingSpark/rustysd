@@ -138,7 +138,9 @@ fn get_next_exited_child() -> Option<ChildIterElem> {
     let wait_any_pid = nix::unistd::Pid::from_raw(-1);
     match nix::sys::wait::waitpid(wait_any_pid, Some(nix::sys::wait::WaitPidFlag::WNOHANG)) {
         Ok(exit_status) => match exit_status {
-            nix::sys::wait::WaitStatus::Exited(pid, code) => Some(Ok((pid, ChildTermination::Exit(code)))),
+            nix::sys::wait::WaitStatus::Exited(pid, code) => {
+                Some(Ok((pid, ChildTermination::Exit(code))))
+            }
             nix::sys::wait::WaitStatus::Signaled(pid, signal, _dumped_core) => {
                 // signals get handed to the parent if the child got killed by it but didnt handle the
                 // signal itself
