@@ -165,7 +165,10 @@ fn main() {
                             {
                                 if srvc.socket_ids.contains(&socket_id) {
                                     srvc_unit_id = Some(unit_locked.id);
-                                    trace!("Start service {} by socket activation", unit_locked.conf.name());
+                                    trace!(
+                                        "Start service {} by socket activation",
+                                        unit_locked.conf.name()
+                                    );
                                 }
                             }
                         }

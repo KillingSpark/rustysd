@@ -8,9 +8,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::platform::EventFd;
+use crate::signal_handler::ChildTermination;
 use crate::sockets::Socket;
 use crate::units::*;
-use crate::signal_handler::ChildTermination;
 
 #[derive(Debug)]
 pub struct ServiceRuntimeInfo {

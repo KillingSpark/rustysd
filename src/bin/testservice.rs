@@ -199,8 +199,8 @@ fn main() {
     stream.connect(socket_path).unwrap();
     stream.send(&b"STATUS=Next message that should be read before the READY message\nREADY=1\nSTATUS=Next message that should not be read directly after the fork\n"[..]).unwrap();
 
-     //create a child so we can see that orphanes are killed too
-     match nix::unistd::fork() {
+    //create a child so we can see that orphanes are killed too
+    match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Child) => {
             std::thread::sleep(std::time::Duration::from_secs(1000000));
         }
