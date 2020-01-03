@@ -147,7 +147,6 @@ mod dbus_support {
     }
 
     #[test]
-    #[ignore]
     fn test_dbus_wait() {
         let name = "This.Is.A.Test.Name".to_owned();
         let name2 = name.clone();
