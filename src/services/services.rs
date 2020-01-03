@@ -53,8 +53,10 @@ impl Service {
     ) -> Result<(), String> {
         trace!("Start service {}", name);
         if !allow_ignore || self.socket_ids.is_empty() {
+            // TODO do the ExecStartPre
             let mut pid_table = pid_table.lock().unwrap();
             start_service(self, name.clone(), &sockets, notification_socket_path)?;
+            // TODO do the ExecStartPost
             if let Some(new_pid) = self.pid {
                 pid_table.insert(new_pid, PidEntry::Service(id));
                 for sock in sockets.values_mut() {
