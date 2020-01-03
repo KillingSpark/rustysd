@@ -266,3 +266,97 @@ fn test_socket_parsing() {
         panic!("Not a service, but it should be");
     }
 }
+
+#[test]
+fn test_unit_ordering() {
+    let target1_str = format!(
+        "
+    [Unit]
+    Description = {}
+    Before = {}
+    
+    [Install]
+    RequiredBy = {}
+    ",
+        "Target", "2.target", "2.target",
+    );
+
+    let parsed_file = crate::units::parse_file(&target1_str).unwrap();
+    let target1_unit = crate::units::parse_target(
+        parsed_file,
+        &std::path::PathBuf::from("/path/to/1.target"),
+        crate::units::UnitId(crate::units::UnitIdKind::Socket, 1),
+    )
+    .unwrap();
+
+    let target2_str = format!(
+        "
+    [Unit]
+    Description = {}
+    After = {}
+
+    [Install]
+    RequiredBy = {}
+    ",
+        "Target", "1.target", "3.target",
+    );
+
+    let parsed_file = crate::units::parse_file(&target2_str).unwrap();
+    let target2_unit = crate::units::parse_target(
+        parsed_file,
+        &std::path::PathBuf::from("/path/to/2.target"),
+        crate::units::UnitId(crate::units::UnitIdKind::Socket, 2),
+    )
+    .unwrap();
+
+    let target3_str = format!(
+        "
+    [Unit]
+    Description = {}
+    After = {}
+    
+    ",
+        "Target", "1.target"
+    );
+
+    let parsed_file = crate::units::parse_file(&target3_str).unwrap();
+    let target3_unit = crate::units::parse_target(
+        parsed_file,
+        &std::path::PathBuf::from("/path/to/3.target"),
+        crate::units::UnitId(crate::units::UnitIdKind::Socket, 3),
+    )
+    .unwrap();
+
+    let mut unit_table = std::collections::HashMap::new();
+    let id1 = target1_unit.id;
+    let id2 = target2_unit.id;
+    let id3 = target3_unit.id;
+    unit_table.insert(target1_unit.id, target1_unit);
+    unit_table.insert(target2_unit.id, target2_unit);
+    unit_table.insert(target3_unit.id, target3_unit);
+
+    crate::units::fill_dependencies(&mut unit_table);
+    crate::units::add_implicit_before_after(&mut unit_table);
+    unit_table
+        .values_mut()
+        .for_each(|unit| unit.dedup_dependencies());
+    unit_table.values().for_each(|unit| println!("{} {:?}", unit.id, unit.install));
+
+    // before/after 1.target
+    assert!(unit_table.get(&id1).unwrap().install.after.is_empty());
+    assert!(unit_table.get(&id1).unwrap().install.before.len() == 2);
+    assert!(unit_table.get(&id1).unwrap().install.before.contains(&id2));
+    assert!(unit_table.get(&id1).unwrap().install.before.contains(&id3));
+
+    // before/after 2.target
+    assert_eq!(unit_table.get(&id2).unwrap().install.before.len(), 1);
+    assert!(unit_table.get(&id2).unwrap().install.before.contains(&id3));
+    assert_eq!(unit_table.get(&id2).unwrap().install.after.len(), 1);
+    assert!(unit_table.get(&id2).unwrap().install.after.contains(&id1));
+
+    // before/after 3.target
+    assert!(unit_table.get(&id3).unwrap().install.before.is_empty());
+    assert!(unit_table.get(&id3).unwrap().install.after.len() == 2);
+    assert!(unit_table.get(&id3).unwrap().install.after.contains(&id2));
+    assert!(unit_table.get(&id3).unwrap().install.after.contains(&id1));
+}
