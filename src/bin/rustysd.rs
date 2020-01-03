@@ -63,6 +63,8 @@ fn main() {
     // also opening all fildescriptors in the socket files
     let mut unit_table = units::load_all_units(&conf.unit_dirs).unwrap();
     units::prune_units(&conf.target_unit, &mut unit_table).unwrap();
+    units::sanity_check_dependencies(&unit_table).unwrap();
+    trace!("Unit dependencies passed sanity checks");
     let unit_table = unit_table;
 
     if std::env::args()
