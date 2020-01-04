@@ -87,7 +87,7 @@ pub fn insert_new_unit(
         let mut names_needed = Vec::new();
         names_needed.extend(new_unit.conf.after.iter().cloned());
         names_needed.extend(new_unit.conf.before.iter().cloned());
-        
+
         if let Some(conf) = &new_unit.install.install_config {
             names_needed.extend(conf.required_by.iter().cloned());
             names_needed.extend(conf.wanted_by.iter().cloned());
@@ -144,8 +144,7 @@ pub fn insert_new_unit(
                 new_unit.install.wants.push(id);
                 unit_locked.install.wanted_by.push(new_id);
             }
-            
-            
+
             if let Some(conf) = &new_unit.install.install_config {
                 if conf.required_by.contains(&name) {
                     new_unit.install.required_by.push(id);
@@ -164,7 +163,10 @@ pub fn insert_new_unit(
     }
     {
         let status_table_locked = &mut *run_info.status_table.write().unwrap();
-        status_table_locked.insert(new_id, Arc::new(Mutex::new(units::UnitStatus::NeverStarted)));
+        status_table_locked.insert(
+            new_id,
+            Arc::new(Mutex::new(units::UnitStatus::NeverStarted)),
+        );
     }
     Ok(())
 }

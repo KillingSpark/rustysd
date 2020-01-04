@@ -39,7 +39,7 @@ impl Call {
         }
 
         Value::Object(map)
-    } 
+    }
 }
 
 pub fn make_result_response(id: Option<Value>, result: Value) -> Value {

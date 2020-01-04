@@ -337,10 +337,14 @@ fn test_unit_ordering() {
 
     crate::units::fill_dependencies(&mut unit_table);
     crate::units::add_implicit_before_after(&mut unit_table);
-    unit_table.values_mut().for_each(|unit| unit.dedup_dependencies());
+    unit_table
+        .values_mut()
+        .for_each(|unit| unit.dedup_dependencies());
     crate::units::sanity_check_dependencies(&unit_table).unwrap();
 
-    unit_table.values().for_each(|unit| println!("{} {:?}", unit.id, unit.install));
+    unit_table
+        .values()
+        .for_each(|unit| println!("{} {:?}", unit.id, unit.install));
 
     // before/after 1.target
     assert!(unit_table.get(&id1).unwrap().install.after.is_empty());
