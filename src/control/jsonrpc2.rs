@@ -26,6 +26,20 @@ impl Call {
             _ => Err("Value wasn't an object".into()),
         }
     }
+
+    pub fn to_json(&self) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert("jsonrpc".into(), Value::String("2.0".into()));
+        map.insert("method".into(), Value::String(self.method.clone()));
+        if let Some(params) = &self.params {
+            map.insert("params".into(), params.clone());
+        }
+        if let Some(id) = &self.id {
+            map.insert("id".into(), id.clone());
+        }
+
+        Value::Object(map)
+    } 
 }
 
 pub fn make_result_response(id: Option<Value>, result: Value) -> Value {

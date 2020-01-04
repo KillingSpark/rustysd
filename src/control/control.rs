@@ -204,16 +204,16 @@ pub fn execute_command(
                     //list all
                     let unit_table_locked = run_info.unit_table.read().unwrap();
                     let strings: Vec<_> = unit_table_locked
-                        .iter()
-                        .map(|(_id, unit)| {
-                            let unit_locked = &unit.lock().unwrap();
-                            match unit_locked.specialized {
-                                UnitSpecialized::Socket(_) => format_socket(&unit_locked),
-                                UnitSpecialized::Service(_) => format_service(&unit_locked),
-                                UnitSpecialized::Target => format_target(&unit_locked),
-                            }
-                        })
-                        .collect();
+                    .iter()
+                    .map(|(_id, unit)| {
+                        let unit_locked = &unit.lock().unwrap();
+                        match unit_locked.specialized {
+                            UnitSpecialized::Socket(_) => format_socket(&unit_locked),
+                            UnitSpecialized::Service(_) => format_service(&unit_locked),
+                            UnitSpecialized::Target => format_target(&unit_locked),
+                        }
+                    })
+                    .collect();
                     for s in strings {
                         result_vec.as_array_mut().unwrap().push(s);
                     }
@@ -221,7 +221,12 @@ pub fn execute_command(
             }
         }
         Command::ListUnits(_kind) => {
-            // list units of kind or all
+            // TODO list units of kind or all
+            let unit_table_locked = run_info.unit_table.read().unwrap();
+            for unit in unit_table_locked.values() {
+                let unit_locked = unit.lock().unwrap();
+                result_vec.as_array_mut().unwrap().push(Value::String(unit_locked.conf.name()));
+            }
         }
     }
 

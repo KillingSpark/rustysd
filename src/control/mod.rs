@@ -13,6 +13,6 @@
 //! echo '{"method": "restart", "params": "test.service"}' | socat - TCP-CONNECT:0.0.0.0:8080
 
 mod control;
-mod jsonrpc2;
+pub mod jsonrpc2;
 
 pub use control::*;
