@@ -168,20 +168,22 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                 &mut srvc_unit_locked.specialized
                             {
                                 srvc.stdout_buffer.extend(&buf[..bytes]);
-                                if srvc.stdout_buffer.contains(&b'\n') {
-                                    let lines = srvc.stdout_buffer.split(|x| *x == b'\n');
-                                    let mut outbuf: Vec<u8> = Vec::new();
+                                let mut outbuf: Vec<u8> = Vec::new();
+                                while srvc.stdout_buffer.contains(&b'\n') {
+                                    let split_pos = srvc.stdout_buffer.iter().position(|r| *r == b'\n').unwrap();
+                                    let  (line, lines) = srvc.stdout_buffer.split_at(split_pos+1);
 
-                                    for line in lines {
-                                        if line.is_empty() {
-                                            continue;
-                                        }
-                                        outbuf.clear();
-                                        outbuf.extend(prefix.as_bytes());
-                                        outbuf.extend(line);
-                                        outbuf.push(b'\n');
-                                        std::io::stdout().write_all(&outbuf).unwrap();
+                                    // drop \n at the end of the line
+                                    let line = &line[0..line.len()-1];
+                                    if line.is_empty() {
+                                        continue;
                                     }
+                                    outbuf.clear();
+                                    outbuf.extend(prefix.as_bytes());
+                                    outbuf.extend(line);
+                                    outbuf.push(b'\n');
+                                    std::io::stdout().write_all(&outbuf).unwrap();
+                                    srvc.stdout_buffer = lines.to_vec();
                                 }
                             }
                         }
@@ -266,19 +268,22 @@ pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                 &mut srvc_unit_locked.specialized
                             {
                                 srvc.stderr_buffer.extend(&buf[..bytes]);
-                                if srvc.stderr_buffer.contains(&b'\n') {
-                                    let lines = srvc.stderr_buffer.split(|x| *x == b'\n');
-                                    let mut outbuf: Vec<u8> = Vec::new();
-                                    for line in lines {
-                                        if line.is_empty() {
-                                            continue;
-                                        }
-                                        outbuf.clear();
-                                        outbuf.extend(prefix.as_bytes());
-                                        outbuf.extend(line);
-                                        outbuf.push(b'\n');
-                                        std::io::stderr().write_all(&outbuf).unwrap();
+                                let mut outbuf: Vec<u8> = Vec::new();
+                                while srvc.stderr_buffer.contains(&b'\n') {
+                                    let split_pos = srvc.stderr_buffer.iter().position(|r| *r == b'\n').unwrap();
+                                    let  (line, lines) = srvc.stderr_buffer.split_at(split_pos+1);
+
+                                    // drop \n at the end of the line
+                                    let line = &line[0..line.len()-1];
+                                    if line.is_empty() {
+                                        continue;
                                     }
+                                    outbuf.clear();
+                                    outbuf.extend(prefix.as_bytes());
+                                    outbuf.extend(line);
+                                    outbuf.push(b'\n');
+                                    std::io::stderr().write_all(&outbuf).unwrap();
+                                    srvc.stderr_buffer = lines.to_vec();
                                 }
                             }
                         }
