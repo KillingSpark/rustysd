@@ -1,3 +1,10 @@
+//! RSDCTL
+//! This is a utility to pack cli args into the jsonrpc2 format and send them to rustysd.
+//! It will read the answer and pretty print it. In the future there might be a more sophisticated client.
+//! For now this should suffice.
+//!
+//! Note that this doesn't even check for the correctness of commands and there args, this is done by the main binary "rustysd"
+
 use rustysd::control::jsonrpc2::Call;
 use serde_json::Value;
 use std::io::Write;
@@ -5,8 +12,24 @@ use std::io::Write;
 fn main() {
     let mut args: Vec<_> = std::env::args().collect();
     let _exec_name = args.remove(0);
+    if args[0] == "--help" {
+        println!("
+        This is a utility to pack cli args into the jsonrpc2 format and send them to rustysd.
+        It will read the answer and pretty print it. In the future there might be a more sophisticated client.
+        For now this should suffice.
+        
+        Usage:
+            rsdctl <ip-addr:port> <command> [args]
+        
+        Example:
+            rsdctl 0.0.0.0:8080 restart test.service
+        ");
+        return;
+    }
+
     let addr = args.remove(0);
     let args = args;
+
     let params = if args.len() == 2 {
         Some(Value::String(args[1].clone()))
     } else if args.len() > 1 {
