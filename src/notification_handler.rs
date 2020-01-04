@@ -170,11 +170,15 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                 srvc.stdout_buffer.extend(&buf[..bytes]);
                                 let mut outbuf: Vec<u8> = Vec::new();
                                 while srvc.stdout_buffer.contains(&b'\n') {
-                                    let split_pos = srvc.stdout_buffer.iter().position(|r| *r == b'\n').unwrap();
-                                    let  (line, lines) = srvc.stdout_buffer.split_at(split_pos+1);
+                                    let split_pos = srvc
+                                        .stdout_buffer
+                                        .iter()
+                                        .position(|r| *r == b'\n')
+                                        .unwrap();
+                                    let (line, lines) = srvc.stdout_buffer.split_at(split_pos + 1);
 
                                     // drop \n at the end of the line
-                                    let line = &line[0..line.len()-1];
+                                    let line = &line[0..line.len() - 1];
                                     if line.is_empty() {
                                         continue;
                                     }
@@ -200,20 +204,11 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
 pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id: HashMap<_, _> =
-            unit_table
-                .read()
-                .unwrap()
-                .iter()
-                .fold(HashMap::new(), |mut map, (id, srvc_unit)| {
-                    let srvc_unit_locked = srvc_unit.lock().unwrap();
-                    if let UnitSpecialized::Service(srvc) = &srvc_unit_locked.specialized {
-                        if let Some(fd) = &srvc.stderr_dup {
-                            map.insert(fd.0, *id);
-                        }
-                    }
-                    map
-                });
+        let fd_to_srvc_id = collect_from_srvc(unit_table.clone(), |map, srvc, id| {
+            if let Some(fd) = &srvc.stderr_dup {
+                map.insert(fd.0, id);
+            }
+        });
 
         let mut fdset = nix::sys::select::FdSet::new();
         for fd in fd_to_srvc_id.keys() {
@@ -270,11 +265,15 @@ pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                 srvc.stderr_buffer.extend(&buf[..bytes]);
                                 let mut outbuf: Vec<u8> = Vec::new();
                                 while srvc.stderr_buffer.contains(&b'\n') {
-                                    let split_pos = srvc.stderr_buffer.iter().position(|r| *r == b'\n').unwrap();
-                                    let  (line, lines) = srvc.stderr_buffer.split_at(split_pos+1);
+                                    let split_pos = srvc
+                                        .stderr_buffer
+                                        .iter()
+                                        .position(|r| *r == b'\n')
+                                        .unwrap();
+                                    let (line, lines) = srvc.stderr_buffer.split_at(split_pos + 1);
 
                                     // drop \n at the end of the line
-                                    let line = &line[0..line.len()-1];
+                                    let line = &line[0..line.len() - 1];
                                     if line.is_empty() {
                                         continue;
                                     }
