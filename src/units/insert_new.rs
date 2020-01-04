@@ -77,7 +77,7 @@ pub fn load_new_unit(
 /// 1. activate the unit
 /// 1. removing the unit again if the activation fails
 pub fn insert_new_unit(
-    new_unit: units::Unit,
+    mut new_unit: units::Unit,
     run_info: units::ArcRuntimeInfo,
 ) -> Result<(), String> {
     let new_id = new_unit.id;
@@ -87,6 +87,7 @@ pub fn insert_new_unit(
         let mut names_needed = Vec::new();
         names_needed.extend(new_unit.conf.after.iter().cloned());
         names_needed.extend(new_unit.conf.before.iter().cloned());
+        
         if let Some(conf) = &new_unit.install.install_config {
             names_needed.extend(conf.required_by.iter().cloned());
             names_needed.extend(conf.wanted_by.iter().cloned());
@@ -120,6 +121,41 @@ pub fn insert_new_unit(
                 "Names referenced by unit but not found in the known set of units: {:?}",
                 names_needed.keys().collect::<Vec<_>>()
             ));
+        }
+
+        // Setup relations of before <-> after / requires <-> requiredby
+        for unit in unit_table_locked.values() {
+            let mut unit_locked = unit.lock().unwrap();
+            let name = unit_locked.conf.name();
+            let id = unit_locked.id;
+            if new_unit.conf.after.contains(&name) {
+                new_unit.install.after.push(id);
+                unit_locked.install.before.push(new_id);
+            }
+            if new_unit.conf.before.contains(&name) {
+                new_unit.install.before.push(id);
+                unit_locked.install.after.push(new_id);
+            }
+            if new_unit.conf.requires.contains(&name) {
+                new_unit.install.requires.push(id);
+                unit_locked.install.required_by.push(new_id);
+            }
+            if new_unit.conf.wants.contains(&name) {
+                new_unit.install.wants.push(id);
+                unit_locked.install.wanted_by.push(new_id);
+            }
+            
+            
+            if let Some(conf) = &new_unit.install.install_config {
+                if conf.required_by.contains(&name) {
+                    new_unit.install.required_by.push(id);
+                    unit_locked.install.requires.push(new_id);
+                }
+                if conf.wanted_by.contains(&name) {
+                    new_unit.install.wanted_by.push(id);
+                    unit_locked.install.wants.push(new_id);
+                }
+            }
         }
     }
     {
