@@ -2,7 +2,6 @@ use crate::units;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use crate::platform::EventFd;
 
 fn find_new_unit_path(unit_dirs: &[PathBuf], find_name: &str) -> Result<Option<PathBuf>, String> {
     for dir in unit_dirs {
@@ -75,25 +74,13 @@ pub fn load_new_unit(
 /// 1. inserting it into the unit_table of run_info
 /// 1. activate the unit
 /// 1. removing the unit again if the activation fails
-pub fn activate_new_unit(new_unit: units::Unit, run_info: units::ArcRuntimeInfo,notification_socket_path: std::path::PathBuf, eventfds: Arc<Vec<EventFd>>) -> Result<(), String> {
+pub fn activate_new_unit(new_unit: units::Unit, run_info: units::ArcRuntimeInfo) -> Result<(), String> {
     let new_id = new_unit.id; 
     // TODO check if new unit only refs existing units
     // TODO check if all ref'd units are not failed
     {
         let unit_table_locked = &mut *run_info.unit_table.write().unwrap();
         unit_table_locked.insert(new_id, Arc::new(Mutex::new(new_unit)));
-    }
-    match units::activate_unit(new_id, run_info.clone(), notification_socket_path, eventfds, true) {
-        Ok(_) =>  { /* Happy */}
-        Err(e) => {
-            // TODO check if we actually want to remove the new unit?
-            let new_unit = {
-                let unit_table_locked = &mut *run_info.unit_table.write().unwrap();
-                unit_table_locked.remove(&new_id).unwrap()
-            };
-            let new_unit_locked = new_unit.lock().unwrap();
-            return Err(format!("Error while activating unit {}: {}", new_unit_locked.conf.name(), e));
-        }
     }
     Ok(())
 }
