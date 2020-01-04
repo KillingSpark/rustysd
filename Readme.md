@@ -164,9 +164,15 @@ Some stuff where I chose something along the way where there might be better/oth
     1. Con: Probably less portable to more exotic unices (like redox)
 
 ## How does it work
+Rustysd has two binaries: The main service-manager 'rustysd' and the control client 'rsdctl'. 
+
+The client is just a dumb utility to 
+pack cli arguments into jsonrpc2 format and send them to rustysd. This can be used to restart units, add new units, or show the status
+of units. 
+
 Generally rustysd has two phases:
 1. Bring up all units with as much concurrency as possible, and as lazily (with socket activation) as possible
-2. Wait for events from the services, and react to these
+2. Wait for events from the services or the control sockets, and react to these
     1. Data from either stdout/err or the notification sockets
     2. Signals from the kernel
 
