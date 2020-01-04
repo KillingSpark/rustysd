@@ -90,31 +90,32 @@ It currently is somewhat pessimistic, I will work on improving the comparison of
 
 ### General features
 
-1. Parsing of service files (a subset of the settings are recognized)
-1. Parsing of socket files (a subset of the settings are recognized)
-1. Ordering of services according to the before/after relations
-1. Killing services that require services that have died 
-1. Matching services and sockets either by name or dynamically by parsing the appropiate settings in the .service/.socket files
-1. Passing filedescriptors to the daemons as systemd clients expect them (names and all that good stuff)
-1. Pretty much all parts of the sd_notify API
-1. Waiting for the READY=1 notification for services of type notify
-1. Waiting for services of type dbus
-1. Waiting for multiple dependencies
-1. Target units to synchronize the startup
-1. Send SIGKILL to whole processgroup when killing a service
-1. Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
-1. Pruning the set of loaded units to only the needed ones to reach the target unit
+* Parsing of service files (a subset of the settings are recognized)
+* Parsing of socket files (a subset of the settings are recognized)
+* Ordering of services according to the before/after relations
+* Killing services that require services that have died 
+* Matching services and sockets either by name or dynamically by parsing the appropiate settings in the .service/.socket files
+* Passing filedescriptors to the daemons as systemd clients expect them (names and all that good stuff)
+* Pretty much all parts of the sd_notify API
+* Waiting for the READY=1 notification for services of type notify
+* Waiting for services of type dbus
+* Waiting for multiple dependencies
+* Target units to synchronize the startup
+* Send SIGKILL to whole processgroup when killing a service
+* Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
+* Pruning the set of loaded units to only the needed ones to reach the target unit
+* Adding new units while running
 
 ### Optional build features
 There are some features behind flags because they are either platform dependent or not necessarily needed for most of the use-cases
-1. dbus_support: Activate support for services of type dbus (not needed for many services and probably a dumb idea in a container anyways)
-1. linux_eventfd: Use eventfds instead of pipes to interrupt select() calls (because they only exist on linux)
+* dbus_support: Activate support for services of type dbus (not needed for many services and probably a dumb idea in a container anyways)
+* linux_eventfd: Use eventfds instead of pipes to interrupt select() calls (because they only exist on linux)
 
 ### Docker
 Running in a docker container as PID1 works. The image that is built by the scripts in the dockerfiles directory results in a 2MB image that contains
-1. Rustysd (stripped binary built with musl to be completely static)
-1. The testservice and testserviceclient (stripped binaries built with musl to be completely static)
-1. The unit files in test_units
+* Rustysd (stripped binary built with musl to be completely static)
+* The testservice and testserviceclient (stripped binaries built with musl to be completely static)
+* The unit files in test_units
 
 
 ### See for yourself
@@ -142,7 +143,7 @@ Requiring small changes / additions transparent to the other modules:
 * Timeouts for service starting (should be easy for the current service types. might get complicated for type forking)
 * Patching unit definitions with dropin files
 * Socket options like MaxConnections=/KeepAlive=
-* Killing services properly. SigTerm/Kill/Hup/ executing the stop commands .....
+* Killing services properly. SigTerm/Kill/Hup/ executing the stop commands ..... (currently there is just a sigkill sent to the whole processgroup)
 * More socket types 
     1. Netlink is missing for example
     1. Abstract namespace for unix sockets (but thats linux specific anyways and rust stdlib doesnt support it.....)
@@ -153,7 +154,6 @@ Requiring small changes / additions transparent to the other modules:
 Unclear how much work it is:
 * Get all the meta-targets and default dependencies right
     * Individually these are probably small parts. But as a whole task it seems like much
-* Adding new units while running
 
 
 ## What could be done better
