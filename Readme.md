@@ -150,6 +150,9 @@ Requiring small changes / additions transparent to the other modules:
 * Service type oneshot is missing
 * Service type idle is missing (not even sure if its a good idea to support this)
 * A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
+    1. Killing is missing
+    2. Disabling of units is missing
+    3. A better UI than pretty-printed json is missing 
 
 Unclear how much work it is:
 * Get all the meta-targets and default dependencies right
