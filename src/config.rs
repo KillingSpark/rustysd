@@ -20,7 +20,7 @@ pub struct LoggingConfig {
     pub log_dir: PathBuf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub unit_dirs: Vec<PathBuf>,
     pub target_unit: String,

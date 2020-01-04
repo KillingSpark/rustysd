@@ -55,6 +55,8 @@ pub struct RuntimeInfo {
     pub unit_table: ArcMutUnitTable,
     pub status_table: ArcMutStatusTable,
     pub pid_table: ArcMutPidTable,
+    pub config: crate::config::Config,
+    pub last_id: Arc<Mutex<u64>>,
 }
 
 // This will be passed through to all the different threads as a central state struct

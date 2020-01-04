@@ -6,6 +6,7 @@ pub enum Command {
     ListUnits(Option<UnitSpecialized>),
     Status(Option<String>),
     Restart(String),
+    LoadNew(String),
 }
 
 enum ParseError {
@@ -47,7 +48,26 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
             };
             Command::Restart(name)
         }
+        // TODO parse filters for the listing
         "list-units" => Command::ListUnits(None),
+        "enable" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => s.clone(),
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => {
+                    return Err(ParseError::ParamsInvalid(format!(
+                        "Params must be a single string"
+                    )))
+                }
+            };
+            Command::LoadNew(name)
+        }
         _ => {
             return Err(ParseError::MethodNotFound(format!(
                 "Unknown method: {}",
@@ -204,16 +224,16 @@ pub fn execute_command(
                     //list all
                     let unit_table_locked = run_info.unit_table.read().unwrap();
                     let strings: Vec<_> = unit_table_locked
-                    .iter()
-                    .map(|(_id, unit)| {
-                        let unit_locked = &unit.lock().unwrap();
-                        match unit_locked.specialized {
-                            UnitSpecialized::Socket(_) => format_socket(&unit_locked),
-                            UnitSpecialized::Service(_) => format_service(&unit_locked),
-                            UnitSpecialized::Target => format_target(&unit_locked),
-                        }
-                    })
-                    .collect();
+                        .iter()
+                        .map(|(_id, unit)| {
+                            let unit_locked = &unit.lock().unwrap();
+                            match unit_locked.specialized {
+                                UnitSpecialized::Socket(_) => format_socket(&unit_locked),
+                                UnitSpecialized::Service(_) => format_service(&unit_locked),
+                                UnitSpecialized::Target => format_target(&unit_locked),
+                            }
+                        })
+                        .collect();
                     for s in strings {
                         result_vec.as_array_mut().unwrap().push(s);
                     }
@@ -225,8 +245,20 @@ pub fn execute_command(
             let unit_table_locked = run_info.unit_table.read().unwrap();
             for unit in unit_table_locked.values() {
                 let unit_locked = unit.lock().unwrap();
-                result_vec.as_array_mut().unwrap().push(Value::String(unit_locked.conf.name()));
+                result_vec
+                    .as_array_mut()
+                    .unwrap()
+                    .push(Value::String(unit_locked.conf.name()));
             }
+        }
+        Command::LoadNew(name) => {
+            let this_id = {
+                let last_id = &mut *run_info.last_id.lock().unwrap();
+                *last_id = *last_id + 1;
+                *last_id
+            };
+            let unit = load_new_unit(&run_info.config.unit_dirs, &name, this_id)?;
+            insert_new_unit(unit, run_info)?;
         }
     }
 

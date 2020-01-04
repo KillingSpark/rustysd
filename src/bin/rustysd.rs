@@ -96,6 +96,10 @@ fn main() {
         unit_table: unit_table.clone(),
         pid_table: pid_table.clone(),
         status_table: status_table.clone(),
+
+        // TODO find actual max id used
+        last_id: Arc::new(Mutex::new(300)),
+        config: conf.clone(),
     });
 
     // listen on user commands like listunits/kill/restart...

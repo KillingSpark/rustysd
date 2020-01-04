@@ -7,7 +7,9 @@ fn main() {
     let _exec_name = args.remove(0);
     let addr = args.remove(0);
     let args = args;
-    let params = if args.len() > 1 {
+    let params = if args.len() == 2 {
+        Some(Value::String(args[1].clone()))
+    } else if args.len() > 1 {
         Some({
             args[1..]
                 .iter()

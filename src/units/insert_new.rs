@@ -45,22 +45,24 @@ pub fn load_new_unit(
             )
             .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?
         } else if find_name.ends_with(".socket") {
-            units::parse_service(
+            units::parse_socket(
                 parsed,
                 &unit_path,
-                units::UnitId(units::UnitIdKind::Service, next_id),
+                units::UnitId(units::UnitIdKind::Socket, next_id),
             )
             .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?
         } else if find_name.ends_with(".target") {
-            
-                units::parse_service(
-                    parsed,
-                    &unit_path,
-                    units::UnitId(units::UnitIdKind::Service, next_id),
-                )
-                .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?
+            units::parse_target(
+                parsed,
+                &unit_path,
+                units::UnitId(units::UnitIdKind::Target, next_id),
+            )
+            .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?
         } else {
-            return Err(format!("File suffix not recognized for file {:?}", unit_path));
+            return Err(format!(
+                "File suffix not recognized for file {:?}",
+                unit_path
+            ));
         };
 
         Ok(unit)
@@ -69,18 +71,64 @@ pub fn load_new_unit(
     }
 }
 
-/// Activates a new unit by 
-/// 1. (not yet but will be) checking the units referenced by this new unit 
+/// Activates a new unit by
+/// 1. (not yet but will be) checking the units referenced by this new unit
 /// 1. inserting it into the unit_table of run_info
 /// 1. activate the unit
 /// 1. removing the unit again if the activation fails
-pub fn activate_new_unit(new_unit: units::Unit, run_info: units::ArcRuntimeInfo) -> Result<(), String> {
-    let new_id = new_unit.id; 
+pub fn insert_new_unit(
+    new_unit: units::Unit,
+    run_info: units::ArcRuntimeInfo,
+) -> Result<(), String> {
+    let new_id = new_unit.id;
     // TODO check if new unit only refs existing units
     // TODO check if all ref'd units are not failed
     {
+        let mut names_needed = Vec::new();
+        names_needed.extend(new_unit.conf.after.iter().cloned());
+        names_needed.extend(new_unit.conf.before.iter().cloned());
+        if let Some(conf) = &new_unit.install.install_config {
+            names_needed.extend(conf.required_by.iter().cloned());
+            names_needed.extend(conf.wanted_by.iter().cloned());
+        }
+        if let units::UnitSpecialized::Socket(sock) = &new_unit.specialized {
+            names_needed.extend(sock.services.iter().cloned());
+        }
+        if let units::UnitSpecialized::Service(srvc) = &new_unit.specialized {
+            if let Some(conf) = &srvc.service_config {
+                names_needed.extend(conf.sockets.iter().cloned());
+            }
+        }
+        let mut names_needed: std::collections::HashMap<_, _> =
+            names_needed.iter().map(|name| (name, ())).collect();
+
+        let unit_table_locked = &*run_info.unit_table.read().unwrap();
+        for unit in unit_table_locked.values() {
+            let unit_locked = unit.lock().unwrap();
+            if unit_locked.id == new_id {
+                return Err(format!("Id {} exists already", new_id));
+            }
+            if unit_locked.conf.name() == new_unit.conf.name() {
+                return Err(format!("Name {} exists already", new_unit.conf.name()));
+            }
+            if names_needed.contains_key(&unit_locked.conf.name()) {
+                names_needed.remove(&unit_locked.conf.name()).unwrap();
+            }
+        }
+        if names_needed.len() > 0 {
+            return Err(format!(
+                "Names referenced by unit but not found in the known set of units: {:?}",
+                names_needed.keys().collect::<Vec<_>>()
+            ));
+        }
+    }
+    {
         let unit_table_locked = &mut *run_info.unit_table.write().unwrap();
         unit_table_locked.insert(new_id, Arc::new(Mutex::new(new_unit)));
+    }
+    {
+        let status_table_locked = &mut *run_info.status_table.write().unwrap();
+        status_table_locked.insert(new_id, Arc::new(Mutex::new(units::UnitStatus::NeverStarted)));
     }
     Ok(())
 }
