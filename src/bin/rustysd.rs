@@ -197,7 +197,7 @@ fn main() {
                                     let status_locked = status.lock().unwrap();
                                     *status_locked
                                 };
-                                
+
                                 if srvc_status != units::UnitStatus::StartedWaitingForSocket {
                                     trace!(
                                         "Ignore socket activation. Service has status: {:?}",

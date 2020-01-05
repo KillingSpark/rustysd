@@ -88,7 +88,8 @@ pub fn activate_unit(
         let is_started = {
             let status = status_table_locked.get(elem).unwrap();
             let status_locked = status.lock().unwrap();
-            *status_locked == UnitStatus::Started || *status_locked == UnitStatus::StartedWaitingForSocket
+            *status_locked == UnitStatus::Started
+                || *status_locked == UnitStatus::StartedWaitingForSocket
         };
         acc && is_started
     });

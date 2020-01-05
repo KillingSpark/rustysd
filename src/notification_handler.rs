@@ -176,7 +176,7 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                         .position(|r| *r == b'\n')
                                         .unwrap();
                                     let (line, lines) = srvc.stdout_buffer.split_at(split_pos + 1);
-                                    
+
                                     // drop \n at the end of the line
                                     let line = &line[0..line.len() - 1].to_vec();
                                     srvc.stdout_buffer = lines.to_vec();
