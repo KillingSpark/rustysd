@@ -152,7 +152,8 @@ Requiring small changes / additions transparent to the other modules:
 * A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
     1. Killing is missing
     2. Disabling of units is missing
-    3. A better UI than pretty-printed json is missing 
+    3. A better UI than pretty-printed json is missing
+* Many of the missing features in feature-comparison.md are relatively simple issues
 
 Unclear how much work it is:
 * Get all the meta-targets and default dependencies right
