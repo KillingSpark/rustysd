@@ -106,7 +106,10 @@ pub fn handle_signals(
                             }
                             UnitSpecialized::Socket(sock) => {
                                 trace!("Close socket unit: {}", unit_locked.conf.name());
-                                match sock.close_all() {
+                                match sock.close_all(
+                                    unit_locked.conf.name(),
+                                    &mut *run_info.fd_store.write().unwrap(),
+                                ) {
                                     Err(e) => error!("Error while closing sockets: {}", e),
                                     Ok(()) => {}
                                 }

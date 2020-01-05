@@ -122,24 +122,11 @@ pub fn activate_unit(
 
     let name = unit_locked.conf.name();
     let next_services_ids = unit_locked.install.before.clone();
-    trace!("Lock required units for unit {}", name);
-    let mut other_needed_units = Vec::new();
-    {
-        let units_locked = run_info.unit_table.read().unwrap();
-        other_needed_units.extend(unit_locked.filter_units_needed_for_activation(&units_locked));
-    }
-    let mut other_needed_units_locked = crate::units::lock_all(&mut other_needed_units);
-    let mut other_needed_units_refs = HashMap::new();
-    for (id, other_unit_locked) in &mut other_needed_units_locked {
-        let other_unit_locked: &mut Unit = &mut (*other_unit_locked);
-        other_needed_units_refs.insert(*id, other_unit_locked);
-    }
-    trace!("Done locking required units for unit {}", name);
 
     unit_locked
         .activate(
-            &mut other_needed_units_refs,
             run_info.pid_table.clone(),
+            run_info.fd_store.clone(),
             notification_socket_path.clone(),
             &eventfds,
             allow_ignore,

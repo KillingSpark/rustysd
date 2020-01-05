@@ -24,6 +24,7 @@
 pub mod config;
 pub mod control;
 pub mod dbus_wait;
+pub mod fd_store;
 pub mod logging;
 pub mod notification_handler;
 pub mod platform;

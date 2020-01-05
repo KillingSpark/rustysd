@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::fd_store::FDStore;
 use crate::platform::EventFd;
 use crate::signal_handler::ChildTermination;
 use crate::sockets::Socket;
@@ -23,7 +24,7 @@ pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
     pub service_config: Option<ServiceConfig>,
 
-    pub socket_ids: Vec<UnitId>,
+    pub socket_names: Vec<String>,
 
     pub status_msgs: Vec<String>,
 
@@ -45,23 +46,25 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &String,
-        sockets: &mut HashMap<UnitId, &mut Socket>,
+        fd_store: ArcMutFDStore,
         pid_table: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<(), String> {
         trace!("Start service {}", name);
-        if !allow_ignore || self.socket_ids.is_empty() {
+        if !allow_ignore || self.socket_names.is_empty() {
             // TODO do the ExecStartPre
             let mut pid_table = pid_table.lock().unwrap();
-            start_service(self, name.clone(), &sockets, notification_socket_path)?;
+            start_service(
+                self,
+                name.clone(),
+                &*fd_store.read().unwrap(),
+                notification_socket_path,
+            )?;
             // TODO do the ExecStartPost
             if let Some(new_pid) = self.pid {
                 pid_table.insert(new_pid, PidEntry::Service(id));
-                for sock in sockets.values_mut() {
-                    sock.activated = true;
-                }
                 crate::platform::notify_event_fds(&eventfds);
             }
         } else {
@@ -69,9 +72,6 @@ impl Service {
                 "Ignore service {} start, waiting for socket activation instead",
                 name,
             );
-            for sock in sockets.values_mut() {
-                sock.activated = false;
-            }
             crate::platform::notify_event_fds(&eventfds)
         }
         Ok(())
@@ -178,7 +178,8 @@ pub fn service_exit_handler(
         }
     };
 
-    let (name, restart_unit) = {
+    trace!("Check if we want to restart the unit");
+    let (name, sockets, restart_unit) = {
         let unit_locked = &mut *unit.lock().unwrap();
         let name = unit_locked.conf.name();
         if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
@@ -192,18 +193,30 @@ pub fn service_exit_handler(
 
             if let Some(conf) = &srvc.service_config {
                 if conf.restart == ServiceRestart::Always {
-                    (name, true)
+                    let sockets = srvc.socket_names.clone();
+                    (name, sockets, true)
                 } else {
-                    (name, false)
+                    (name, Vec::new(), false)
                 }
             } else {
-                (name, false)
+                (name, Vec::new(), false)
             }
         } else {
-            (name, false)
+            (name, Vec::new(), false)
         }
     };
     if restart_unit {
+        {
+            // tell socket activation to listen to these sockets again
+            for unit in run_info.unit_table.read().unwrap().values() {
+                let mut unit_locked = unit.lock().unwrap();
+                if sockets.contains(&unit_locked.conf.name()) {
+                    if let UnitSpecialized::Socket(sock) = &mut unit_locked.specialized {
+                        sock.activated = false;
+                    }
+                }
+            }
+        }
         trace!("Restart service {} after it died", name);
         crate::units::reactivate_unit(
             srvc_id,

@@ -139,7 +139,7 @@ pub fn prune_units(
         let unit = unit_table.remove(id).unwrap();
         trace!("Pruning unit: {}", unit.conf.name());
     }
-    prune_sockets(unit_table);
+
     add_implicit_before_after(unit_table);
     for unit in unit_table.values_mut() {
         unit.install.before = unit
@@ -227,83 +227,6 @@ fn find_needed_units_recursive(
 
     for new_id in &new_needed_ids {
         find_needed_units_recursive(*new_id, unit_table, visited_ids);
-    }
-}
-
-fn prune_sockets(unit_table: &mut HashMap<UnitId, Unit>) {
-    let mut socket_ids_to_keep = Vec::new();
-    let mut socket_ids_to_remove = Vec::new();
-    for unit in unit_table.values() {
-        if let UnitSpecialized::Service(srvc) = &unit.specialized {
-            socket_ids_to_keep.extend(srvc.socket_ids.iter().cloned());
-        }
-    }
-    for unit in unit_table.values() {
-        if unit.is_socket() && !socket_ids_to_keep.contains(&unit.id) {
-            socket_ids_to_remove.push(unit.id);
-        }
-    }
-    for id in &socket_ids_to_remove {
-        let unit = unit_table.remove(id).unwrap();
-        trace!("Pruning socket: {}", unit.conf.name());
-    }
-
-    let mut socket_target_unit = None;
-    for unit in unit_table.values_mut() {
-        if unit.conf.name() == "sockets.target" {
-            socket_target_unit = Some(unit);
-            break;
-        }
-    }
-    if let Some(socket_target_unit) = socket_target_unit {
-        trace!("Cleaning sockets.target dependencies");
-        socket_target_unit.install.before = socket_target_unit
-            .install
-            .before
-            .iter()
-            .filter(|id| socket_ids_to_keep.contains(id))
-            .map(|id| *id)
-            .collect();
-
-        socket_target_unit.install.after = socket_target_unit
-            .install
-            .after
-            .iter()
-            .filter(|id| socket_ids_to_keep.contains(id))
-            .map(|id| *id)
-            .collect();
-
-        socket_target_unit.install.requires = socket_target_unit
-            .install
-            .requires
-            .iter()
-            .filter(|id| socket_ids_to_keep.contains(id))
-            .map(|id| *id)
-            .collect();
-
-        socket_target_unit.install.wants = socket_target_unit
-            .install
-            .wants
-            .iter()
-            .filter(|id| socket_ids_to_keep.contains(id))
-            .map(|id| *id)
-            .collect();
-
-        socket_target_unit.install.required_by = socket_target_unit
-            .install
-            .required_by
-            .iter()
-            .filter(|id| socket_ids_to_keep.contains(id))
-            .map(|id| *id)
-            .collect();
-
-        socket_target_unit.install.wanted_by = socket_target_unit
-            .install
-            .wanted_by
-            .iter()
-            .filter(|id| socket_ids_to_keep.contains(id))
-            .map(|id| *id)
-            .collect();
     }
 }
 
@@ -447,7 +370,7 @@ pub fn apply_sockets_to_services(
                     // add sockets for services with the exact same name
                     if (srvc_unit.conf.name_without_suffix()
                         == sock_unit.conf.name_without_suffix())
-                        && !srvc.socket_ids.contains(&sock_unit.id)
+                        && !srvc.socket_names.contains(&sock_unit.conf.name())
                     {
                         trace!(
                             "add socket: {} to service: {}",
@@ -455,7 +378,7 @@ pub fn apply_sockets_to_services(
                             srvc_unit.conf.name()
                         );
 
-                        srvc.socket_ids.push(sock_unit.id);
+                        srvc.socket_names.push(sock_unit.conf.name());
                         add_sock_srvc_relations(
                             srvc_unit.id,
                             &mut srvc_unit.install,
@@ -468,14 +391,14 @@ pub fn apply_sockets_to_services(
                     // add sockets to services that specify that the socket belongs to them
                     if let Some(srvc_conf) = &srvc.service_config {
                         if srvc_conf.sockets.contains(&sock_unit.conf.name())
-                            && !srvc.socket_ids.contains(&sock_unit.id)
+                            && !srvc.socket_names.contains(&sock_unit.conf.name())
                         {
                             trace!(
                                 "add socket: {} to service: {}",
                                 sock_unit.conf.name(),
                                 srvc_unit.conf.name()
                             );
-                            srvc.socket_ids.push(sock_unit.id);
+                            srvc.socket_names.push(sock_unit.conf.name());
                             add_sock_srvc_relations(
                                 srvc_unit.id,
                                 &mut srvc_unit.install,
@@ -494,7 +417,7 @@ pub fn apply_sockets_to_services(
                     let srvc = &mut srvc_unit.specialized;
                     if let UnitSpecialized::Service(srvc) = srvc {
                         if (*srvc_name == srvc_unit.conf.name())
-                            && !srvc.socket_ids.contains(&sock_unit.id)
+                            && !srvc.socket_names.contains(&sock_unit.conf.name())
                         {
                             trace!(
                                 "add socket: {} to service: {}",
@@ -502,7 +425,7 @@ pub fn apply_sockets_to_services(
                                 srvc_unit.conf.name()
                             );
 
-                            srvc.socket_ids.push(sock_unit.id);
+                            srvc.socket_names.push(sock_unit.conf.name());
                             add_sock_srvc_relations(
                                 srvc_unit.id,
                                 &mut srvc_unit.install,
@@ -529,7 +452,7 @@ pub fn apply_sockets_to_services(
 
     for srvc_unit in service_table.values_mut() {
         if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
-            srvc.socket_ids.sort();
+            srvc.socket_names.sort();
         }
     }
 

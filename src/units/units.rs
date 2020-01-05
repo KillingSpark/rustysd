@@ -1,7 +1,7 @@
+use crate::fd_store::FDStore;
 use crate::platform::EventFd;
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
-use std::os::unix::io::AsRawFd;
 
 use nix::unistd::Pid;
 use std::collections::HashMap;
@@ -51,10 +51,13 @@ pub type ArcMutStatusTable = Arc<RwLock<StatusTable>>;
 pub type PidTable = HashMap<Pid, PidEntry>;
 pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
 
+pub type ArcMutFDStore = Arc<RwLock<FDStore>>;
+
 pub struct RuntimeInfo {
     pub unit_table: ArcMutUnitTable,
     pub status_table: ArcMutStatusTable,
     pub pid_table: ArcMutPidTable,
+    pub fd_store: ArcMutFDStore,
     pub config: crate::config::Config,
     pub last_id: Arc<Mutex<u64>>,
 }
@@ -167,32 +170,10 @@ impl Unit {
         self.install.after.dedup();
     }
 
-    fn ids_needed_for_activation(&self) -> Vec<UnitId> {
-        match &self.specialized {
-            UnitSpecialized::Target => Vec::new(),
-            UnitSpecialized::Socket(_) => Vec::new(),
-            UnitSpecialized::Service(srvc) => srvc.socket_ids.clone(),
-        }
-    }
-
-    pub fn filter_units_needed_for_activation(&self, unit_table: &UnitTable) -> UnitTable {
-        let ids_needed = self.ids_needed_for_activation();
-        let units_needed = unit_table
-            .iter()
-            .fold(HashMap::new(), |mut acc, (id, unit)| {
-                if ids_needed.contains(id) {
-                    acc.insert(*id, Arc::clone(unit));
-                }
-                acc
-            });
-
-        units_needed
-    }
-
     pub fn activate(
         &mut self,
-        required_units: &mut HashMap<UnitId, &mut Unit>,
         pid_table: ArcMutPidTable,
+        fd_store: ArcMutFDStore,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
@@ -200,20 +181,14 @@ impl Unit {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
-                sock.open_all()
+                sock.open_all(self.conf.name(), self.id, &mut *fd_store.write().unwrap())
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
-                let mut sockets: HashMap<UnitId, &mut Socket> = HashMap::new();
-                for (id, unit_locked) in required_units {
-                    if let UnitSpecialized::Socket(sock) = &mut unit_locked.specialized {
-                        sockets.insert(*id, sock);
-                    }
-                }
                 srvc.start(
                     self.id,
                     &self.conf.name(),
-                    &mut sockets,
+                    fd_store,
                     pid_table,
                     notification_socket_path,
                     eventfds,
@@ -223,11 +198,15 @@ impl Unit {
         }
         Ok(())
     }
-    pub fn deactivate(&mut self, pid_table: ArcMutPidTable) -> Result<(), String> {
+    pub fn deactivate(
+        &mut self,
+        pid_table: ArcMutPidTable,
+        fd_store: ArcMutFDStore,
+    ) -> Result<(), String> {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Deactivated target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
-                sock.close_all()
+                sock.close_all(self.conf.name(), &mut *fd_store.write().unwrap())
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
@@ -275,8 +254,6 @@ impl UnitConfig {
 pub struct SocketConfig {
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
-
-    pub fd: Option<Arc<Box<dyn AsRawFd>>>,
 }
 
 impl fmt::Debug for SocketConfig {

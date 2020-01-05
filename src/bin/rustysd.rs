@@ -95,6 +95,7 @@ fn main() {
     let run_info = Arc::new(units::RuntimeInfo {
         unit_table: unit_table.clone(),
         pid_table: pid_table.clone(),
+        fd_store: Arc::new(std::sync::RwLock::new(rustysd::fd_store::FDStore::default())),
         status_table: status_table.clone(),
 
         // TODO find actual max id used
@@ -150,26 +151,32 @@ fn main() {
         notification_handler::handle_all_std_err(stderr_eventfd, unit_table_clone);
     });
 
-    let unit_table_clone = unit_table.clone();
     let run_info_clone = run_info.clone();
     let note_sock_path_clone = conf.notification_sockets_dir.clone();
     let eventfds_clone = Arc::new(eventfds.clone());
     std::thread::spawn(move || loop {
         match wait_for_socket_activation::wait_for_socket(
             sock_act_eventfd,
-            unit_table_clone.clone(),
+            run_info_clone.unit_table.clone(),
+            run_info_clone.fd_store.clone(),
         ) {
             Ok(ids) => {
                 for socket_id in ids {
-                    let unit_table_locked = unit_table_clone.read().unwrap();
+                    let unit_table_locked = run_info_clone.unit_table.read().unwrap();
                     {
+                        let socket_name = {
+                            let sock_unit = unit_table_locked.get(&socket_id).unwrap();
+                            let sock_unit_locked = sock_unit.lock().unwrap();
+                            sock_unit_locked.conf.name()
+                        };
+
                         let mut srvc_unit_id = None;
                         for unit in unit_table_locked.values() {
                             let unit_locked = unit.lock().unwrap();
                             if let crate::units::UnitSpecialized::Service(srvc) =
                                 &unit_locked.specialized
                             {
-                                if srvc.socket_ids.contains(&socket_id) {
+                                if srvc.socket_names.contains(&socket_name) {
                                     srvc_unit_id = Some(unit_locked.id);
                                     trace!(
                                         "Start service {} by socket activation",
@@ -187,7 +194,13 @@ fn main() {
                                 false,
                             ) {
                                 Ok(_) => {
-                                    // Happy
+                                    let sock_unit = unit_table_locked.get(&socket_id).unwrap();
+                                    let mut sock_unit_locked = sock_unit.lock().unwrap();
+                                    if let units::UnitSpecialized::Socket(sock) =
+                                        &mut sock_unit_locked.specialized
+                                    {
+                                        sock.activated = true;
+                                    }
                                 }
                                 Err(e) => {
                                     format!(

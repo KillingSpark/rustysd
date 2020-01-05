@@ -53,7 +53,7 @@ pub fn parse_service(
             signaled_ready: false,
 
             service_config,
-            socket_ids: Vec::new(),
+            socket_names: Vec::new(),
 
             process_group: None,
 

@@ -1,3 +1,4 @@
+use crate::fd_store::FDStore;
 use crate::services::Service;
 use crate::sockets::Socket;
 use crate::units::UnitId;
@@ -11,7 +12,7 @@ use std::collections::HashMap;
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
     name: String,
-    sockets: &HashMap<UnitId, &mut Socket>,
+    fd_store: &FDStore,
     notification_socket_path: std::path::PathBuf,
 ) -> Result<(), String> {
     // check if executable even exists
@@ -66,7 +67,7 @@ fn start_service_with_filedescriptors(
             fork_child::after_fork_child(
                 srvc,
                 &name,
-                sockets,
+                fd_store,
                 prefork_res.notify_socket_env_var.to_str().unwrap(),
                 prefork_res.stdout,
                 prefork_res.stderr,
@@ -80,7 +81,7 @@ fn start_service_with_filedescriptors(
 pub fn start_service(
     srvc: &mut Service,
     name: String,
-    sockets: &HashMap<UnitId, &mut Socket>,
+    fd_store: &FDStore,
     notification_socket_path: std::path::PathBuf,
 ) -> Result<(), String> {
     if let Some(conf) = &srvc.service_config {
@@ -102,7 +103,7 @@ pub fn start_service(
                     srvc.process_group.unwrap()
                 ));
             }
-            start_service_with_filedescriptors(srvc, name, sockets, notification_socket_path)?;
+            start_service_with_filedescriptors(srvc, name, fd_store, notification_socket_path)?;
             srvc.runtime_info.up_since = Some(std::time::Instant::now());
             Ok(())
         }

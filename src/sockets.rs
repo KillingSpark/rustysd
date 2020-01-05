@@ -7,9 +7,9 @@ use std::{
     os::unix::io::FromRawFd,
     os::unix::io::RawFd,
     os::unix::net::{UnixDatagram, UnixListener},
-    sync::Arc,
 };
 
+use crate::fd_store::FDStore;
 use crate::units::*;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -29,7 +29,7 @@ pub enum SpecializedSocketConfig {
 }
 
 impl SpecializedSocketConfig {
-    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
+    fn open(&self) -> Result<Box<dyn AsRawFd + Send + Sync>, String> {
         match self {
             SpecializedSocketConfig::UnixSocket(conf) => conf.open(),
             SpecializedSocketConfig::TcpSocket(conf) => conf.open(),
@@ -60,7 +60,7 @@ pub struct FifoConfig {
 }
 
 impl FifoConfig {
-    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
+    fn open(&self) -> Result<Box<dyn AsRawFd + Send + Sync>, String> {
         if self.path.exists() {
             std::fs::remove_file(&self.path).unwrap();
         }
@@ -75,7 +75,7 @@ impl FifoConfig {
         let fifo_fd = nix::fcntl::open(&self.path, open_flags, mode).unwrap();
         // need to make a file out of that so AsRawFd is implemented (it's not implmeneted for RawFd itself...)
         let fifo = unsafe { std::fs::File::from_raw_fd(fifo_fd) };
-        Ok(Arc::new(Box::new(fifo)))
+        Ok(Box::new(fifo))
     }
 
     fn close(&self, rawfd: RawFd) -> Result<(), String> {
@@ -127,7 +127,7 @@ impl UnixSocketConfig {
         Ok(())
     }
 
-    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
+    fn open(&self) -> Result<Box<dyn AsRawFd + Send + Sync>, String> {
         match self {
             UnixSocketConfig::Stream(path) => {
                 let spath = std::path::Path::new(&path);
@@ -151,7 +151,7 @@ impl UnixSocketConfig {
                     Ok(stream) => stream,
                 };
                 //need to stop the listener to drop which would close the filedescriptor
-                Ok(Arc::new(Box::new(stream)))
+                Ok(Box::new(stream))
             }
             UnixSocketConfig::Datagram(path) => {
                 let spath = std::path::Path::new(&path);
@@ -175,7 +175,7 @@ impl UnixSocketConfig {
                     Ok(stream) => stream,
                 };
                 //need to stop the listener to drop which would close the filedescriptor
-                Ok(Arc::new(Box::new(stream)))
+                Ok(Box::new(stream))
             }
             UnixSocketConfig::Sequential(path) => {
                 let spath = std::path::Path::new(&path);
@@ -193,10 +193,11 @@ impl UnixSocketConfig {
                 }
 
                 let path = std::path::PathBuf::from(&path);
+                trace!("opening datagram unix socket: {:?}", path);
                 match crate::platform::make_seqpacket_socket(&path) {
                     Ok(fd) => {
                         // return our own type until the std supports sequential packet unix sockets
-                        Ok(Arc::new(Box::new(UnixSeqPacket(Some(fd)))))
+                        Ok(Box::new(UnixSeqPacket(Some(fd))))
                     }
                     Err(e) => Err(e),
                 }
@@ -211,11 +212,11 @@ pub struct TcpSocketConfig {
 }
 
 impl TcpSocketConfig {
-    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
+    fn open(&self) -> Result<Box<dyn AsRawFd + Send + Sync>, String> {
         trace!("opening tcp socket: {:?}", self.addr);
         let listener = TcpListener::bind(self.addr).unwrap();
         //need to stop the listener to drop which would close the filedescriptor
-        Ok(Arc::new(Box::new(listener)))
+        Ok(Box::new(listener))
     }
     fn close(&self, rawfd: RawFd) -> Result<(), String> {
         nix::unistd::close(rawfd)
@@ -229,11 +230,11 @@ pub struct UdpSocketConfig {
 }
 
 impl UdpSocketConfig {
-    fn open(&self) -> Result<Arc<Box<dyn AsRawFd>>, String> {
+    fn open(&self) -> Result<Box<dyn AsRawFd + Send + Sync>, String> {
         trace!("opening udp socket: {:?}", self.addr);
         let listener = UdpSocket::bind(self.addr).unwrap();
         //need to stop the listener to drop which would close the filedescriptor
-        Ok(Arc::new(Box::new(listener)))
+        Ok(Box::new(listener))
     }
 
     fn close(&self, rawfd: RawFd) -> Result<(), String> {
@@ -263,7 +264,13 @@ impl Socket {
         name_list
     }
 
-    pub fn open_all(&mut self) -> std::io::Result<()> {
+    pub fn open_all(
+        &mut self,
+        name: String,
+        id: UnitId,
+        fd_store: &mut FDStore,
+    ) -> std::io::Result<()> {
+        let mut fds = Vec::new();
         for idx in 0..self.sockets.len() {
             let conf = &mut self.sockets[idx];
             let as_raw_fd = conf.specialized.open().unwrap();
@@ -275,16 +282,25 @@ impl Socket {
                 nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
             )
             .unwrap();
-            conf.fd = Some(as_raw_fd);
+            fds.push((id, self.name.clone(), as_raw_fd));
             //need to stop the listener to drop which would close the filedescriptor
         }
+        trace!(
+            "Opened all sockets: {:?}",
+            fds.iter()
+                .map(|(_, _, fd)| fd.as_raw_fd())
+                .collect::<Vec<_>>(),
+        );
+        fd_store.insert_global(name, fds);
         Ok(())
     }
 
-    pub fn close_all(&mut self) -> Result<(), String> {
-        for conf in &self.sockets {
-            if let Some(fd) = &conf.fd {
-                conf.specialized.close(fd.as_raw_fd())?;
+    pub fn close_all(&mut self, name: String, fd_store: &mut FDStore) -> Result<(), String> {
+        if let Some(fds) = fd_store.remove_global(&name) {
+            for idx in 0..fds.len() {
+                self.sockets[idx]
+                    .specialized
+                    .close(fds[idx].2.as_raw_fd())?;
             }
         }
         Ok(())

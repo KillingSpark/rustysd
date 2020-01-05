@@ -15,7 +15,9 @@ pub fn deactivate_unit(id_to_kill: UnitId, run_info: ArcRuntimeInfo) {
         let mut status_locked = status.lock().unwrap();
         *status_locked = UnitStatus::Stopping;
     }
-    unit_locked.deactivate(run_info.pid_table.clone()).unwrap();
+    unit_locked
+        .deactivate(run_info.pid_table.clone(), run_info.fd_store.clone())
+        .unwrap();
     {
         let status_table_locked = run_info.status_table.read().unwrap();
         let status = status_table_locked.get(&id_to_kill).unwrap();

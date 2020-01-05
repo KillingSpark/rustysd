@@ -194,11 +194,7 @@ fn parse_socket_section(
             }
         };
 
-        socket_configs.push(SocketConfig {
-            kind,
-            specialized,
-            fd: None,
-        });
+        socket_configs.push(SocketConfig { kind, specialized });
     }
 
     let name = match fdname {
