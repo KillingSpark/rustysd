@@ -185,15 +185,20 @@ fn main() {
                                 }
                             }
                         }
+
                         if let Some(srvc_unit_id) = srvc_unit_id {
-                            match crate::units::activate_unit(
-                                srvc_unit_id,
-                                run_info_clone.clone(),
-                                note_sock_path_clone.clone(),
-                                eventfds_clone.clone(),
-                                false,
-                            ) {
-                                Ok(_) => {
+                            if let Some(status) = run_info_clone
+                                .status_table
+                                .read()
+                                .unwrap()
+                                .get(&srvc_unit_id)
+                            {
+                                let status_locked = status.lock().unwrap();
+                                if *status_locked != units::UnitStatus::StartedWaitingForSocket {
+                                    trace!(
+                                        "Ignore socket activation. Service has status: {:?}",
+                                        *status_locked
+                                    );
                                     let sock_unit = unit_table_locked.get(&socket_id).unwrap();
                                     let mut sock_unit_locked = sock_unit.lock().unwrap();
                                     if let units::UnitSpecialized::Socket(sock) =
@@ -201,13 +206,32 @@ fn main() {
                                     {
                                         sock.activated = true;
                                     }
-                                }
-                                Err(e) => {
-                                    format!(
-                                        "Error while starting service from socket activation: {}",
-                                        e
-                                    );
-                                    break;
+                                } else {
+                                    match crate::units::activate_unit(
+                                        srvc_unit_id,
+                                        run_info_clone.clone(),
+                                        note_sock_path_clone.clone(),
+                                        eventfds_clone.clone(),
+                                        false,
+                                    ) {
+                                        Ok(_) => {
+                                            let sock_unit =
+                                                unit_table_locked.get(&socket_id).unwrap();
+                                            let mut sock_unit_locked = sock_unit.lock().unwrap();
+                                            if let units::UnitSpecialized::Socket(sock) =
+                                                &mut sock_unit_locked.specialized
+                                            {
+                                                sock.activated = true;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            format!(
+                                                "Error while starting service from socket activation: {}",
+                                                e
+                                            );
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -93,6 +93,7 @@ pub enum UnitStatus {
     NeverStarted,
     Starting,
     Started,
+    StartedWaitingForSocket,
     Stopping,
     Stopped,
     StoppedFinal,
@@ -177,7 +178,7 @@ impl Unit {
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
-    ) -> Result<(), String> {
+    ) -> Result<UnitStatus, String> {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
@@ -185,7 +186,7 @@ impl Unit {
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
-                srvc.start(
+                match srvc.start(
                     self.id,
                     &self.conf.name(),
                     fd_store,
@@ -193,10 +194,15 @@ impl Unit {
                     notification_socket_path,
                     eventfds,
                     allow_ignore,
-                )?;
+                )? {
+                    crate::services::StartResult::Started => return Ok(UnitStatus::Started),
+                    crate::services::StartResult::WaitingForSocket => {
+                        return Ok(UnitStatus::StartedWaitingForSocket)
+                    }
+                }
             }
         }
-        Ok(())
+        Ok(UnitStatus::Started)
     }
     pub fn deactivate(
         &mut self,

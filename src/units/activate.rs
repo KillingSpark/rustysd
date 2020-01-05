@@ -84,7 +84,8 @@ pub fn activate_unit(
     let all_deps_ready = unit_locked.install.after.iter().fold(true, |acc, elem| {
         let is_started = {
             let status = status_table_locked.get(elem).unwrap();
-            *status.lock().unwrap() == UnitStatus::Started
+            let status_locked = status.lock().unwrap();
+            *status_locked == UnitStatus::Started || *status_locked == UnitStatus::StartedWaitingForSocket
         };
         acc && is_started
     });
@@ -131,12 +132,12 @@ pub fn activate_unit(
             &eventfds,
             allow_ignore,
         )
-        .map(|_| {
+        .map(|new_status| {
             // Update the status while we still lock the unit
             let status_table_locked = run_info.status_table.read().unwrap();
             let status = status_table_locked.get(&unit_locked.id).unwrap();
             let mut status_locked = status.lock().unwrap();
-            *status_locked = UnitStatus::Started;
+            *status_locked = new_status;
             StartResult::Started(next_services_ids)
         })
         .map_err(|e| {

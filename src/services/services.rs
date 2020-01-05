@@ -41,6 +41,11 @@ pub struct Service {
     pub stderr_buffer: Vec<u8>,
 }
 
+pub enum StartResult {
+    Started,
+    WaitingForSocket,
+}
+
 impl Service {
     pub fn start(
         &mut self,
@@ -51,7 +56,7 @@ impl Service {
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
-    ) -> Result<(), String> {
+    ) -> Result<StartResult, String> {
         trace!("Start service {}", name);
         if !allow_ignore || self.socket_names.is_empty() {
             // TODO do the ExecStartPre
@@ -67,14 +72,15 @@ impl Service {
                 pid_table.insert(new_pid, PidEntry::Service(id));
                 crate::platform::notify_event_fds(&eventfds);
             }
+            Ok(StartResult::Started)
         } else {
             trace!(
                 "Ignore service {} start, waiting for socket activation instead",
                 name,
             );
-            crate::platform::notify_event_fds(&eventfds)
+            crate::platform::notify_event_fds(&eventfds);
+            Ok(StartResult::WaitingForSocket)
         }
-        Ok(())
     }
 
     fn stop(&mut self, id: UnitId, name: &str, pid_table: &mut PidTable) {

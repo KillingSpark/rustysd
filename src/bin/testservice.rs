@@ -207,10 +207,10 @@ fn main() {
         _ => {}
     }
     // random service failure because we write horrible services that crash constantly
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        std::process::exit(1);
-    });
+    //std::thread::spawn(move || {
+    //    std::thread::sleep(std::time::Duration::from_secs(5));
+    //    std::process::exit(1);
+    //});
 
     let mut counter = 0;
     loop {
