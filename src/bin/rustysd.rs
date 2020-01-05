@@ -61,7 +61,10 @@ fn main() {
 
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let mut unit_table = units::load_all_units(&conf.unit_dirs).unwrap();
+    let mut first_id = 0;
+    let mut unit_table = units::load_all_units(&conf.unit_dirs, &mut first_id).unwrap();
+    first_id = first_id + 1;
+    
     units::prune_units(&conf.target_unit, &mut unit_table).unwrap();
     units::sanity_check_dependencies(&unit_table).unwrap();
     trace!("Unit dependencies passed sanity checks");
@@ -98,8 +101,7 @@ fn main() {
         fd_store: Arc::new(std::sync::RwLock::new(rustysd::fd_store::FDStore::default())),
         status_table: status_table.clone(),
 
-        // TODO find actual max id used
-        last_id: Arc::new(Mutex::new(300)),
+        last_id: Arc::new(Mutex::new(first_id)),
         config: conf.clone(),
     });
 
