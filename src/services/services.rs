@@ -98,7 +98,7 @@ impl Service {
         }
     }
 
-    fn stop(&mut self, id: UnitId, name: &str, pid_table: &mut PidTable) {
+    fn stop(&mut self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         self.run_stop_cmd(id, name, pid_table);
 
         if let Some(proc_group) = self.process_group {
@@ -113,11 +113,11 @@ impl Service {
         self.process_group = None;
     }
 
-    pub fn kill(&mut self, id: UnitId, name: &str, pid_table: &mut PidTable) {
+    pub fn kill(&mut self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         self.stop(id, name, pid_table);
     }
 
-    pub fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: &mut PidTable) {
+    pub fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         let split: Vec<&str> = match &self.service_config {
             Some(conf) => {
                 if conf.stop.is_empty() {
@@ -136,12 +136,72 @@ impl Service {
 
         match cmd.spawn() {
             Ok(mut child) => {
-                pid_table.insert(
+                pid_table.lock().unwrap().insert(
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     PidEntry::Stop(id),
                 );
                 child.wait().unwrap();
                 trace!("Stopped Service: {} with pid: {:?}", name, self.pid);
+            }
+            Err(e) => panic!(e.description().to_owned()),
+        }
+    }
+
+    pub fn run_prestart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+        let split: Vec<&str> = match &self.service_config {
+            Some(conf) => {
+                if conf.stop.is_empty() {
+                    return;
+                }
+                conf.stop.split(' ').collect()
+            }
+            None => return,
+        };
+
+        let mut cmd = Command::new(split[0]);
+        for part in &split[1..] {
+            cmd.arg(part);
+        }
+        cmd.stdout(Stdio::null());
+
+        match cmd.spawn() {
+            Ok(mut child) => {
+                pid_table.lock().unwrap().insert(
+                    nix::unistd::Pid::from_raw(child.id() as i32),
+                    PidEntry::Stop(id),
+                );
+                child.wait().unwrap();
+                trace!("Ran prestart for service: {} with pid: {:?}", name, child.id());
+            }
+            Err(e) => panic!(e.description().to_owned()),
+        }
+    }
+    
+    pub fn run_posstart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+        let split: Vec<&str> = match &self.service_config {
+            Some(conf) => {
+                if conf.stop.is_empty() {
+                    return;
+                }
+                conf.stop.split(' ').collect()
+            }
+            None => return,
+        };
+        
+        let mut cmd = Command::new(split[0]);
+        for part in &split[1..] {
+            cmd.arg(part);
+        }
+        cmd.stdout(Stdio::null());
+        
+        match cmd.spawn() {
+            Ok(mut child) => {
+                pid_table.lock().unwrap().insert(
+                    nix::unistd::Pid::from_raw(child.id() as i32),
+                    PidEntry::Stop(id),
+                );
+                child.wait().unwrap();
+                trace!("Ran prestart for service: {} with pid: {:?}", name, child.id());
             }
             Err(e) => panic!(e.description().to_owned()),
         }

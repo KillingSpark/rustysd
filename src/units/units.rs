@@ -218,7 +218,7 @@ impl Unit {
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
-                srvc.kill(self.id, &self.conf.name(), &mut *pid_table.lock().unwrap());
+                srvc.kill(self.id, &self.conf.name(), pid_table);
             }
         }
         Ok(())
