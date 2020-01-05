@@ -108,7 +108,10 @@ impl UnixSeqPacket {
     fn close(&mut self) {
         if let Some(fd) = self.0 {
             if let Err(e) = nix::unistd::close(fd) {
-                error!("Error while closing unix sequential packet socket (fd: {}): {}", fd, e);
+                error!(
+                    "Error while closing unix sequential packet socket (fd: {}): {}",
+                    fd, e
+                );
             }
         }
         self.0 = None;
