@@ -1,17 +1,13 @@
 use super::start_service::*;
-use std::collections::HashMap;
+use crate::platform::EventFd;
+use crate::signal_handler::ChildTermination;
+use crate::units::*;
 use std::error::Error;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
-
-use crate::fd_store::FDStore;
-use crate::platform::EventFd;
-use crate::signal_handler::ChildTermination;
-use crate::sockets::Socket;
-use crate::units::*;
 
 #[derive(Debug)]
 pub struct ServiceRuntimeInfo {

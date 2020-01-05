@@ -2,7 +2,6 @@
 
 use super::units::*;
 use crate::platform::EventFd;
-use std::collections::HashMap;
 use std::sync::Arc;
 use threadpool::ThreadPool;
 

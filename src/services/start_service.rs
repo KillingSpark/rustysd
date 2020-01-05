@@ -1,13 +1,8 @@
-use crate::fd_store::FDStore;
-use crate::services::Service;
-use crate::sockets::Socket;
-use crate::units::UnitId;
-
 use super::fork_child;
 use super::fork_parent;
 use super::pre_fork;
-
-use std::collections::HashMap;
+use crate::fd_store::FDStore;
+use crate::services::Service;
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,

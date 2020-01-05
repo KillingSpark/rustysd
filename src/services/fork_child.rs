@@ -3,7 +3,7 @@ use crate::platform::setenv;
 use crate::services::Service;
 use std::os::unix::io::RawFd;
 
-fn close_all_unneeded_fds(srvc: &mut Service, fd_store: &FDStore) {
+fn close_all_unneeded_fds(_srvc: &mut Service, _fd_store: &FDStore) {
     // This is not really necessary since we mark all fds with FD_CLOEXEC but just to be safe...
     // TODO either shift to fd store or delete
     //for (id, sock) in srvc.service_config.unwrap().sockets {
