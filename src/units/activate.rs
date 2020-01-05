@@ -75,7 +75,10 @@ pub fn activate_unit(
             }
         }
     };
+    trace!("Lock unit: {}", id_to_start);
     let mut unit_locked = unit.lock().unwrap();
+    trace!("Locked unit: {}", id_to_start);
+    let name = unit_locked.conf.name();
 
     let status_table_locked = run_info.status_table.read().unwrap();
 
@@ -99,9 +102,11 @@ pub fn activate_unit(
     }
 
     // Check if the unit is currently starting. Update the status to starting if not
-    let status = status_table_locked.get(&id_to_start).unwrap();
     {
+        let status = status_table_locked.get(&id_to_start).unwrap();
+        trace!("Lock status for: {}", name);
         let mut status_locked = status.lock().unwrap();
+        trace!("Locked status for: {}", name);
 
         // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
         // TODO make this relation less weird. Maybe add a separate code path for socket activation
@@ -120,8 +125,6 @@ pub fn activate_unit(
             *status_locked = UnitStatus::Starting;
         }
     }
-
-    let name = unit_locked.conf.name();
     let next_services_ids = unit_locked.install.before.clone();
 
     unit_locked

@@ -88,7 +88,7 @@ pub enum PidEntry {
     Stop(UnitId),
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum UnitStatus {
     NeverStarted,
     Starting,

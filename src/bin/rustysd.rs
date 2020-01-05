@@ -193,11 +193,15 @@ fn main() {
                                 .unwrap()
                                 .get(&srvc_unit_id)
                             {
-                                let status_locked = status.lock().unwrap();
-                                if *status_locked != units::UnitStatus::StartedWaitingForSocket {
+                                let srvc_status = {
+                                    let status_locked = status.lock().unwrap();
+                                    *status_locked
+                                };
+                                
+                                if srvc_status != units::UnitStatus::StartedWaitingForSocket {
                                     trace!(
                                         "Ignore socket activation. Service has status: {:?}",
-                                        *status_locked
+                                        srvc_status
                                     );
                                     let sock_unit = unit_table_locked.get(&socket_id).unwrap();
                                     let mut sock_unit_locked = sock_unit.lock().unwrap();
