@@ -311,6 +311,8 @@ pub struct ServiceConfig {
     pub notifyaccess: NotifyKind,
     pub exec: String,
     pub stop: String,
+    pub startpre: String,
+    pub startpost: String,
     pub srcv_type: ServiceType,
 
     pub dbus_name: Option<String>,

@@ -72,6 +72,7 @@ impl Service {
         if !allow_ignore || self.socket_names.is_empty() {
             trace!("Start service {}", name);
             super::prepare_service::prepare_service(self, name, &notification_socket_path)?;
+            self.run_prestart(id, name, pid_table.clone());
             {
                 let mut pid_table_locked = pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
@@ -87,6 +88,7 @@ impl Service {
                 let sock = sock.clone();
                 super::fork_parent::wait_for_service(self, name, &*sock.lock().unwrap())?;
             }
+            self.run_poststart(id, name, pid_table.clone());
             Ok(StartResult::Started)
         } else {
             trace!(
@@ -117,7 +119,7 @@ impl Service {
         self.stop(id, name, pid_table);
     }
 
-    pub fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+    fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         let split: Vec<&str> = match &self.service_config {
             Some(conf) => {
                 if conf.stop.is_empty() {
@@ -134,6 +136,9 @@ impl Service {
         }
         cmd.stdout(Stdio::null());
 
+        trace!("Run stop process for service: {} with pid", name);
+        // TODO alter this to use the stdout/err pipes after the fork
+        // TODO check return value
         match cmd.spawn() {
             Ok(mut child) => {
                 pid_table.lock().unwrap().insert(
@@ -141,29 +146,32 @@ impl Service {
                     PidEntry::Stop(id),
                 );
                 child.wait().unwrap();
-                trace!("Stopped Service: {} with pid: {:?}", name, self.pid);
+                trace!("Ran stop process for service: {} with pid: {:?}", name, child.id());
             }
             Err(e) => panic!(e.description().to_owned()),
         }
     }
-
-    pub fn run_prestart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+    
+    fn run_prestart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         let split: Vec<&str> = match &self.service_config {
             Some(conf) => {
-                if conf.stop.is_empty() {
+                if conf.startpre.is_empty() {
                     return;
                 }
-                conf.stop.split(' ').collect()
+                conf.startpre.split(' ').collect()
             }
             None => return,
         };
-
+        
         let mut cmd = Command::new(split[0]);
         for part in &split[1..] {
             cmd.arg(part);
         }
         cmd.stdout(Stdio::null());
-
+        
+        trace!("Start running prestart for service: {}", name);
+        // TODO alter this to use the stdout/err pipes after the fork
+        // TODO check return value
         match cmd.spawn() {
             Ok(mut child) => {
                 pid_table.lock().unwrap().insert(
@@ -177,13 +185,13 @@ impl Service {
         }
     }
     
-    pub fn run_posstart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+    fn run_poststart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         let split: Vec<&str> = match &self.service_config {
             Some(conf) => {
-                if conf.stop.is_empty() {
+                if conf.startpost.is_empty() {
                     return;
                 }
-                conf.stop.split(' ').collect()
+                conf.startpost.split(' ').collect()
             }
             None => return,
         };
@@ -194,6 +202,8 @@ impl Service {
         }
         cmd.stdout(Stdio::null());
         
+        trace!("Start running proststart for service: {}", name);
+        // TODO alter this to use the stdout/err pipes after the fork
         match cmd.spawn() {
             Ok(mut child) => {
                 pid_table.lock().unwrap().insert(
@@ -201,7 +211,7 @@ impl Service {
                     PidEntry::Stop(id),
                 );
                 child.wait().unwrap();
-                trace!("Ran prestart for service: {} with pid: {:?}", name, child.id());
+                trace!("Ran proststart for service: {} with pid: {:?}", name, child.id());
             }
             Err(e) => panic!(e.description().to_owned()),
         }

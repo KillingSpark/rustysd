@@ -4,6 +4,9 @@ Sockets= test_second.socket
 NotifyAccess= all
 Type= notify
 Restart= always
+ExecStartPre= /bin/true
+ExecStartPost= /bin/true
+Stop= /bin/true
 
 [Unit]
 Before= test2.service

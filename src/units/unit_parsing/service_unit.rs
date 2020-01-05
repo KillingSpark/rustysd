@@ -78,6 +78,8 @@ pub fn parse_service(
 fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingError> {
     let exec = section.remove("EXEC");
     let stop = section.remove("STOP");
+    let startpre = section.remove("EXECSTARTPRE");
+    let startpost = section.remove("EXECSTARTPOST");
     let restart = section.remove("RESTART");
     let sockets = section.remove("SOCKETS");
     let notify_access = section.remove("NOTIFYACCESS");
@@ -152,6 +154,26 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         }
         None => "".to_string(),
     };
+    let startpre = match startpre {
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                vec.remove(0).1
+            } else {
+                panic!("ExecStartPre had to many entries: {:?}", vec);
+            }
+        }
+        None => "".to_string(),
+    };
+    let startpost = match startpost {
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                vec.remove(0).1
+            } else {
+                panic!("ExecStartPre had to many entries: {:?}", vec);
+            }
+        }
+        None => "".to_string(),
+    };
 
     let restart = match restart {
         Some(vec) => {
@@ -204,6 +226,8 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         dbus_name,
         exec,
         stop,
+        startpre,
+        startpost,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),
     })
 }
