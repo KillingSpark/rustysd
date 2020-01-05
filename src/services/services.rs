@@ -64,7 +64,7 @@ impl Service {
         }
         if self.process_group.is_some() {
             return Err(format!(
-                "Service {} has already a pid {:?}",
+                "Service {} has already a pgid {:?}",
                 name,
                 self.process_group.unwrap()
             ));
