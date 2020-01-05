@@ -135,11 +135,12 @@ impl Service {
         cmd.stdout(Stdio::null());
 
         match cmd.spawn() {
-            Ok(child) => {
+            Ok(mut child) => {
                 pid_table.insert(
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     PidEntry::Stop(id),
                 );
+                child.wait().unwrap();
                 trace!("Stopped Service: {} with pid: {:?}", name, self.pid);
             }
             Err(e) => panic!(e.description().to_owned()),
