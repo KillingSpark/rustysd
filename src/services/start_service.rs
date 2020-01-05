@@ -36,10 +36,12 @@ fn start_service_with_filedescriptors(
     }
 
     // 1. fork
-    // 2. in fork use dup2 to map all relevant file desrciptors to 3..x
-    // 3. in fork mark all other file descriptors with FD_CLOEXEC
-    // 4. set relevant env varibales $LISTEN_FDS $LISTEN_PID
-    // 4. execve the cmd with the args
+    // 1. in fork use dup2 to map all relevant file desrciptors to 3..x
+    // 1. in fork mark all other file descriptors with FD_CLOEXEC
+    // 1. in fork set relevant env varibales $LISTEN_FDS $LISTEN_PID
+    // 1. in fork execve the cmd with the args
+    // 1. in parent set pid and return. Waiting will be done afterwards if necessary
+
 
     // make sure we have the lock that the child will need
     match nix::unistd::fork() {
@@ -86,20 +88,6 @@ pub fn start_service(
             warn!("Inetd style accepting is not supported");
             Err("Inetd style accepting is not supported".into())
         } else {
-            if srvc.pid.is_some() {
-                return Err(format!(
-                    "Service {} has already a pid {:?}",
-                    name,
-                    srvc.pid.unwrap()
-                ));
-            }
-            if srvc.process_group.is_some() {
-                return Err(format!(
-                    "Service {} has already a pid {:?}",
-                    name,
-                    srvc.process_group.unwrap()
-                ));
-            }
             start_service_with_filedescriptors(srvc, name, fd_store)?;
             srvc.runtime_info.up_since = Some(std::time::Instant::now());
             Ok(())

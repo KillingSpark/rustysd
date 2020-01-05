@@ -55,19 +55,29 @@ impl Service {
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<StartResult, String> {
-        trace!("Start service {}", name);
+        if self.pid.is_some() {
+            return Err(format!(
+                "Service {} has already a pid {:?}",
+                name,
+                self.pid.unwrap()
+            ));
+        }
+        if self.process_group.is_some() {
+            return Err(format!(
+                "Service {} has already a pid {:?}",
+                name,
+                self.process_group.unwrap()
+            ));
+        }
         if !allow_ignore || self.socket_names.is_empty() {
+            trace!("Start service {}", name);
             super::prepare_service::prepare_service(self, name, &notification_socket_path)?;
             {
                 let mut pid_table_locked = pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
                 // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
-                start_service(
-                    self,
-                    name.clone(),
-                    &*fd_store.read().unwrap(),
-                )?;
+                start_service(self, name.clone(), &*fd_store.read().unwrap())?;
                 if let Some(new_pid) = self.pid {
                     pid_table_locked.insert(new_pid, PidEntry::Service(id));
                     crate::platform::notify_event_fds(&eventfds);
