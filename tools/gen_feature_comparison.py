@@ -48,7 +48,7 @@ SUPPORTED_FEATURES = {
     "ListenSequentialPacket": {"icon": ICON_TICK, "text": "Opening sequential packet sockets is supported."},
     "ListenFIFO": {"icon": ICON_TICK, "text": "Opening FIFOs is supported. Filemode setting is not supported as of yet though."},
     "Accept": {"icon": ICON_QMARK, "text": "Only the setting 'no' is supported. Inted-style activation is not yet supported."},
-    "ExecStart": {"icon": ICON_TICK, "text": "Exec'ing the command gievn is supported"},
+    "ExecStart": {"icon": ICON_TICK, "text": "Exec'ing the command given is supported"},
     "ExecStartPre": {"icon": ICON_QMARK, "text": "Only one command is accepted not multiple. Also the return value is currently unchecked."},
     "ExecStartPost": {"icon": ICON_QMARK, "text": "Only one command is accepted not multiple. Also the return value is currently unchecked."},
     "ExecStop": {"icon": ICON_QMARK, "text": "Only one command is accepted not multiple. Also the return value is currently unchecked."},

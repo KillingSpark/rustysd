@@ -1396,7 +1396,7 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStart=">ExecStart=</a></td>
   <td>✔️</td>
   <td><a href="https://github.com/search?q=%27ExecStart%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Exec'ing the command gievn is supported</td>
+  <td>Exec'ing the command given is supported</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStartPre=">ExecStartPre=</a></td>
