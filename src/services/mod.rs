@@ -5,7 +5,7 @@
 //! 4. signaling processgroup on kill
 mod fork_child;
 mod fork_parent;
-mod pre_fork;
+mod prepare_service;
 mod pre_fork_os_specific;
 mod services;
 mod start_service;

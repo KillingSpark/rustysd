@@ -30,6 +30,8 @@ pub struct Service {
     pub signaled_ready: bool,
 
     pub notifications: Option<Arc<Mutex<UnixDatagram>>>,
+    pub notifications_path: Option<std::path::PathBuf>,
+
     pub stdout_dup: Option<(RawFd, RawFd)>,
     pub stderr_dup: Option<(RawFd, RawFd)>,
     pub notifications_buffer: String,
@@ -55,16 +57,16 @@ impl Service {
     ) -> Result<StartResult, String> {
         trace!("Start service {}", name);
         if !allow_ignore || self.socket_names.is_empty() {
+            super::prepare_service::prepare_service(self, name, &notification_socket_path)?;
             {
                 let mut pid_table_locked = pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
-                // Doing it under the lock of the pid_table prevents races between processes exiting very 
+                // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
                 start_service(
                     self,
                     name.clone(),
                     &*fd_store.read().unwrap(),
-                    notification_socket_path,
                 )?;
                 if let Some(new_pid) = self.pid {
                     pid_table_locked.insert(new_pid, PidEntry::Service(id));
@@ -73,11 +75,7 @@ impl Service {
             }
             if let Some(sock) = &self.notifications {
                 let sock = sock.clone();
-                super::fork_parent::wait_for_service(
-                    self,
-                    name,
-                    & *sock.lock().unwrap(),
-                )?;
+                super::fork_parent::wait_for_service(self, name, &*sock.lock().unwrap())?;
             }
             Ok(StartResult::Started)
         } else {

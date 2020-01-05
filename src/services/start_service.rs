@@ -1,5 +1,4 @@
 use super::fork_child;
-use super::pre_fork;
 use crate::fd_store::FDStore;
 use crate::services::Service;
 
@@ -7,7 +6,6 @@ fn start_service_with_filedescriptors(
     srvc: &mut Service,
     name: &str,
     fd_store: &FDStore,
-    notification_socket_path: std::path::PathBuf,
 ) -> Result<(), String> {
     // check if executable even exists
     let split: Vec<&str> = match &srvc.service_config {
@@ -43,24 +41,35 @@ fn start_service_with_filedescriptors(
     // 4. set relevant env varibales $LISTEN_FDS $LISTEN_PID
     // 4. execve the cmd with the args
 
-    let prefork_res = pre_fork::pre_fork(srvc, &name, &notification_socket_path)?;
-
     // make sure we have the lock that the child will need
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             srvc.pid = Some(child);
             srvc.process_group = Some(nix::unistd::Pid::from_raw(-child.as_raw()));
-            srvc.notifications = Some(prefork_res.notification_socket.clone());
         }
         Ok(nix::unistd::ForkResult::Child) => {
-            fork_child::after_fork_child(
-                srvc,
-                &name,
-                fd_store,
-                prefork_res.notify_socket_env_var.to_str().unwrap(),
-                prefork_res.stdout,
-                prefork_res.stderr,
-            );
+            let notifications_path = {
+                if let Some(p) = &srvc.notifications_path {
+                    p.to_str().unwrap().to_owned()
+                } else {
+                    unreachable!();
+                }
+            };
+            let stdout = {
+                if let Some(rwpair) = &srvc.stdout_dup {
+                    rwpair.1
+                } else {
+                    unreachable!();
+                }
+            };
+            let stderr = {
+                if let Some(rwpair) = &srvc.stderr_dup {
+                    rwpair.1
+                } else {
+                    unreachable!();
+                }
+            };
+            fork_child::after_fork_child(srvc, &name, fd_store, &notifications_path, stdout, stderr);
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),
     }
@@ -71,7 +80,6 @@ pub fn start_service(
     srvc: &mut Service,
     name: &str,
     fd_store: &FDStore,
-    notification_socket_path: std::path::PathBuf,
 ) -> Result<(), String> {
     if let Some(conf) = &srvc.service_config {
         if conf.accept {
@@ -92,7 +100,7 @@ pub fn start_service(
                     srvc.process_group.unwrap()
                 ));
             }
-            start_service_with_filedescriptors(srvc, name, fd_store, notification_socket_path)?;
+            start_service_with_filedescriptors(srvc, name, fd_store)?;
             srvc.runtime_info.up_since = Some(std::time::Instant::now());
             Ok(())
         }

@@ -65,6 +65,7 @@ pub fn parse_service(
             },
 
             notifications: None,
+            notifications_path: None,
             stdout_dup: None,
             stderr_dup: None,
             notifications_buffer: String::new(),
