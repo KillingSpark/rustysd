@@ -1394,21 +1394,21 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStart=">ExecStart=</a></td>
-  <td>❌</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27ExecStart%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Exec'ing the command gievn is supported</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStartPre=">ExecStartPre=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPre%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Only one command is accepted not multiple. Also the return value is currently unchecked.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStartPost=">ExecStartPost=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPost%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Only one command is accepted not multiple. Also the return value is currently unchecked.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecCondition=">ExecCondition=</a></td>
@@ -1424,9 +1424,9 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStop=">ExecStop=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStop%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Only one command is accepted not multiple. Also the return value is currently unchecked.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStopPost=">ExecStopPost=</a></td>
@@ -1831,15 +1831,15 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#ExecStartPre=">ExecStartPre=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPre%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Only one command is accepted not multiple. Also the return value is currently unchecked.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#ExecStartPost=">ExecStartPost=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPost%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Only one command is accepted not multiple. Also the return value is currently unchecked.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#ExecStopPre=">ExecStopPre=</a></td>
