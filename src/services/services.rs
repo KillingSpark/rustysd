@@ -46,7 +46,7 @@ impl Service {
     pub fn start(
         &mut self,
         id: UnitId,
-        name: &String,
+        name: &str,
         fd_store: ArcMutFDStore,
         pid_table: ArcMutPidTable,
         notification_socket_path: std::path::PathBuf,
@@ -55,18 +55,29 @@ impl Service {
     ) -> Result<StartResult, String> {
         trace!("Start service {}", name);
         if !allow_ignore || self.socket_names.is_empty() {
-            // TODO do the ExecStartPre
-            let mut pid_table = pid_table.lock().unwrap();
-            start_service(
-                self,
-                name.clone(),
-                &*fd_store.read().unwrap(),
-                notification_socket_path,
-            )?;
-            // TODO do the ExecStartPost
-            if let Some(new_pid) = self.pid {
-                pid_table.insert(new_pid, PidEntry::Service(id));
-                crate::platform::notify_event_fds(&eventfds);
+            {
+                let mut pid_table_locked = pid_table.lock().unwrap();
+                // This mainly just forks the process. The waiting (if necessary) is done below
+                // Doing it under the lock of the pid_table prevents races between processes exiting very 
+                // fast and inserting the new pid into the pid table
+                start_service(
+                    self,
+                    name.clone(),
+                    &*fd_store.read().unwrap(),
+                    notification_socket_path,
+                )?;
+                if let Some(new_pid) = self.pid {
+                    pid_table_locked.insert(new_pid, PidEntry::Service(id));
+                    crate::platform::notify_event_fds(&eventfds);
+                }
+            }
+            if let Some(sock) = &self.notifications {
+                let sock = sock.clone();
+                super::fork_parent::wait_for_service(
+                    self,
+                    name,
+                    & *sock.lock().unwrap(),
+                )?;
             }
             Ok(StartResult::Started)
         } else {
@@ -151,6 +162,38 @@ pub fn service_exit_handler(
                 PidEntry::Stop(id) => {
                     trace!(
                         "Stop process for service: {} exited with: {:?}",
+                        unit_table_locked
+                            .get(&id)
+                            .unwrap()
+                            .lock()
+                            .unwrap()
+                            .conf
+                            .name(),
+                        code
+                    );
+                    let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
+                    pid_table_locked.remove(&pid);
+                    return Ok(());
+                }
+                PidEntry::PreStart(id) => {
+                    trace!(
+                        "PreStart process for service: {} exited with: {:?}",
+                        unit_table_locked
+                            .get(&id)
+                            .unwrap()
+                            .lock()
+                            .unwrap()
+                            .conf
+                            .name(),
+                        code
+                    );
+                    let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
+                    pid_table_locked.remove(&pid);
+                    return Ok(());
+                }
+                PidEntry::PostStart(id) => {
+                    trace!(
+                        "PostStart process for service: {} exited with: {:?}",
                         unit_table_locked
                             .get(&id)
                             .unwrap()

@@ -2,16 +2,11 @@ use crate::services::Service;
 use crate::units::*;
 use std::os::unix::net::UnixDatagram;
 
-pub fn after_fork_parent(
+pub fn wait_for_service(
     srvc: &mut Service,
-    name: String,
-    new_pid: nix::unistd::Pid,
-    notify_socket_env_var: &std::path::Path,
+    name: &str,
     stream: &UnixDatagram,
-) {
-    srvc.pid = Some(new_pid);
-    srvc.process_group = Some(nix::unistd::Pid::from_raw(-new_pid.as_raw()));
-
+) -> Result<(), String> {
     trace!(
         "[FORK_PARENT] Service: {} forked with pid: {}",
         name,
@@ -22,8 +17,8 @@ pub fn after_fork_parent(
         match conf.srcv_type {
             ServiceType::Notify => {
                 trace!(
-                    "[FORK_PARENT] Waiting for a notification on: {:?}",
-                    &notify_socket_env_var
+                    "[FORK_PARENT] Waiting for a notification for service {}",
+                    name
                 );
 
                 let start_time = std::time::Instant::now();
@@ -98,4 +93,5 @@ pub fn after_fork_parent(
             }
         }
     }
+    Ok(())
 }

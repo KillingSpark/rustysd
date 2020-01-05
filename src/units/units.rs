@@ -86,6 +86,8 @@ pub fn lock_all(
 pub enum PidEntry {
     Service(UnitId),
     Stop(UnitId),
+    PreStart(UnitId),
+    PostStart(UnitId),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]

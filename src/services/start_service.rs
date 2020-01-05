@@ -1,12 +1,11 @@
 use super::fork_child;
-use super::fork_parent;
 use super::pre_fork;
 use crate::fd_store::FDStore;
 use crate::services::Service;
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
-    name: String,
+    name: &str,
     fd_store: &FDStore,
     notification_socket_path: std::path::PathBuf,
 ) -> Result<(), String> {
@@ -47,16 +46,11 @@ fn start_service_with_filedescriptors(
     let prefork_res = pre_fork::pre_fork(srvc, &name, &notification_socket_path)?;
 
     // make sure we have the lock that the child will need
-    let stream_locked = &*prefork_res.notification_socket.lock().unwrap();
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
-            fork_parent::after_fork_parent(
-                srvc,
-                name,
-                child,
-                std::path::Path::new(prefork_res.notify_socket_env_var.to_str().unwrap()),
-                stream_locked,
-            );
+            srvc.pid = Some(child);
+            srvc.process_group = Some(nix::unistd::Pid::from_raw(-child.as_raw()));
+            srvc.notifications = Some(prefork_res.notification_socket.clone());
         }
         Ok(nix::unistd::ForkResult::Child) => {
             fork_child::after_fork_child(
@@ -75,7 +69,7 @@ fn start_service_with_filedescriptors(
 
 pub fn start_service(
     srvc: &mut Service,
-    name: String,
+    name: &str,
     fd_store: &FDStore,
     notification_socket_path: std::path::PathBuf,
 ) -> Result<(), String> {
