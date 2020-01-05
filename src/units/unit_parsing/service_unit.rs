@@ -76,8 +76,8 @@ pub fn parse_service(
 }
 
 fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingError> {
-    let exec = section.remove("EXEC");
-    let stop = section.remove("STOP");
+    let exec = section.remove("EXECSTART");
+    let stop = section.remove("EXECSTOP");
     let startpre = section.remove("EXECSTARTPRE");
     let startpost = section.remove("EXECSTARTPOST");
     let restart = section.remove("RESTART");

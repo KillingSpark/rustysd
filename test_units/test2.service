@@ -1,5 +1,5 @@
 [Service]
-Exec= ./target/debug/testserviceclient
+ExecStart= ./target/debug/testserviceclient
 NotifyAccess= all
 Type= simple
 Restart= always

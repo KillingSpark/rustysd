@@ -1,5 +1,5 @@
 [Service]
-Exec= ./test_c_service/test_service  arg1 arg2
+ExecStart= ./test_c_service/test_service  arg1 arg2
 Sockets= cservice.socket
 NotifyAccess= all
 Type= notify
