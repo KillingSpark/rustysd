@@ -87,6 +87,8 @@ impl Service {
                 Ok(_) => trace!("Success killing process group for service {}", name,),
                 Err(e) => error!("Error killing process group for service {}: {}", name, e,),
             }
+        }else{
+            trace!("Tried to kill service that didn't have a process-group. This might have resulted in orphan processes.");
         }
         self.pid = None;
         self.process_group = None;

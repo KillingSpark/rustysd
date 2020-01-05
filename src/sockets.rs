@@ -87,7 +87,7 @@ impl FifoConfig {
 }
 
 #[derive(Debug)]
-struct UnixSeqPacket(Option<i32>);
+struct UnixSeqPacket(Option<i32>, std::path::PathBuf);
 
 impl AsRawFd for UnixSeqPacket {
     fn as_raw_fd(&self) -> i32 {
@@ -97,7 +97,10 @@ impl AsRawFd for UnixSeqPacket {
 
 impl Drop for UnixSeqPacket {
     fn drop(&mut self) {
-        self.close();
+        if self.1.exists() {
+            self.close();
+            std::fs::remove_file(&self.1).unwrap();
+        }
     }
 }
 
@@ -105,7 +108,7 @@ impl UnixSeqPacket {
     fn close(&mut self) {
         if let Some(fd) = self.0 {
             if let Err(e) = nix::unistd::close(fd) {
-                error!("Error while closing unix sequential packet socket: {}", e);
+                error!("Error while closing unix sequential packet socket (fd: {}): {}", fd, e);
             }
         }
         self.0 = None;
@@ -197,7 +200,7 @@ impl UnixSocketConfig {
                 match crate::platform::make_seqpacket_socket(&path) {
                     Ok(fd) => {
                         // return our own type until the std supports sequential packet unix sockets
-                        Ok(Box::new(UnixSeqPacket(Some(fd))))
+                        Ok(Box::new(UnixSeqPacket(Some(fd), path.clone())))
                     }
                     Err(e) => Err(e),
                 }
