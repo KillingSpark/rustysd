@@ -9,7 +9,9 @@ fn test_service_parsing() {
     let install_required_by = "install_req_by";
     let install_wanted_by = "install_wanted_by";
 
-    let service_exec = "/path/to/startbin arg1 arg2 arg3";
+    let service_execstart = "/path/to/startbin arg1 arg2 arg3";
+    let service_execpre = "/path/to/startprebin arg1 arg2 arg3";
+    let service_execpost = "/path/to/startpostbin arg1 arg2 arg3";
     let service_stop = "/path/to/stopbin arg1 arg2 arg3";
     let service_sockets = "socket_name1,socket_name2";
 
@@ -28,6 +30,8 @@ fn test_service_parsing() {
     
     [Service]
     ExecStart = {}
+    ExecStartPre = {}
+    ExecStartPost = {}
     ExecStop = {}
     Sockets = {}
 
@@ -39,7 +43,9 @@ fn test_service_parsing() {
         unit_after2,
         install_required_by,
         install_wanted_by,
-        service_exec,
+        service_execstart,
+        service_execpre,
+        service_execpost,
         service_stop,
         service_sockets,
     );
@@ -76,7 +82,9 @@ fn test_service_parsing() {
     }
     if let crate::units::UnitSpecialized::Service(srvc) = service.specialized {
         if let Some(conf) = srvc.service_config {
-            assert_eq!(conf.exec, service_exec);
+            assert_eq!(conf.exec, service_execstart);
+            assert_eq!(conf.startpre, service_execpre);
+            assert_eq!(conf.startpost, service_execpost);
             assert_eq!(conf.stop, service_stop);
             assert_eq!(
                 conf.sockets,
