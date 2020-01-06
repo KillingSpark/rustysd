@@ -9,4 +9,6 @@ mod prepare_service;
 mod pre_fork_os_specific;
 mod services;
 mod start_service;
+mod service_exit_handler;
 pub use services::*;
+pub use service_exit_handler::*;
