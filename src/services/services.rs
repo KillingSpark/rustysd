@@ -145,13 +145,38 @@ impl Service {
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     PidEntry::Stop(id),
                 );
-                child.wait().unwrap();
-                trace!("Ran stop process for service: {} with pid: {:?}", name, child.id());
+                trace!("Wait for stop process for service {}", name);
+                match wait_for_child(&mut child, None) {
+                    WaitResult::Success(Err(e)) => {
+                        // This might also happen because it was collected by the signal_handler.
+                        // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
+                        // that has not been ported to rust
+                        error!(
+                            "Error while waiting on stop process for service {}: {}",
+                            name, e
+                        );
+                        // TODO return error or something
+                    }
+                    WaitResult::Success(Ok(_)) => {
+                        // Happy
+                    }
+                    WaitResult::TimedOut => {
+                        // TODO handle timeout
+                    }
+                }
+                trace!(
+                    "Ran stop process for service: {} with pid: {:?}",
+                    name,
+                    child.id()
+                );
+                pid_table
+                    .lock()
+                    .unwrap()
+                    .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
             }
             Err(e) => panic!(e.description().to_owned()),
         }
     }
-    
     fn run_prestart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         let split: Vec<&str> = match &self.service_config {
             Some(conf) => {
@@ -162,13 +187,11 @@ impl Service {
             }
             None => return,
         };
-        
         let mut cmd = Command::new(split[0]);
         for part in &split[1..] {
             cmd.arg(part);
         }
         cmd.stdout(Stdio::null());
-        
         trace!("Start running prestart for service: {}", name);
         // TODO alter this to use the stdout/err pipes after the fork
         // TODO check return value
@@ -178,13 +201,38 @@ impl Service {
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     PidEntry::Stop(id),
                 );
-                child.wait().unwrap();
-                trace!("Ran prestart for service: {} with pid: {:?}", name, child.id());
+                trace!("Wait for prestart for service {}", name);
+                match wait_for_child(&mut child, None) {
+                    WaitResult::Success(Err(e)) => {
+                        // This might also happen because it was collected by the signal_handler.
+                        // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
+                        // that has not been ported to rust
+                        error!(
+                            "Error while waiting on prestart for service {}: {}",
+                            name, e
+                        );
+                        // TODO return error or something
+                    }
+                    WaitResult::Success(Ok(_)) => {
+                        // Happy
+                    }
+                    WaitResult::TimedOut => {
+                        // TODO handle timeout
+                    }
+                }
+                trace!(
+                    "Ran prestart for service: {} with pid: {:?}",
+                    name,
+                    child.id()
+                );
+                pid_table
+                    .lock()
+                    .unwrap()
+                    .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
             }
             Err(e) => panic!(e.description().to_owned()),
         }
     }
-    
     fn run_poststart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         let split: Vec<&str> = match &self.service_config {
             Some(conf) => {
@@ -195,13 +243,11 @@ impl Service {
             }
             None => return,
         };
-        
         let mut cmd = Command::new(split[0]);
         for part in &split[1..] {
             cmd.arg(part);
         }
         cmd.stdout(Stdio::null());
-        
         trace!("Start running proststart for service: {}", name);
         // TODO alter this to use the stdout/err pipes after the fork
         match cmd.spawn() {
@@ -210,11 +256,91 @@ impl Service {
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     PidEntry::Stop(id),
                 );
-                child.wait().unwrap();
-                trace!("Ran proststart for service: {} with pid: {:?}", name, child.id());
+                trace!("Wait for poststart for service {}", name);
+                match wait_for_child(&mut child, None) {
+                    WaitResult::Success(Err(e)) => {
+                        // This might also happen because it was collected by the signal_handler.
+                        // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
+                        // that has not been ported to rust
+                        error!(
+                            "Error while waiting on poststart for service {}: {}",
+                            name, e
+                        );
+                        // TODO return error or something
+                    }
+                    WaitResult::Success(Ok(_)) => {
+                        // Happy
+                    }
+                    WaitResult::TimedOut => {
+                        // TODO handle timeout
+                    }
+                }
+                trace!(
+                    "Ran proststart for service: {} with pid: {:?}",
+                    name,
+                    child.id()
+                );
+                pid_table
+                    .lock()
+                    .unwrap()
+                    .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
             }
             Err(e) => panic!(e.description().to_owned()),
         }
+    }
+}
+
+enum WaitResult {
+    TimedOut,
+    Success(std::io::Result<Option<std::process::ExitStatus>>),
+}
+
+/// Wait for the termination of a subprocess, with an optional timeout.
+/// An error does not mean that the waiting actually failed.
+/// This might also happen because it was collected by the signal_handler.
+/// This could be fixed by using the waitid() with WNOWAIT in the signal handler but
+/// that has not been ported to rust
+fn wait_for_child(
+    child: &mut std::process::Child,
+    time_out: Option<std::time::Duration>,
+) -> WaitResult {
+    let mut counter = 1u64;
+    let start_time = std::time::Instant::now();
+    loop {
+        if let Some(time_out) = time_out {
+            if start_time.elapsed() >= time_out {
+                return WaitResult::TimedOut;
+            }
+        }
+        match child.try_wait() {
+            Err(e) => {
+                // This might also happen because it was collected by the signal_handler.
+                // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
+                // that has not been ported to rust
+
+                // in any case it probably means that the process has exited...
+                return WaitResult::Success(Err(e));
+            }
+            Ok(Some(x)) => {
+                // Happy
+                return WaitResult::Success(Ok(Some(x)));
+            }
+            Ok(None) => {
+                // Happy but need to wait longer
+            }
+        }
+        // exponential backoff to get low latencies for fast processes
+        // but not hog the cpu for too long
+        // start at 0.05 ms
+        // capped to 10 ms to not introduce too big latencies
+        // TODO review those numbers
+        let sleep_dur = std::time::Duration::from_micros(counter * 50);
+        let sleep_cap = std::time::Duration::from_millis(10);
+        let sleep_dur = sleep_dur.min(sleep_cap);
+        if sleep_dur < sleep_cap {
+            counter = counter * 2;
+        }
+        std::thread::sleep(sleep_dur);
     }
 }
 
