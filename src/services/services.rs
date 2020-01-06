@@ -161,6 +161,7 @@ impl Service {
                     }
                     WaitResult::TimedOut => {
                         // TODO handle timeout
+                        let _ = child.kill();
                     }
                 }
                 trace!(
@@ -217,6 +218,7 @@ impl Service {
                     }
                     WaitResult::TimedOut => {
                         // TODO handle timeout
+                        let _ = child.kill();
                     }
                 }
                 trace!(
@@ -272,6 +274,7 @@ impl Service {
                     }
                     WaitResult::TimedOut => {
                         // TODO handle timeout
+                        let _ = child.kill();
                     }
                 }
                 trace!(
