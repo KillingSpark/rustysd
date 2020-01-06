@@ -158,17 +158,22 @@ impl Service {
                     }
                     WaitResult::Success(Ok(_)) => {
                         // Happy
+                        trace!(
+                            "Ran stop process for service: {} with pid: {:?}",
+                            name,
+                            child.id()
+                        );
                     }
                     WaitResult::TimedOut => {
                         // TODO handle timeout
+                        trace!(
+                            "Stop process for service: {} with pid: {:?} took longer than the timeout",
+                            name,
+                            child.id()
+                        );
                         let _ = child.kill();
                     }
                 }
-                trace!(
-                    "Ran stop process for service: {} with pid: {:?}",
-                    name,
-                    child.id()
-                );
                 pid_table
                     .lock()
                     .unwrap()
@@ -214,18 +219,22 @@ impl Service {
                         // TODO return error or something
                     }
                     WaitResult::Success(Ok(_)) => {
-                        // Happy
+                        trace!(
+                            "Ran prestart for service: {} with pid: {:?}",
+                            name,
+                            child.id()
+                        );
                     }
                     WaitResult::TimedOut => {
                         // TODO handle timeout
+                        trace!(
+                            "Prestart for service: {} with pid: {:?} took longer than the timeout",
+                            name,
+                            child.id()
+                        );
                         let _ = child.kill();
                     }
                 }
-                trace!(
-                    "Ran prestart for service: {} with pid: {:?}",
-                    name,
-                    child.id()
-                );
                 pid_table
                     .lock()
                     .unwrap()
@@ -270,18 +279,22 @@ impl Service {
                         // TODO return error or something
                     }
                     WaitResult::Success(Ok(_)) => {
-                        // Happy
+                        trace!(
+                            "Ran proststart for service: {} with pid: {:?}",
+                            name,
+                            child.id()
+                        );
                     }
                     WaitResult::TimedOut => {
                         // TODO handle timeout
+                        trace!(
+                            "Poststart for service: {} with pid: {:?} took longer than the timeout",
+                            name,
+                            child.id()
+                        );
                         let _ = child.kill();
                     }
                 }
-                trace!(
-                    "Ran proststart for service: {} with pid: {:?}",
-                    name,
-                    child.id()
-                );
                 pid_table
                     .lock()
                     .unwrap()
