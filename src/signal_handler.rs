@@ -136,7 +136,8 @@ type ChildIterElem = Result<(nix::unistd::Pid, ChildTermination), nix::Error>;
 
 fn get_next_exited_child() -> Option<ChildIterElem> {
     let wait_any_pid = nix::unistd::Pid::from_raw(-1);
-    match nix::sys::wait::waitpid(wait_any_pid, Some(nix::sys::wait::WaitPidFlag::WNOHANG)) {
+    let wait_flags = nix::sys::wait::WaitPidFlag::WNOHANG;
+    match nix::sys::wait::waitpid(wait_any_pid, Some(wait_flags)) {
         Ok(exit_status) => match exit_status {
             nix::sys::wait::WaitStatus::Exited(pid, code) => {
                 Some(Ok((pid, ChildTermination::Exit(code))))
@@ -152,8 +153,9 @@ fn get_next_exited_child() -> Option<ChildIterElem> {
                 None
             }
             _ => {
-                trace!("Child signaled with code: {:?}", exit_status);
-                None
+                trace!("Ignored child signal received with code: {:?}", exit_status);
+                // return next child, we dont care about other events like stop/continue of children
+                get_next_exited_child()
             }
         },
         Err(e) => {
