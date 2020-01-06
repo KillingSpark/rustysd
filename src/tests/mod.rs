@@ -27,8 +27,8 @@ fn test_service_parsing() {
     WantedBy = {}
     
     [Service]
-    Exec = {}
-    Stop = {}
+    ExecStart = {}
+    ExecStop = {}
     Sockets = {}
 
     "#,
