@@ -140,7 +140,6 @@ Requiring bigger changes or seem complicated:
 
 Requiring small changes / additions transparent to the other modules:
 * Change user to drop privileges
-* Timeouts for service starting (should be easy for the current service types. might get complicated for type forking)
 * Patching unit definitions with dropin files
 * Socket options like MaxConnections=/KeepAlive=
 * Killing services properly. SigTerm/Kill/Hup/ executing the stop commands ..... (currently there is just a sigkill sent to the whole processgroup)
