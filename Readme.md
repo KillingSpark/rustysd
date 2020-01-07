@@ -79,7 +79,7 @@ to write a compatibility shim if an equivalents exist on the target platform. It
 1. sending (kill/terminating) signals to whole process groups (as long as we care about cleanup after killing, maybe the platform handles this in another smart way?)
 1. setting env variables (currently handled with libc because the rust std contains locks which currently break on forking)
 1. setting the current process as a subprocess reaper (might not be that important, other platforms might handle reparenting of orphaned processes differently than unix)
-1. chnaging the user id to drop privileges
+1. changing the user id to drop privileges
 
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested. If you find anything does actually not work
@@ -147,13 +147,13 @@ Requiring small changes / additions transparent to the other modules:
 * More socket types 
     1. Netlink is missing for example
     1. Abstract namespace for unix sockets (but thats linux specific anyways and rust stdlib doesnt support it.....)
-* Service type oneshot is missing
 * Service type idle is missing (not even sure if its a good idea to support this)
 * A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
     1. Killing is missing
     2. Disabling of units is missing
     3. A better UI than pretty-printed json is missing
 * Many of the missing features in feature-comparison.md are relatively simple issues
+* Checking exit codes of execprestart/execpoststart and oneshot services
 
 Unclear how much work it is:
 * Get all the meta-targets and default dependencies right
