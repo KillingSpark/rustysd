@@ -322,6 +322,7 @@ pub struct ServiceConfig {
     pub startpost: String,
     pub srcv_type: ServiceType,
     pub starttimeout: Option<Timeout>,
+    pub stoptimeout: Option<Timeout>,
     pub generaltimeout: Option<Timeout>,
 
     pub dbus_name: Option<String>,

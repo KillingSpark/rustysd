@@ -144,8 +144,26 @@ impl Service {
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     PidEntry::Stop(id),
                 );
+                let timeout_dur = if let Some(conf) = &self.service_config {
+                    if let Some(timeout) = &conf.stoptimeout {
+                        match timeout {
+                            Timeout::Infinity => None,
+                            Timeout::Duration(dur) => Some(*dur),
+                        }
+                    } else if let Some(timeout) = &conf.generaltimeout {
+                        match timeout {
+                            Timeout::Infinity => None,
+                            Timeout::Duration(dur) => Some(*dur),
+                        }
+                    } else {
+                        // TODO default timeout
+                        None
+                    }
+                } else {
+                    None
+                };
                 trace!("Wait for stop process for service {}", name);
-                match wait_for_child(&mut child, None) {
+                match wait_for_child(&mut child, timeout_dur) {
                     WaitResult::Success(Err(e)) => {
                         // This might also happen because it was collected by the signal_handler.
                         // This could be fixed by using the waitid() with WNOWAIT in the signal handler but

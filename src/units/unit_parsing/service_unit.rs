@@ -108,6 +108,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     let startpre = section.remove("EXECSTARTPRE");
     let startpost = section.remove("EXECSTARTPOST");
     let starttimeout = section.remove("TIMEOUTSTARTSEC");
+    let stoptimeout = section.remove("TIMEOUTSTOPSEC");
     let generaltimeout = section.remove("TIMEOUTSEC");
 
     let restart = section.remove("RESTART");
@@ -134,12 +135,22 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         }
         None => None,
     };
+    let stoptimeout = match stoptimeout {
+        Some(vec) => {
+            if vec.len() == 1 {
+                Some(parse_timeout(&vec[0].1))
+            } else {
+                panic!("TimeoutStopSec had to many entries: {:?}", vec);
+            }
+        }
+        None => None,
+    };
     let generaltimeout = match generaltimeout {
         Some(vec) => {
             if vec.len() == 1 {
                 Some(parse_timeout(&vec[0].1))
             } else {
-                panic!("TimeoutStartSec had to many entries: {:?}", vec);
+                panic!("TimeoutSec had to many entries: {:?}", vec);
             }
         }
         None => None,
@@ -281,6 +292,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         startpre,
         startpost,
         starttimeout,
+        stoptimeout,
         generaltimeout,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),
     })
