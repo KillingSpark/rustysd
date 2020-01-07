@@ -26,7 +26,24 @@ fn move_to_new_session() -> bool {
     }
 }
 
+fn remount_root_rw() {
+    // TODO maybe need more flags
+    let flags = nix::mount::MsFlags::MS_REMOUNT;
+    let source: Option<&str> = None;
+    let fs_type: Option<&str> = None;
+    let data: Option<&str> = None;
+    nix::mount::mount(source, "/", fs_type, flags, data).unwrap();
+}
+
+fn pid1_specific_setup() {
+    if nix::unistd::getuid().is_root() {
+        remount_root_rw();
+    }
+}
+
 fn main() {
+    pid1_specific_setup();
+
     let (log_conf, conf) = config::load_config(None);
 
     logging::setup_logging(&log_conf).unwrap();
@@ -64,7 +81,6 @@ fn main() {
     let mut first_id = 0;
     let mut unit_table = units::load_all_units(&conf.unit_dirs, &mut first_id).unwrap();
     first_id = first_id + 1;
-    
     units::prune_units(&conf.target_unit, &mut unit_table).unwrap();
     units::sanity_check_dependencies(&unit_table).unwrap();
     trace!("Unit dependencies passed sanity checks");
