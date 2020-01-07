@@ -62,6 +62,70 @@ pub fn wait_for_service(
             ServiceType::Simple => {
                 trace!("[FORK_PARENT] service {} doesnt notify", name);
             }
+            ServiceType::OneShot => {
+                trace!(
+                    "[FORK_PARENT] Waiting for oneshot service to exit: {}",
+                    name
+                );
+                let mut counter = 1u64;
+                let start_time = std::time::Instant::now();
+                let time_out = None;
+                loop {
+                    if let Some(time_out) = time_out {
+                        if start_time.elapsed() >= time_out {
+                            //TODO handle timeout correctly
+                        }
+                    }
+                    let wait_flags = nix::sys::wait::WaitPidFlag::WNOHANG;
+                    let res = nix::sys::wait::waitpid(srvc.pid.unwrap(), Some(wait_flags));
+                    match res {
+                        Ok(exit_status) => match exit_status {
+                            nix::sys::wait::WaitStatus::Exited(_pid, _code) => {
+                                // Happy
+                                // TODO check exit codes
+                                return Ok(());
+                            }
+                            nix::sys::wait::WaitStatus::Signaled(_pid, _signal, _dumped_core) => {
+                                // Happy
+                                // TODO check exit codes
+                                return Ok(());
+                            }
+                            nix::sys::wait::WaitStatus::StillAlive => {
+                                // Happy but need to wait longer
+                            }
+                            _ => {
+                                // Happy but need to wait longer, we dont care about other events like stop/continue of children
+                            }
+                        },
+                        Err(e) => {
+                            if let nix::Error::Sys(nix::errno::Errno::ECHILD) = e {
+                                // This might also happen because it was collected by the signal_handler.
+                                // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
+                                // that has not been ported to rust
+                                // in any case it probably means that the process has exited...
+                                return Ok(());
+                            } else {
+                                return Err(format!(
+                                    "Error while waiting on oneshot service {}: {}",
+                                    name, e
+                                ));
+                            }
+                        }
+                    }
+                    // exponential backoff to get low latencies for fast processes
+                    // but not hog the cpu for too long
+                    // start at 0.05 ms
+                    // capped to 10 ms to not introduce too big latencies
+                    // TODO review those numbers
+                    let sleep_dur = std::time::Duration::from_micros(counter * 50);
+                    let sleep_cap = std::time::Duration::from_millis(10);
+                    let sleep_dur = sleep_dur.min(sleep_cap);
+                    if sleep_dur < sleep_cap {
+                        counter = counter * 2;
+                    }
+                    std::thread::sleep(sleep_dur);
+                }
+            }
             ServiceType::Dbus => {
                 if let Some(dbus_name) = &conf.dbus_name {
                     trace!("[FORK_PARENT] Waiting for dbus name: {}", dbus_name);

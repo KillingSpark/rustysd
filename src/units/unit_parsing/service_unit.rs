@@ -111,6 +111,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
                 match vec[0].1.as_str() {
                     "simple" => ServiceType::Simple,
                     "notify" => ServiceType::Notify,
+                    "oneshot" => ServiceType::OneShot,
                     "dbus" => {
                         if cfg!(feature = "dbus_support") {
                             ServiceType::Dbus

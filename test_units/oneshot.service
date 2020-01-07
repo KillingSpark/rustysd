@@ -1,0 +1,12 @@
+[Service]
+ExecStart= /bin/sleep 1 
+ExecStartPre= /bin/sleep 1
+ExecStartPost= /bin/sleep 1
+ExecStop = /bin/sleep 1
+Type= oneshot
+
+[Unit]
+Before= test2.service
+
+[Install]
+WantedBy= default.target
