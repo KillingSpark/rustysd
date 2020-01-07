@@ -60,7 +60,8 @@ SUPPORTED_FEATURES = {
     "WantedBy": {"icon": ICON_TICK,   "text": "Specifying which units pull this unit in is supported"},
     "RequiredBy": {"icon": ICON_TICK, "text": "Specifying which units pull this unit in is supported"},
     "TimeoutStartSec": {"icon": ICON_TICK, "text": "The time a services needs to start can be limited"},
-    "TimeoutSec": {"icon": ICON_TICK, "text": "The time a services needs to start can be limited"},
+    "TimeoutStopSec": {"icon": ICON_TICK, "text": "The time a services needs to stop can be limited"},
+    "TimeoutSec": {"icon": ICON_TICK, "text": "The time a services needs to start/stop can be limited"},
 }
 
 def main():

@@ -1448,9 +1448,9 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#TimeoutStopSec=">TimeoutStopSec=</a></td>
-  <td>❌</td>
+  <td>✔️</td>
   <td><a href="https://github.com/search?q=%27TimeoutStopSec%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>The time a services needs to stop can be limited</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#TimeoutAbortSec=">TimeoutAbortSec=</a></td>
@@ -1462,7 +1462,7 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#TimeoutSec=">TimeoutSec=</a></td>
   <td>✔️</td>
   <td><a href="https://github.com/search?q=%27TimeoutSec%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>The time a services needs to start can be limited</td>
+  <td>The time a services needs to start/stop can be limited</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#RuntimeMaxSec=">RuntimeMaxSec=</a></td>
@@ -1857,7 +1857,7 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#TimeoutSec=">TimeoutSec=</a></td>
   <td>✔️</td>
   <td><a href="https://github.com/search?q=%27TimeoutSec%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>The time a services needs to start can be limited</td>
+  <td>The time a services needs to start/stop can be limited</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#Service=">Service=</a></td>
