@@ -75,11 +75,41 @@ pub fn parse_service(
     })
 }
 
+fn parse_timeout(descr: &str) -> Timeout {
+    if descr.to_uppercase() == "INFINITY" {
+        Timeout::Infinity
+    }else{
+        match descr.parse::<u64>() {
+            Ok(secs) => Timeout::Duration(std::time::Duration::from_secs(secs)),
+            Err(_) => {
+                let mut sum = 0;
+                let split = descr.split(' ').collect::<Vec<_>>();
+                for t in &split {
+                    if t.ends_with("min") {
+                        let mins = t[0..t.len()-3].parse::<u64>().unwrap();
+                        sum += mins * 60;
+                    }else if t.ends_with("hrs") {
+                        let hrs = t[0..t.len()-3].parse::<u64>().unwrap();
+                        sum += hrs * 60*60;
+                    }else if t.ends_with("s") {
+                        let secs = t[0..t.len()-1].parse::<u64>().unwrap();
+                        sum += secs;
+                    }
+                }
+                Timeout::Duration(std::time::Duration::from_secs(sum))
+            }
+        }
+    }
+}
+
 fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingError> {
     let exec = section.remove("EXECSTART");
     let stop = section.remove("EXECSTOP");
     let startpre = section.remove("EXECSTARTPRE");
     let startpost = section.remove("EXECSTARTPOST");
+    let starttimeout = section.remove("TIMEOUTSTARTSEC");
+    let generaltimeout = section.remove("TIMEOUTSEC");
+
     let restart = section.remove("RESTART");
     let sockets = section.remove("SOCKETS");
     let notify_access = section.remove("NOTIFYACCESS");
@@ -93,6 +123,27 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
             section
         );
     }
+
+    let starttimeout = match starttimeout {
+        Some(vec) => {
+            if vec.len() == 1 {
+                Some(parse_timeout(&vec[0].1))
+            } else {
+                panic!("TimeoutStartSec had to many entries: {:?}", vec);
+            }
+        }
+        None => None,
+    };
+    let generaltimeout = match generaltimeout {
+        Some(vec) => {
+            if vec.len() == 1 {
+                Some(parse_timeout(&vec[0].1))
+            } else {
+                panic!("TimeoutStartSec had to many entries: {:?}", vec);
+            }
+        }
+        None => None,
+    };
 
     let exec = match exec {
         Some(mut vec) => {
@@ -229,6 +280,8 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         stop,
         startpre,
         startpost,
+        starttimeout,
+        generaltimeout,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),
     })
 }

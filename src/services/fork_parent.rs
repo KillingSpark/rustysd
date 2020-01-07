@@ -12,8 +12,26 @@ pub fn wait_for_service(
         name,
         srvc.pid.unwrap()
     );
-
     if let Some(conf) = &srvc.service_config {
+        let start_time = std::time::Instant::now();
+        let duration_timeout = {
+            if let Some(timeout) = &conf.starttimeout {
+                match timeout {
+                    Timeout::Duration(dur) => Some(*dur),
+                    Timeout::Infinity => None,
+                }
+            } else {
+                if let Some(timeout) = &conf.generaltimeout {
+                    match timeout {
+                        Timeout::Duration(dur) => Some(*dur),
+                        Timeout::Infinity => None,
+                    }
+                } else {
+                    // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                    None
+                }
+            }
+        };
         match conf.srcv_type {
             ServiceType::Notify => {
                 trace!(
@@ -21,9 +39,7 @@ pub fn wait_for_service(
                     name
                 );
 
-                let start_time = std::time::Instant::now();
                 //let duration_timeout = Some(std::time::Duration::from_nanos(1_000_000_000_000));
-                let duration_timeout = None;
                 let mut buf = [0u8; 512];
                 loop {
                     if let Some(duration_timeout) = duration_timeout {
@@ -68,12 +84,12 @@ pub fn wait_for_service(
                     name
                 );
                 let mut counter = 1u64;
-                let start_time = std::time::Instant::now();
-                let time_out = None;
                 loop {
-                    if let Some(time_out) = time_out {
+                    if let Some(time_out) = duration_timeout {
                         if start_time.elapsed() >= time_out {
                             //TODO handle timeout correctly
+                            error!("oneshot service {} reached timeout", name);
+                            break;
                         }
                     }
                     let wait_flags = nix::sys::wait::WaitPidFlag::WNOHANG;

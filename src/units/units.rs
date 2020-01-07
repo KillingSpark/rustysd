@@ -306,6 +306,12 @@ pub enum ServiceRestart {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub enum Timeout {
+    Duration(std::time::Duration),
+    Infinity,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {
     pub restart: ServiceRestart,
     pub accept: bool,
@@ -315,6 +321,8 @@ pub struct ServiceConfig {
     pub startpre: String,
     pub startpost: String,
     pub srcv_type: ServiceType,
+    pub starttimeout: Option<Timeout>,
+    pub generaltimeout: Option<Timeout>,
 
     pub dbus_name: Option<String>,
 
