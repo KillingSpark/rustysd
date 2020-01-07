@@ -145,9 +145,15 @@ pub fn wait_for_service(
             ServiceType::Dbus => {
                 if let Some(dbus_name) = &conf.dbus_name {
                     trace!("[FORK_PARENT] Waiting for dbus name: {}", dbus_name);
+                    let timeout = if let Some(dur) = duration_timeout {
+                        dur
+                    }else{
+                        // TODO make timeout for dbus optional
+                        std::time::Duration::from_secs(1_000_000)
+                    };
                     match crate::dbus_wait::wait_for_name_system_bus(
                         &dbus_name,
-                        std::time::Duration::from_millis(10_000),
+                        timeout,
                     ) {
                         Ok(res) => {
                             match res {
