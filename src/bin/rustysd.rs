@@ -38,7 +38,7 @@ fn remount_root_rw() {
 
 #[cfg(target_os="linux")]
 fn pid1_specific_setup() {
-    if nix::unistd::getuid().is_root() {
+    if nix::unistd::getpid().as_raw() == 0 {
         remount_root_rw();
     }
 }
