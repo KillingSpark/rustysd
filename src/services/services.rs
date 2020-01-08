@@ -166,6 +166,7 @@ impl Service {
     }
 
     fn run_cmd(
+        &mut self,
         cmd_str: &str,
         id: UnitId,
         name: &str,
@@ -178,8 +179,9 @@ impl Service {
             cmd.arg(part);
         }
         // TODO alter this to use the stdout/err pipes after the fork
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        cmd.stdin(Stdio::null());
 
         trace!("Run {} for service: {}", cmd_str, name);
         // TODO check return value
@@ -195,11 +197,25 @@ impl Service {
                         // This might also happen because it was collected by the signal_handler.
                         // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
                         // that has not been ported to rust
-                        error!(
-                            "Error while waiting on stop process for service {}: {}",
-                            name, e
-                        );
-                        false
+                        let found = {
+                            let pid_table_locked = pid_table.lock().unwrap();
+                            if pid_table_locked
+                                .contains_key(&nix::unistd::Pid::from_raw(child.id() as i32))
+                            {
+                                // Got collected by the signal handler
+                                // TODO collect return value in signal handler and check here
+                                true
+                            } else {
+                                false
+                            }
+                        };
+                        if !found {
+                            error!(
+                                "Error while waiting on {} for service {}: {}",
+                                cmd_str, name, e
+                            );
+                        }
+                        found
                         // TODO return error or something
                     }
                     WaitResult::Success(Ok(exitstatus)) => {
@@ -211,7 +227,8 @@ impl Service {
                             let _res = pid_table
                                 .lock()
                                 .unwrap()
-                                .get(&nix::unistd::Pid::from_raw(child.id() as i32)).unwrap();
+                                .get(&nix::unistd::Pid::from_raw(child.id() as i32))
+                                .unwrap();
                             true
                         }
                         // Happy
@@ -223,6 +240,20 @@ impl Service {
                         false
                     }
                 };
+                {
+                    use std::io::Read;
+                    if let Some(stream) = &mut child.stderr {
+                        let mut buf = Vec::new();
+                        let _bytes = stream.read_to_end(&mut buf).unwrap();
+                        self.stderr_buffer.extend(buf);
+                    }
+                    if let Some(stream) = &mut child.stdout {
+                        let mut buf = Vec::new();
+                        let _bytes = stream.read_to_end(&mut buf).unwrap();
+                        self.stdout_buffer.extend(buf);
+                    }
+                }
+
                 pid_table
                     .lock()
                     .unwrap()
@@ -237,6 +268,7 @@ impl Service {
     }
 
     fn run_all_cmds(
+        &mut self,
         cmds: &Vec<String>,
         id: UnitId,
         name: &str,
@@ -244,14 +276,14 @@ impl Service {
         pid_table: ArcMutPidTable,
     ) -> bool {
         for cmd in cmds {
-            if !Self::run_cmd(cmd, id, name, timeout, pid_table.clone()) {
+            if !self.run_cmd(cmd, id, name, timeout, pid_table.clone()) {
                 return false;
             }
         }
         true
     }
 
-    fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+    fn run_stop_cmd(&mut self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         match &self.service_config {
             Some(conf) => {
                 if conf.stop.is_empty() {
@@ -259,12 +291,13 @@ impl Service {
                 }
                 let timeout = self.get_stop_timeout();
                 // TODO handle return of false
-                Self::run_all_cmds(&conf.stop, id, name, timeout, pid_table.clone());
+                let cmds = conf.stop.clone();
+                self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone());
             }
             None => return,
         }
     }
-    fn run_prestart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+    fn run_prestart(&mut self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         match &self.service_config {
             Some(conf) => {
                 if conf.startpre.is_empty() {
@@ -272,12 +305,14 @@ impl Service {
                 }
                 let timeout = self.get_start_timeout();
                 // TODO handle return of false
-                Self::run_all_cmds(&conf.startpre, id, name, timeout, pid_table.clone());
+                trace!("Prestarts for service {}, {:?}", name, conf.startpre);
+                let cmds = conf.startpre.clone();
+                self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone());
             }
             None => return,
         }
     }
-    fn run_poststart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+    fn run_poststart(&mut self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         match &self.service_config {
             Some(conf) => {
                 if conf.startpost.is_empty() {
@@ -285,7 +320,8 @@ impl Service {
                 }
                 let timeout = self.get_start_timeout();
                 // TODO handle return of false
-                Self::run_all_cmds(&conf.startpost, id, name, timeout, pid_table.clone());
+                let cmds = conf.startpost.clone();
+                self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone());
             }
             None => return,
         }
