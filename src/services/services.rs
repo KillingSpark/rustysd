@@ -118,24 +118,15 @@ impl Service {
         self.stop(id, name, pid_table);
     }
 
-    fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
-        let split: Vec<&str> = match &self.service_config {
-            Some(conf) => {
-                if conf.stop.is_empty() {
-                    return;
-                }
-                conf.stop.split(' ').collect()
-            }
-            None => return,
-        };
-
+    fn run_cmd(cmd_str: &str, id: UnitId, name: &str, timeout: Option<std::time::Duration>, pid_table: ArcMutPidTable) {
+        let split = cmd_str.split(' ').collect::<Vec<_>>();
         let mut cmd = Command::new(split[0]);
         for part in &split[1..] {
             cmd.arg(part);
         }
         cmd.stdout(Stdio::null());
 
-        trace!("Run stop process for service: {} with pid", name);
+        trace!("Run {} for service: {}", cmd_str, name);
         // TODO alter this to use the stdout/err pipes after the fork
         // TODO check return value
         match cmd.spawn() {
@@ -144,26 +135,8 @@ impl Service {
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     PidEntry::Stop(id),
                 );
-                let timeout_dur = if let Some(conf) = &self.service_config {
-                    if let Some(timeout) = &conf.stoptimeout {
-                        match timeout {
-                            Timeout::Infinity => None,
-                            Timeout::Duration(dur) => Some(*dur),
-                        }
-                    } else if let Some(timeout) = &conf.generaltimeout {
-                        match timeout {
-                            Timeout::Infinity => None,
-                            Timeout::Duration(dur) => Some(*dur),
-                        }
-                    } else {
-                        // TODO default timeout
-                        None
-                    }
-                } else {
-                    None
-                };
-                trace!("Wait for stop process for service {}", name);
-                match wait_for_child(&mut child, timeout_dur) {
+                trace!("Wait for {} for service: {}", cmd_str, name);
+                match wait_for_child(&mut child, timeout) {
                     WaitResult::Success(Err(e)) => {
                         // This might also happen because it was collected by the signal_handler.
                         // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
@@ -176,19 +149,11 @@ impl Service {
                     }
                     WaitResult::Success(Ok(_)) => {
                         // Happy
-                        trace!(
-                            "Ran stop process for service: {} with pid: {:?}",
-                            name,
-                            child.id()
-                        );
+                        trace!("success running {} for service: {}", cmd_str, name);
                     }
                     WaitResult::TimedOut => {
+                        trace!("Timeout running {} for service: {}", cmd_str, name);
                         // TODO handle timeout
-                        trace!(
-                            "Stop process for service: {} with pid: {:?} took longer than the timeout",
-                            name,
-                            child.id()
-                        );
                         let _ = child.kill();
                     }
                 }
@@ -198,127 +163,94 @@ impl Service {
                     .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
             }
             Err(e) => panic!(e.description().to_owned()),
+        }
+    }
+
+    fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
+        match &self.service_config {
+            Some(conf) => {
+                if conf.stop.is_empty() {
+                    return;
+                }
+                let duration_timeout = {
+                    if let Some(timeout) = &conf.starttimeout {
+                        match timeout {
+                            Timeout::Duration(dur) => Some(*dur),
+                            Timeout::Infinity => None,
+                        }
+                    } else {
+                        if let Some(timeout) = &conf.generaltimeout {
+                            match timeout {
+                                Timeout::Duration(dur) => Some(*dur),
+                                Timeout::Infinity => None,
+                            }
+                        } else {
+                            // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                            None
+                        }
+                    }
+                };
+                Self::run_cmd(&conf.stop, id, name, duration_timeout, pid_table);
+            }
+            None => return,
         }
     }
     fn run_prestart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
-        let split: Vec<&str> = match &self.service_config {
+        match &self.service_config {
             Some(conf) => {
-                if conf.startpre.is_empty() {
+                if conf.stop.is_empty() {
                     return;
                 }
-                conf.startpre.split(' ').collect()
+                let duration_timeout = {
+                    if let Some(timeout) = &conf.starttimeout {
+                        match timeout {
+                            Timeout::Duration(dur) => Some(*dur),
+                            Timeout::Infinity => None,
+                        }
+                    } else {
+                        if let Some(timeout) = &conf.generaltimeout {
+                            match timeout {
+                                Timeout::Duration(dur) => Some(*dur),
+                                Timeout::Infinity => None,
+                            }
+                        } else {
+                            // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                            None
+                        }
+                    }
+                };
+                Self::run_cmd(&conf.startpre, id, name, duration_timeout, pid_table);
             }
             None => return,
-        };
-        let mut cmd = Command::new(split[0]);
-        for part in &split[1..] {
-            cmd.arg(part);
-        }
-        cmd.stdout(Stdio::null());
-        trace!("Start running prestart for service: {}", name);
-        // TODO alter this to use the stdout/err pipes after the fork
-        // TODO check return value
-        match cmd.spawn() {
-            Ok(mut child) => {
-                pid_table.lock().unwrap().insert(
-                    nix::unistd::Pid::from_raw(child.id() as i32),
-                    PidEntry::Stop(id),
-                );
-                trace!("Wait for prestart for service {}", name);
-                match wait_for_child(&mut child, None) {
-                    WaitResult::Success(Err(e)) => {
-                        // This might also happen because it was collected by the signal_handler.
-                        // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
-                        // that has not been ported to rust
-                        error!(
-                            "Error while waiting on prestart for service {}: {}",
-                            name, e
-                        );
-                        // TODO return error or something
-                    }
-                    WaitResult::Success(Ok(_)) => {
-                        trace!(
-                            "Ran prestart for service: {} with pid: {:?}",
-                            name,
-                            child.id()
-                        );
-                    }
-                    WaitResult::TimedOut => {
-                        // TODO handle timeout
-                        trace!(
-                            "Prestart for service: {} with pid: {:?} took longer than the timeout",
-                            name,
-                            child.id()
-                        );
-                        let _ = child.kill();
-                    }
-                }
-                pid_table
-                    .lock()
-                    .unwrap()
-                    .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
-            }
-            Err(e) => panic!(e.description().to_owned()),
         }
     }
     fn run_poststart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
-        let split: Vec<&str> = match &self.service_config {
+        match &self.service_config {
             Some(conf) => {
-                if conf.startpost.is_empty() {
+                if conf.stop.is_empty() {
                     return;
                 }
-                conf.startpost.split(' ').collect()
+                let duration_timeout = {
+                    if let Some(timeout) = &conf.starttimeout {
+                        match timeout {
+                            Timeout::Duration(dur) => Some(*dur),
+                            Timeout::Infinity => None,
+                        }
+                    } else {
+                        if let Some(timeout) = &conf.generaltimeout {
+                            match timeout {
+                                Timeout::Duration(dur) => Some(*dur),
+                                Timeout::Infinity => None,
+                            }
+                        } else {
+                            // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                            None
+                        }
+                    }
+                };
+                Self::run_cmd(&conf.startpost, id, name, duration_timeout, pid_table);
             }
             None => return,
-        };
-        let mut cmd = Command::new(split[0]);
-        for part in &split[1..] {
-            cmd.arg(part);
-        }
-        cmd.stdout(Stdio::null());
-        trace!("Start running proststart for service: {}", name);
-        // TODO alter this to use the stdout/err pipes after the fork
-        match cmd.spawn() {
-            Ok(mut child) => {
-                pid_table.lock().unwrap().insert(
-                    nix::unistd::Pid::from_raw(child.id() as i32),
-                    PidEntry::Stop(id),
-                );
-                trace!("Wait for poststart for service {}", name);
-                match wait_for_child(&mut child, None) {
-                    WaitResult::Success(Err(e)) => {
-                        // This might also happen because it was collected by the signal_handler.
-                        // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
-                        // that has not been ported to rust
-                        error!(
-                            "Error while waiting on poststart for service {}: {}",
-                            name, e
-                        );
-                        // TODO return error or something
-                    }
-                    WaitResult::Success(Ok(_)) => {
-                        trace!(
-                            "Ran proststart for service: {} with pid: {:?}",
-                            name,
-                            child.id()
-                        );
-                    }
-                    WaitResult::TimedOut => {
-                        // TODO handle timeout
-                        trace!(
-                            "Poststart for service: {} with pid: {:?} took longer than the timeout",
-                            name,
-                            child.id()
-                        );
-                        let _ = child.kill();
-                    }
-                }
-                pid_table
-                    .lock()
-                    .unwrap()
-                    .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
-            }
-            Err(e) => panic!(e.description().to_owned()),
         }
     }
 }
