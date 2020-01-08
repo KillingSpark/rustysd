@@ -1,7 +1,6 @@
 use super::start_service::*;
 use crate::platform::EventFd;
 use crate::units::*;
-use std::error::Error;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
@@ -172,16 +171,17 @@ impl Service {
         name: &str,
         timeout: Option<std::time::Duration>,
         pid_table: ArcMutPidTable,
-    ) {
+    ) -> bool {
         let split = cmd_str.split(' ').collect::<Vec<_>>();
         let mut cmd = Command::new(split[0]);
         for part in &split[1..] {
             cmd.arg(part);
         }
+        // TODO alter this to use the stdout/err pipes after the fork
         cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
 
         trace!("Run {} for service: {}", cmd_str, name);
-        // TODO alter this to use the stdout/err pipes after the fork
         // TODO check return value
         match cmd.spawn() {
             Ok(mut child) => {
@@ -190,7 +190,7 @@ impl Service {
                     PidEntry::Stop(id),
                 );
                 trace!("Wait for {} for service: {}", cmd_str, name);
-                match wait_for_child(&mut child, timeout) {
+                let success = match wait_for_child(&mut child, timeout) {
                     WaitResult::Success(Err(e)) => {
                         // This might also happen because it was collected by the signal_handler.
                         // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
@@ -199,24 +199,40 @@ impl Service {
                             "Error while waiting on stop process for service {}: {}",
                             name, e
                         );
+                        false
                         // TODO return error or something
                     }
-                    WaitResult::Success(Ok(_)) => {
-                        // Happy
+                    WaitResult::Success(Ok(exitstatus)) => {
                         trace!("success running {} for service: {}", cmd_str, name);
+                        if let Some(status) = exitstatus {
+                            status.success()
+                        } else {
+                            // TODO clean this mess up. Store results in the pid table
+                            let _res = pid_table
+                                .lock()
+                                .unwrap()
+                                .get(&nix::unistd::Pid::from_raw(child.id() as i32)).unwrap();
+                            true
+                        }
+                        // Happy
                     }
                     WaitResult::TimedOut => {
                         trace!("Timeout running {} for service: {}", cmd_str, name);
                         // TODO handle timeout
                         let _ = child.kill();
+                        false
                     }
-                }
+                };
                 pid_table
                     .lock()
                     .unwrap()
                     .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
+                success
             }
-            Err(e) => panic!(e.description().to_owned()),
+            Err(e) => {
+                error!("Error while spawning child process {}, {}", cmd_str, e);
+                false
+            }
         }
     }
 
@@ -226,10 +242,13 @@ impl Service {
         name: &str,
         timeout: Option<std::time::Duration>,
         pid_table: ArcMutPidTable,
-    ) {
+    ) -> bool {
         for cmd in cmds {
-            Self::run_cmd(cmd, id, name, timeout, pid_table.clone());
+            if !Self::run_cmd(cmd, id, name, timeout, pid_table.clone()) {
+                return false;
+            }
         }
+        true
     }
 
     fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
@@ -238,8 +257,9 @@ impl Service {
                 if conf.stop.is_empty() {
                     return;
                 }
-                let duration_timeout = self.get_stop_timeout();
-                Self::run_all_cmds(&conf.stop, id, name, duration_timeout, pid_table.clone());
+                let timeout = self.get_stop_timeout();
+                // TODO handle return of false
+                Self::run_all_cmds(&conf.stop, id, name, timeout, pid_table.clone());
             }
             None => return,
         }
@@ -250,14 +270,9 @@ impl Service {
                 if conf.startpre.is_empty() {
                     return;
                 }
-                let duration_timeout = self.get_start_timeout();
-                Self::run_all_cmds(
-                    &conf.startpre,
-                    id,
-                    name,
-                    duration_timeout,
-                    pid_table.clone(),
-                );
+                let timeout = self.get_start_timeout();
+                // TODO handle return of false
+                Self::run_all_cmds(&conf.startpre, id, name, timeout, pid_table.clone());
             }
             None => return,
         }
@@ -268,14 +283,9 @@ impl Service {
                 if conf.startpost.is_empty() {
                     return;
                 }
-                let duration_timeout = self.get_start_timeout();
-                Self::run_all_cmds(
-                    &conf.startpost,
-                    id,
-                    name,
-                    duration_timeout,
-                    pid_table.clone(),
-                );
+                let timeout = self.get_start_timeout();
+                // TODO handle return of false
+                Self::run_all_cmds(&conf.startpost, id, name, timeout, pid_table.clone());
             }
             None => return,
         }
