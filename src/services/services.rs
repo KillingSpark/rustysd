@@ -118,7 +118,61 @@ impl Service {
         self.stop(id, name, pid_table);
     }
 
-    fn run_cmd(cmd_str: &str, id: UnitId, name: &str, timeout: Option<std::time::Duration>, pid_table: ArcMutPidTable) {
+    fn get_start_timeout(&self) -> Option<std::time::Duration> {
+        match &self.service_config {
+            Some(conf) => {
+                if let Some(timeout) = &conf.starttimeout {
+                    match timeout {
+                        Timeout::Duration(dur) => Some(*dur),
+                        Timeout::Infinity => None,
+                    }
+                } else {
+                    if let Some(timeout) = &conf.generaltimeout {
+                        match timeout {
+                            Timeout::Duration(dur) => Some(*dur),
+                            Timeout::Infinity => None,
+                        }
+                    } else {
+                        // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                        None
+                    }
+                }
+            }
+            None => None,
+        }
+    }
+
+    fn get_stop_timeout(&self) -> Option<std::time::Duration> {
+        match &self.service_config {
+            Some(conf) => {
+                if let Some(timeout) = &conf.stoptimeout {
+                    match timeout {
+                        Timeout::Duration(dur) => Some(*dur),
+                        Timeout::Infinity => None,
+                    }
+                } else {
+                    if let Some(timeout) = &conf.generaltimeout {
+                        match timeout {
+                            Timeout::Duration(dur) => Some(*dur),
+                            Timeout::Infinity => None,
+                        }
+                    } else {
+                        // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                        None
+                    }
+                }
+            }
+            None => None,
+        }
+    }
+
+    fn run_cmd(
+        cmd_str: &str,
+        id: UnitId,
+        name: &str,
+        timeout: Option<std::time::Duration>,
+        pid_table: ArcMutPidTable,
+    ) {
         let split = cmd_str.split(' ').collect::<Vec<_>>();
         let mut cmd = Command::new(split[0]);
         for part in &split[1..] {
@@ -166,33 +220,26 @@ impl Service {
         }
     }
 
+    fn run_all_cmds(
+        cmds: &Vec<String>,
+        id: UnitId,
+        name: &str,
+        timeout: Option<std::time::Duration>,
+        pid_table: ArcMutPidTable,
+    ) {
+        for cmd in cmds {
+            Self::run_cmd(cmd, id, name, timeout, pid_table.clone());
+        }
+    }
+
     fn run_stop_cmd(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         match &self.service_config {
             Some(conf) => {
                 if conf.stop.is_empty() {
                     return;
                 }
-                let duration_timeout = {
-                    if let Some(timeout) = &conf.starttimeout {
-                        match timeout {
-                            Timeout::Duration(dur) => Some(*dur),
-                            Timeout::Infinity => None,
-                        }
-                    } else {
-                        if let Some(timeout) = &conf.generaltimeout {
-                            match timeout {
-                                Timeout::Duration(dur) => Some(*dur),
-                                Timeout::Infinity => None,
-                            }
-                        } else {
-                            // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                            None
-                        }
-                    }
-                };
-                for cmd in &conf.stop {
-                    Self::run_cmd(&cmd, id, name, duration_timeout, pid_table.clone());
-                }
+                let duration_timeout = self.get_stop_timeout();
+                Self::run_all_cmds(&conf.stop, id, name, duration_timeout, pid_table.clone());
             }
             None => return,
         }
@@ -200,30 +247,17 @@ impl Service {
     fn run_prestart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         match &self.service_config {
             Some(conf) => {
-                if conf.stop.is_empty() {
+                if conf.startpre.is_empty() {
                     return;
                 }
-                let duration_timeout = {
-                    if let Some(timeout) = &conf.starttimeout {
-                        match timeout {
-                            Timeout::Duration(dur) => Some(*dur),
-                            Timeout::Infinity => None,
-                        }
-                    } else {
-                        if let Some(timeout) = &conf.generaltimeout {
-                            match timeout {
-                                Timeout::Duration(dur) => Some(*dur),
-                                Timeout::Infinity => None,
-                            }
-                        } else {
-                            // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                            None
-                        }
-                    }
-                };
-                for cmd in &conf.startpre {
-                    Self::run_cmd(&cmd, id, name, duration_timeout, pid_table.clone());
-                }
+                let duration_timeout = self.get_start_timeout();
+                Self::run_all_cmds(
+                    &conf.startpre,
+                    id,
+                    name,
+                    duration_timeout,
+                    pid_table.clone(),
+                );
             }
             None => return,
         }
@@ -231,30 +265,17 @@ impl Service {
     fn run_poststart(&self, id: UnitId, name: &str, pid_table: ArcMutPidTable) {
         match &self.service_config {
             Some(conf) => {
-                if conf.stop.is_empty() {
+                if conf.startpost.is_empty() {
                     return;
                 }
-                let duration_timeout = {
-                    if let Some(timeout) = &conf.starttimeout {
-                        match timeout {
-                            Timeout::Duration(dur) => Some(*dur),
-                            Timeout::Infinity => None,
-                        }
-                    } else {
-                        if let Some(timeout) = &conf.generaltimeout {
-                            match timeout {
-                                Timeout::Duration(dur) => Some(*dur),
-                                Timeout::Infinity => None,
-                            }
-                        } else {
-                            // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                            None
-                        }
-                    }
-                };
-                for cmd in &conf.startpost {
-                    Self::run_cmd(&cmd, id, name, duration_timeout, pid_table.clone());
-                }
+                let duration_timeout = self.get_start_timeout();
+                Self::run_all_cmds(
+                    &conf.startpost,
+                    id,
+                    name,
+                    duration_timeout,
+                    pid_table.clone(),
+                );
             }
             None => return,
         }
