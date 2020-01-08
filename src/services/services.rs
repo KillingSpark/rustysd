@@ -190,7 +190,9 @@ impl Service {
                         }
                     }
                 };
-                Self::run_cmd(&conf.stop, id, name, duration_timeout, pid_table);
+                for cmd in &conf.stop {
+                    Self::run_cmd(&cmd, id, name, duration_timeout, pid_table.clone());
+                }
             }
             None => return,
         }
@@ -219,7 +221,9 @@ impl Service {
                         }
                     }
                 };
-                Self::run_cmd(&conf.startpre, id, name, duration_timeout, pid_table);
+                for cmd in &conf.startpre {
+                    Self::run_cmd(&cmd, id, name, duration_timeout, pid_table.clone());
+                }
             }
             None => return,
         }
@@ -248,7 +252,9 @@ impl Service {
                         }
                     }
                 };
-                Self::run_cmd(&conf.startpost, id, name, duration_timeout, pid_table);
+                for cmd in &conf.startpost {
+                    Self::run_cmd(&cmd, id, name, duration_timeout, pid_table.clone());
+                }
             }
             None => return,
         }

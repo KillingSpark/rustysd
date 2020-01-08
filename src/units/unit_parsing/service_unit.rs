@@ -208,34 +208,22 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     };
 
     let stop = match stop {
-        Some(mut vec) => {
-            if vec.len() == 1 {
-                vec.remove(0).1
-            } else {
-                panic!("Stop had to many entries: {:?}", vec);
-            }
+        Some(vec) => {
+            map_tupels_to_second(vec)
         }
-        None => "".to_string(),
+        None => Vec::new(),
     };
     let startpre = match startpre {
-        Some(mut vec) => {
-            if vec.len() == 1 {
-                vec.remove(0).1
-            } else {
-                panic!("ExecStartPre had to many entries: {:?}", vec);
-            }
+        Some(vec) => {
+            map_tupels_to_second(vec)
         }
-        None => "".to_string(),
+        None => Vec::new(),
     };
     let startpost = match startpost {
-        Some(mut vec) => {
-            if vec.len() == 1 {
-                vec.remove(0).1
-            } else {
-                panic!("ExecStartPre had to many entries: {:?}", vec);
-            }
+        Some(vec) => {
+            map_tupels_to_second(vec)
         }
-        None => "".to_string(),
+        None => Vec::new(),
     };
 
     let restart = match restart {

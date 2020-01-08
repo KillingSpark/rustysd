@@ -83,9 +83,9 @@ fn test_service_parsing() {
     if let crate::units::UnitSpecialized::Service(srvc) = service.specialized {
         if let Some(conf) = srvc.service_config {
             assert_eq!(conf.exec, service_execstart);
-            assert_eq!(conf.startpre, service_execpre);
-            assert_eq!(conf.startpost, service_execpost);
-            assert_eq!(conf.stop, service_stop);
+            assert_eq!(conf.startpre, vec![service_execpre]);
+            assert_eq!(conf.startpost, vec![service_execpost]);
+            assert_eq!(conf.stop, vec![service_stop]);
             assert_eq!(
                 conf.sockets,
                 vec!["socket_name1".to_owned(), "socket_name2".to_owned()]
