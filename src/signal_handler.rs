@@ -11,7 +11,7 @@ pub fn handle_signals(
     notification_socket_path: std::path::PathBuf,
     eventfds: Vec<EventFd>,
 ) {
-    'outer: loop {
+    loop {
         // Pick up new signals
         for signal in signals.forever() {
             match signal as libc::c_int {
@@ -51,19 +51,32 @@ fn shutdown_sequence(run_info: ArcRuntimeInfo) {
     std::thread::spawn(move || {
         trace!("Shutting down");
         trace!("Get unit lock");
-        let unit_table_locked = run_info.unit_table.write().unwrap();
+
+        // Here we need to get the locks regardless of posions.
+        // At least try to shutdown as much as possible as cleanly as possible
+        let unit_table_locked = match run_info.unit_table.write() {
+            Ok(lock) => lock,
+            Err(err) => err.into_inner(),
+        };
+
         trace!("Kill all services");
         for (id, unit) in unit_table_locked.iter() {
             if id.0 != UnitIdKind::Service {
                 continue;
             }
             trace!("Lock to kill service unit: {}", id);
-            let unit_locked = &mut *unit.lock().unwrap();
+            let unit_locked = &mut *match unit.lock() {
+                Ok(lock) => lock,
+                Err(err) => err.into_inner(),
+            };
             match &mut unit_locked.specialized {
                 UnitSpecialized::Service(srvc) => {
                     {
                         trace!("Get status lock");
-                        let status_table_locked = run_info.status_table.write().unwrap();
+                        let status_table_locked = match run_info.status_table.write() {
+                            Ok(lock) => lock,
+                            Err(err) => err.into_inner(),
+                        };
                         trace!("Set service status: {}", unit_locked.conf.name());
                         let status = status_table_locked.get(&unit_locked.id).unwrap();
                         let mut status_locked = status.lock().unwrap();
@@ -84,7 +97,10 @@ fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                     }
                     {
                         trace!("Get status lock");
-                        let status_table_locked = run_info.status_table.write().unwrap();
+                        let status_table_locked = match run_info.status_table.write() {
+                            Ok(lock) => lock,
+                            Err(err) => err.into_inner(),
+                        };
                         trace!("Set service status: {}", unit_locked.conf.name());
                         let status = status_table_locked.get(&unit_locked.id).unwrap();
                         let mut status_locked = status.lock().unwrap();
@@ -106,21 +122,48 @@ fn shutdown_sequence(run_info: ArcRuntimeInfo) {
             }
 
             trace!("Lock to close socket unit: {}", id);
-            let unit_locked = &mut *unit.lock().unwrap();
+            let unit_locked = &mut *match unit.lock() {
+                Ok(lock) => lock,
+                Err(err) => err.into_inner(),
+            };
             match &mut unit_locked.specialized {
                 UnitSpecialized::Service(_) => {
                     // killed above
                 }
                 UnitSpecialized::Socket(sock) => {
-                    trace!("Close socket unit: {}", unit_locked.conf.name());
-                    match sock.close_all(
-                        unit_locked.conf.name(),
-                        &mut *run_info.fd_store.write().unwrap(),
-                    ) {
-                        Err(e) => error!("Error while closing sockets: {}", e),
-                        Ok(()) => {}
+                    {
+                        trace!("Get status lock");
+                        let status_table_locked = match run_info.status_table.write() {
+                            Ok(lock) => lock,
+                            Err(err) => err.into_inner(),
+                        };
+                        trace!("Set service status: {}", unit_locked.conf.name());
+                        let status = status_table_locked.get(&unit_locked.id).unwrap();
+                        let mut status_locked = status.lock().unwrap();
+                        *status_locked = UnitStatus::Stopping;
                     }
-                    trace!("Closed socket unit: {}", unit_locked.conf.name());
+                    {
+                        trace!("Close socket unit: {}", unit_locked.conf.name());
+                        match sock.close_all(
+                            unit_locked.conf.name(),
+                            &mut *run_info.fd_store.write().unwrap(),
+                        ) {
+                            Err(e) => error!("Error while closing sockets: {}", e),
+                            Ok(()) => {}
+                        }
+                        trace!("Closed socket unit: {}", unit_locked.conf.name());
+                    }
+                    {
+                        trace!("Get status lock");
+                        let status_table_locked = match run_info.status_table.write() {
+                            Ok(lock) => lock,
+                            Err(err) => err.into_inner(),
+                        };
+                        trace!("Set service status: {}", unit_locked.conf.name());
+                        let status = status_table_locked.get(&unit_locked.id).unwrap();
+                        let mut status_locked = status.lock().unwrap();
+                        *status_locked = UnitStatus::Stopping;
+                    }
                 }
                 UnitSpecialized::Target => {
                     // Nothing to do
