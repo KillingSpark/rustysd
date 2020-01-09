@@ -143,16 +143,17 @@ Requiring small changes / additions transparent to the other modules:
 * Patching unit definitions with dropin files
 * Socket options like MaxConnections=/KeepAlive=
 * Killing services properly. SigTerm/Kill/Hup/ executing the stop commands ..... (currently there is just a sigkill sent to the whole processgroup)
+* Recursively deactivating units
 * More socket types 
     1. Netlink is missing for example
     1. Abstract namespace for unix sockets (but thats linux specific anyways and rust stdlib doesnt support it.....)
 * Service type idle is missing (not even sure if its a good idea to support this)
 * A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
-    1. Killing is missing
-    2. Disabling of units is missing
-    3. A better UI than pretty-printed json is missing
+    * Killing is missing
+    * Disabling of units is missing
+    * A better UI than pretty-printed json is missing
 * Many of the missing features in feature-comparison.md are relatively simple issues
-* Checking exit codes of execprestart/execpoststart and oneshot services
+* Support the different allowed prefixed for executables in execstart(-pre/post)
 
 Unclear how much work it is:
 * Get all the meta-targets and default dependencies right
