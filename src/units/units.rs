@@ -218,7 +218,7 @@ impl Unit {
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
             }
             UnitSpecialized::Service(srvc) => {
-                srvc.kill(self.id, &self.conf.name(), pid_table);
+                srvc.kill(self.id, &self.conf.name(), pid_table)?;
             }
         }
         Ok(())
@@ -318,6 +318,7 @@ pub struct ServiceConfig {
     pub notifyaccess: NotifyKind,
     pub exec: String,
     pub stop: Vec<String>,
+    pub stoppost: Vec<String>,
     pub startpre: Vec<String>,
     pub startpost: Vec<String>,
     pub srcv_type: ServiceType,

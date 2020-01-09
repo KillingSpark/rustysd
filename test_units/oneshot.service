@@ -4,7 +4,7 @@ ExecStartPre= /bin/sleep 1
 ExecStartPost= /bin/sleep 1
 ExecStop = /bin/sleep 1
 Type= oneshot
-TimeoutStartSec= 0min 1s
+TimeoutStartSec= 0min 2s
 
 [Unit]
 Before= test2.service

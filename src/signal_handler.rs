@@ -64,12 +64,17 @@ pub fn handle_signals(
                                     *status_locked = UnitStatus::Stopping;
                                 }
                                 {
-                                    srvc.kill(
+                                    let kill_res = srvc.kill(
                                         unit_locked.id,
                                         &unit_locked.conf.name(),
                                         run_info.pid_table.clone(),
                                     );
-                                    trace!("Killed service unit: {}", unit_locked.conf.name());
+                                    match kill_res {
+                                        Ok(()) => {
+                                            trace!("Killed service unit: {}", unit_locked.conf.name());
+                                        }
+                                        Err(e) => error!("{}", e),
+                                    }
                                 }
                                 {
                                     trace!("Get status lock");

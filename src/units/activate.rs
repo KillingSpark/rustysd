@@ -40,7 +40,7 @@ fn activate_units_recursive(
                     // Thats ok
                 }
                 Err(e) => {
-                    panic!("Error while activating unit {}", e);
+                    error!("Error while activating unit {}", e);
                 }
             }
         });

@@ -105,6 +105,7 @@ fn parse_timeout(descr: &str) -> Timeout {
 fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingError> {
     let exec = section.remove("EXECSTART");
     let stop = section.remove("EXECSTOP");
+    let stoppost = section.remove("EXECSTOPPOST");
     let startpre = section.remove("EXECSTARTPRE");
     let startpost = section.remove("EXECSTARTPOST");
     let starttimeout = section.remove("TIMEOUTSTARTSEC");
@@ -213,6 +214,12 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         }
         None => Vec::new(),
     };
+    let stoppost = match stoppost {
+        Some(vec) => {
+            map_tupels_to_second(vec)
+        }
+        None => Vec::new(),
+    };
     let startpre = match startpre {
         Some(vec) => {
             map_tupels_to_second(vec)
@@ -277,6 +284,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         dbus_name,
         exec,
         stop,
+        stoppost,
         startpre,
         startpost,
         starttimeout,
