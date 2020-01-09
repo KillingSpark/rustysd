@@ -159,16 +159,16 @@ pub fn wait_for_service(
                                         "[FORK_PARENT] Did not find dbus name on bus: {}",
                                         dbus_name
                                     );
-                                    // TODO do something about that
+                                    return Err(format!("Timeout reached"));
                                 }
                             }
                         }
                         Err(e) => {
-                            error!("Error while waiting for dbus name: {}", e);
+                            return Err(format!("Error while waiting for dbus name: {}", e));
                         }
                     }
                 } else {
-                    error!("[FORK_PARENT] No busname given for service: {:?}", name);
+                    return Err(format!("[FORK_PARENT] No busname given for service: {:?}", name));
                 }
             }
         }
