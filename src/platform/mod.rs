@@ -24,9 +24,11 @@
 mod eventfd;
 mod subreaper;
 mod unix_common;
+mod drop_privileges;
 
 pub use eventfd::*;
 pub use subreaper::*;
+pub use drop_privileges::*;
 
 #[cfg(any(
     target_os = "freebsd",
