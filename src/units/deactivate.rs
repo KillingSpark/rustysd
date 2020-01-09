@@ -27,7 +27,7 @@ pub fn deactivate_unit(id_to_kill: UnitId, run_info: ArcRuntimeInfo) {
 }
 
 pub fn deactivate_units(ids_to_kill: Vec<UnitId>, run_info: ArcRuntimeInfo) {
-    //TODO killall services that require this service
+    //TODO deactivate all units that require these unit
     for id in ids_to_kill {
         deactivate_unit(id, run_info.clone());
     }

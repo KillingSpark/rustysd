@@ -214,13 +214,10 @@ impl Service {
         for part in &split[1..] {
             cmd.arg(part);
         }
-        // TODO alter this to use the stdout/err pipes after the fork
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.stdin(Stdio::null());
-
         trace!("Run {} for service: {}", cmd_str, name);
-        // TODO check return value
         let spawn_result = {
             let mut pid_table_locked = pid_table.lock().unwrap();
             let res = cmd.spawn();
@@ -237,54 +234,19 @@ impl Service {
                 trace!("Wait for {} for service: {}", cmd_str, name);
                 let wait_result: Result<(), String> =
                     match wait_for_helper_child(&mut child, pid_table.clone(), timeout) {
-                        WaitResult::Success(Err(e)) => {
-                            // This might also happen because it was collected by the signal_handler.
-                            // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
-                            // that has not been ported to rust
-                            let found = {
-                                let pid_table_locked = pid_table.lock().unwrap();
-                                if pid_table_locked
-                                    .contains_key(&nix::unistd::Pid::from_raw(child.id() as i32))
-                                {
-                                    // Got collected by the signal handler
-                                    // TODO collect return value in signal handler and check here
-                                    true
-                                } else {
-                                    false
-                                }
-                            };
-                            if !found {
-                                Err(format!(
-                                    "Error while waiting on {} for service {}: {}",
-                                    cmd_str, name, e
-                                ))
-                            } else {
-                                Ok(())
-                            }
-                            // TODO return error or something
+                        WaitResult::InTime(Err(e)) => {
+                            return Err(format!("error while waiting on {}: {}", cmd_str, e));
                         }
-                        WaitResult::Success(Ok(exitstatus)) => {
+                        WaitResult::InTime(Ok(exitstatus)) => {
                             trace!("success running {} for service: {}", cmd_str, name);
-                            if let Some(status) = exitstatus {
-                                if status.success() {
-                                    Ok(())
-                                } else {
-                                    Err(format!("return status: {:?}", status))
-                                }
-                            } else {
-                                // TODO clean this mess up. Store results in the pid table
-                                let _res = pid_table
-                                    .lock()
-                                    .unwrap()
-                                    .get(&nix::unistd::Pid::from_raw(child.id() as i32))
-                                    .unwrap();
+                            if exitstatus.success() {
                                 Ok(())
+                            } else {
+                                Err(format!("{} returned status: {:?}", cmd_str, exitstatus))
                             }
-                            // Happy
                         }
                         WaitResult::TimedOut => {
                             trace!("Timeout running {} for service: {}", cmd_str, name);
-                            // TODO handle timeout
                             let _ = child.kill();
                             Err(format!(
                                 "Timeout ({:?}) reached while running {} for service: {}",
@@ -345,7 +307,6 @@ impl Service {
                     return Ok(());
                 }
                 let timeout = self.get_stop_timeout();
-                // TODO handle return of false
                 let cmds = conf.stop.clone();
                 self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
             }
@@ -364,7 +325,6 @@ impl Service {
                     return Ok(());
                 }
                 let timeout = self.get_start_timeout();
-                // TODO handle return of false
                 let cmds = conf.startpre.clone();
                 let res = self
                     .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
@@ -392,7 +352,6 @@ impl Service {
                     return Ok(());
                 }
                 let timeout = self.get_start_timeout();
-                // TODO handle return of false
                 let cmds = conf.startpost.clone();
                 let res = self
                     .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
@@ -446,7 +405,6 @@ impl Service {
                     return Ok(());
                 }
                 let timeout = self.get_start_timeout();
-                // TODO handle return of false
                 let cmds = conf.stoppost.clone();
                 self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
             }
@@ -457,7 +415,7 @@ impl Service {
 
 enum WaitResult {
     TimedOut,
-    Success(std::io::Result<Option<crate::signal_handler::ChildTermination>>),
+    InTime(std::io::Result<crate::signal_handler::ChildTermination>),
 }
 
 /// Wait for the termination of a subprocess, with an optional timeout.
@@ -502,7 +460,7 @@ fn wait_for_helper_child(
                         PidEntry::HelperExited(_) => {
                             let entry_owned = pid_table_locked.remove(&pid).unwrap();
                             if let PidEntry::HelperExited(termination_owned) = entry_owned {
-                                return WaitResult::Success(Ok(Some(termination_owned)));
+                                return WaitResult::InTime(Ok(termination_owned));
                             }
                         }
                     }
