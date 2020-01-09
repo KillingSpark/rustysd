@@ -78,7 +78,7 @@ pub fn parse_service(
 fn parse_timeout(descr: &str) -> Timeout {
     if descr.to_uppercase() == "INFINITY" {
         Timeout::Infinity
-    }else{
+    } else {
         match descr.parse::<u64>() {
             Ok(secs) => Timeout::Duration(std::time::Duration::from_secs(secs)),
             Err(_) => {
@@ -86,13 +86,13 @@ fn parse_timeout(descr: &str) -> Timeout {
                 let split = descr.split(' ').collect::<Vec<_>>();
                 for t in &split {
                     if t.ends_with("min") {
-                        let mins = t[0..t.len()-3].parse::<u64>().unwrap();
+                        let mins = t[0..t.len() - 3].parse::<u64>().unwrap();
                         sum += mins * 60;
-                    }else if t.ends_with("hrs") {
-                        let hrs = t[0..t.len()-3].parse::<u64>().unwrap();
-                        sum += hrs * 60*60;
-                    }else if t.ends_with("s") {
-                        let secs = t[0..t.len()-1].parse::<u64>().unwrap();
+                    } else if t.ends_with("hrs") {
+                        let hrs = t[0..t.len() - 3].parse::<u64>().unwrap();
+                        sum += hrs * 60 * 60;
+                    } else if t.ends_with("s") {
+                        let secs = t[0..t.len() - 1].parse::<u64>().unwrap();
                         sum += secs;
                     }
                 }
@@ -209,27 +209,19 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     };
 
     let stop = match stop {
-        Some(vec) => {
-            map_tupels_to_second(vec)
-        }
+        Some(vec) => map_tupels_to_second(vec),
         None => Vec::new(),
     };
     let stoppost = match stoppost {
-        Some(vec) => {
-            map_tupels_to_second(vec)
-        }
+        Some(vec) => map_tupels_to_second(vec),
         None => Vec::new(),
     };
     let startpre = match startpre {
-        Some(vec) => {
-            map_tupels_to_second(vec)
-        }
+        Some(vec) => map_tupels_to_second(vec),
         None => Vec::new(),
     };
     let startpost = match startpost {
-        Some(vec) => {
-            map_tupels_to_second(vec)
-        }
+        Some(vec) => map_tupels_to_second(vec),
         None => Vec::new(),
     };
 

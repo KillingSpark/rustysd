@@ -288,7 +288,7 @@ pub enum ServiceType {
     Simple,
     Notify,
     Dbus,
-    OneShot
+    OneShot,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

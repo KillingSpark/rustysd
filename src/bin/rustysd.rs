@@ -26,7 +26,7 @@ fn move_to_new_session() -> bool {
     }
 }
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 fn remount_root_rw() {
     // TODO maybe need more flags
     let flags = nix::mount::MsFlags::MS_REMOUNT;
@@ -36,15 +36,14 @@ fn remount_root_rw() {
     nix::mount::mount(source, "/", fs_type, flags, data).unwrap();
 }
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 fn pid1_specific_setup() {
     if nix::unistd::getpid().as_raw() == 0 {
         remount_root_rw();
     }
 }
-#[cfg(not(target_os="linux"))]
-fn pid1_specific_setup() {
-}
+#[cfg(not(target_os = "linux"))]
+fn pid1_specific_setup() {}
 
 fn main() {
     pid1_specific_setup();

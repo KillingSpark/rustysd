@@ -42,7 +42,6 @@ fn start_service_with_filedescriptors(
     // 1. in fork execve the cmd with the args
     // 1. in parent set pid and return. Waiting will be done afterwards if necessary
 
-
     // make sure we have the lock that the child will need
     match nix::unistd::fork() {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
@@ -71,18 +70,21 @@ fn start_service_with_filedescriptors(
                     unreachable!();
                 }
             };
-            fork_child::after_fork_child(srvc, &name, fd_store, &notifications_path, stdout, stderr);
+            fork_child::after_fork_child(
+                srvc,
+                &name,
+                fd_store,
+                &notifications_path,
+                stdout,
+                stderr,
+            );
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),
     }
     Ok(())
 }
 
-pub fn start_service(
-    srvc: &mut Service,
-    name: &str,
-    fd_store: &FDStore,
-) -> Result<(), String> {
+pub fn start_service(srvc: &mut Service, name: &str, fd_store: &FDStore) -> Result<(), String> {
     if let Some(conf) = &srvc.service_config {
         if conf.accept {
             warn!("Inetd style accepting is not supported");

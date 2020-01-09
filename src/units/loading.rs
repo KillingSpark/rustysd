@@ -2,7 +2,10 @@ use crate::units::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub fn load_all_units(paths: &[PathBuf], base_id: &mut u64) -> Result<HashMap<UnitId, Unit>, ParsingError> {
+pub fn load_all_units(
+    paths: &[PathBuf],
+    base_id: &mut u64,
+) -> Result<HashMap<UnitId, Unit>, ParsingError> {
     let mut service_unit_table = HashMap::new();
     let mut socket_unit_table = HashMap::new();
     let mut target_unit_table = HashMap::new();
