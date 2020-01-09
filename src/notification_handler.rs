@@ -297,7 +297,6 @@ pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
 }
 
 pub fn handle_notification_message(msg: &str, srvc: &mut Service, name: &str) {
-    // TODO process notification content
     let split: Vec<_> = msg.split('=').collect();
     match split[0] {
         "STATUS" => {

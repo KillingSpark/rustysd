@@ -94,7 +94,7 @@ fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
     }
 }
 
-fn dup_fds(name: &str, sockets: Vec<RawFd>) {
+fn dup_fds(name: &str, sockets: Vec<RawFd>) -> Result<(), String> {
     // start at 3. 0,1,2 are stdin,stdout,stderr
     let file_desc_offset = 3;
     let mut fd_idx = 0;
@@ -105,7 +105,8 @@ fn dup_fds(name: &str, sockets: Vec<RawFd>) {
             //ignore output. newfd might already be closed.
             // TODO check for actual errors other than bad_fd
             let _ = nix::unistd::close(new_fd as i32);
-            let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32).unwrap();
+            let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32)
+                .map_err(|e| format!("Error while duping fd: {}", e))?;
             let _ = nix::unistd::close(old_fd as i32);
             actual_new_fd
         } else {
@@ -127,6 +128,7 @@ fn dup_fds(name: &str, sockets: Vec<RawFd>) {
         };
         fd_idx += 1;
     }
+    Ok(())
 }
 
 fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CString>) {
@@ -200,9 +202,9 @@ pub fn after_fork_child(
         names.extend(sock_names);
     }
 
-    eprintln!("[FORK_CHILD {}] FDs: {:?}", name, fds,);
-
-    dup_fds(name, fds);
+    if let Err(e) = dup_fds(name, fds) {
+        eprintln!("[FORK_CHILD {}]{}", name, e);
+    }
 
     setup_env_vars(names, notify_socket_env_var);
     let (cmd, args) = prepare_exec_args(srvc);

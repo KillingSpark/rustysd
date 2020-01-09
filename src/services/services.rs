@@ -79,13 +79,20 @@ impl Service {
                 // fast and inserting the new pid into the pid table
                 start_service(self, name.clone(), &*fd_store.read().unwrap())?;
                 if let Some(new_pid) = self.pid {
-                    pid_table_locked.insert(new_pid, PidEntry::Service(id));
-                    crate::platform::notify_event_fds(&eventfds);
+                    if let Some(conf) = &self.service_config {
+                        pid_table_locked.insert(new_pid, PidEntry::Service(id, conf.srcv_type));
+                        crate::platform::notify_event_fds(&eventfds);
+                    }
                 }
             }
             if let Some(sock) = &self.notifications {
                 let sock = sock.clone();
-                super::fork_parent::wait_for_service(self, name, &*sock.lock().unwrap())?;
+                super::fork_parent::wait_for_service(
+                    self,
+                    name,
+                    &*sock.lock().unwrap(),
+                    pid_table.clone(),
+                )?;
             }
             self.run_poststart(id, name, pid_table.clone())
                 .map_err(|e| {
@@ -229,7 +236,7 @@ impl Service {
             Ok(mut child) => {
                 trace!("Wait for {} for service: {}", cmd_str, name);
                 let wait_result: Result<(), String> =
-                    match wait_for_child(&mut child, pid_table.clone(), timeout) {
+                    match wait_for_helper_child(&mut child, pid_table.clone(), timeout) {
                         WaitResult::Success(Err(e)) => {
                             // This might also happen because it was collected by the signal_handler.
                             // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
@@ -458,7 +465,7 @@ enum WaitResult {
 /// This might also happen because it was collected by the signal_handler.
 /// This could be fixed by using the waitid() with WNOWAIT in the signal handler but
 /// that has not been ported to rust
-fn wait_for_child(
+fn wait_for_helper_child(
     child: &mut std::process::Child,
     pid_table: ArcMutPidTable,
     time_out: Option<std::time::Duration>,
@@ -477,7 +484,13 @@ fn wait_for_child(
             match pid_table_locked.get(&pid) {
                 Some(entry) => {
                     match entry {
-                        PidEntry::Service(_) => {
+                        PidEntry::OneshotExited(_) => {
+                            // Should never happen
+                            unreachable!(
+                            "Was waiting on helper process but pid got saved as PidEntry::OneshotExited"
+                        );
+                        }
+                        PidEntry::Service(_, _) => {
                             // Should never happen
                             unreachable!(
                             "Was waiting on helper process but pid got saved as PidEntry::Service"
@@ -486,9 +499,9 @@ fn wait_for_child(
                         PidEntry::Helper(_, _) => {
                             // Need to wait longer
                         }
-                        PidEntry::Exited(_) => {
+                        PidEntry::HelperExited(_) => {
                             let entry_owned = pid_table_locked.remove(&pid).unwrap();
-                            if let PidEntry::Exited(termination_owned) = entry_owned {
+                            if let PidEntry::HelperExited(termination_owned) = entry_owned {
                                 return WaitResult::Success(Ok(Some(termination_owned)));
                             }
                         }

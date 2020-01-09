@@ -84,9 +84,10 @@ pub fn lock_all(
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum PidEntry {
-    Service(UnitId),
+    Service(UnitId, ServiceType),
+    OneshotExited(crate::signal_handler::ChildTermination),
     Helper(UnitId, String),
-    Exited(crate::signal_handler::ChildTermination),
+    HelperExited(crate::signal_handler::ChildTermination),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
@@ -282,7 +283,7 @@ pub struct InstallConfig {
     pub required_by: Vec<String>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum ServiceType {
     Simple,
     Notify,

@@ -6,6 +6,7 @@ pub fn wait_for_service(
     srvc: &mut Service,
     name: &str,
     stream: &UnixDatagram,
+    pid_table: ArcMutPidTable,
 ) -> Result<(), String> {
     trace!(
         "[FORK_PARENT] Service: {} forked with pid: {}",
@@ -45,9 +46,8 @@ pub fn wait_for_service(
                     if let Some(duration_timeout) = duration_timeout {
                         let duration_elapsed = start_time.elapsed();
                         if duration_elapsed > duration_timeout {
-                            //TODO handle timeout correctly
                             trace!("[FORK_PARENT] Service {} notification timed out", name);
-                            break;
+                            return Err(format!("Timeout reached"));
                         } else {
                             let duration_till_timeout = duration_timeout - duration_elapsed;
                             stream
@@ -84,47 +84,44 @@ pub fn wait_for_service(
                     name
                 );
                 let mut counter = 1u64;
+                let pid = srvc.pid.unwrap();
                 loop {
                     if let Some(time_out) = duration_timeout {
                         if start_time.elapsed() >= time_out {
-                            //TODO handle timeout correctly
                             error!("oneshot service {} reached timeout", name);
-                            break;
+                            return Err(format!("Timeout reached"));
                         }
                     }
-                    let wait_flags = nix::sys::wait::WaitPidFlag::WNOHANG;
-                    let res = nix::sys::wait::waitpid(srvc.pid.unwrap(), Some(wait_flags));
-                    match res {
-                        Ok(exit_status) => match exit_status {
-                            nix::sys::wait::WaitStatus::Exited(_pid, _code) => {
-                                // Happy
-                                // TODO check exit codes
-                                return Ok(());
+                    {
+                        let mut pid_table_locked = pid_table.lock().unwrap();
+                        match pid_table_locked.get(&pid) {
+                            Some(entry) => {
+                                match entry {
+                                    PidEntry::Service(_, _) => {
+                                        // Still running. Wait more
+                                    }
+                                    PidEntry::OneshotExited(_) => {
+                                        trace!("End wait for {}", name);
+                                        let _entry_owned = pid_table_locked.remove(&pid).unwrap();
+                                        break;
+                                    }
+                                    PidEntry::Helper(_, _) => {
+                                        // Should never happen
+                                        unreachable!(
+                                            "Was waiting on oneshot process but pid got saved as PidEntry::Helper"
+                                        );
+                                    }
+                                    PidEntry::HelperExited(_) => {
+                                        // Should never happen
+                                        unreachable!(
+                                            "Was waiting on oneshot process but pid got saved as PidEntry::HelperExited"
+                                        );
+                                    }
+                                }
                             }
-                            nix::sys::wait::WaitStatus::Signaled(_pid, _signal, _dumped_core) => {
-                                // Happy
-                                // TODO check exit codes
-                                return Ok(());
-                            }
-                            nix::sys::wait::WaitStatus::StillAlive => {
-                                // Happy but need to wait longer
-                            }
-                            _ => {
-                                // Happy but need to wait longer, we dont care about other events like stop/continue of children
-                            }
-                        },
-                        Err(e) => {
-                            if let nix::Error::Sys(nix::errno::Errno::ECHILD) = e {
-                                // This might also happen because it was collected by the signal_handler.
-                                // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
-                                // that has not been ported to rust
-                                // in any case it probably means that the process has exited...
-                                return Ok(());
-                            } else {
-                                return Err(format!(
-                                    "Error while waiting on oneshot service {}: {}",
-                                    name, e
-                                ));
+                            None => {
+                                // Should not happen. Either there is an Helper entry oder a Exited entry
+                                unreachable!("No entry for child found")
                             }
                         }
                     }
@@ -147,14 +144,11 @@ pub fn wait_for_service(
                     trace!("[FORK_PARENT] Waiting for dbus name: {}", dbus_name);
                     let timeout = if let Some(dur) = duration_timeout {
                         dur
-                    }else{
+                    } else {
                         // TODO make timeout for dbus optional
                         std::time::Duration::from_secs(1_000_000)
                     };
-                    match crate::dbus_wait::wait_for_name_system_bus(
-                        &dbus_name,
-                        timeout,
-                    ) {
+                    match crate::dbus_wait::wait_for_name_system_bus(&dbus_name, timeout) {
                         Ok(res) => {
                             match res {
                                 crate::dbus_wait::WaitResult::Ok => {

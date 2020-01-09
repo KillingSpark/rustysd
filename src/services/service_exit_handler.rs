@@ -27,12 +27,20 @@ pub fn service_exit_handler(
     eventfds: &[EventFd],
 ) -> Result<(), String> {
     trace!("Exit handler with pid: {}", pid);
-    let srvc_id = {
+
+    // Handle exiting of helper processes and oneshot processes
+    {
         let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-        let entry = pid_table_locked.remove(&pid);
+        let entry = pid_table_locked.get(&pid);
         match entry {
             Some(entry) => match entry {
-                PidEntry::Service(id) => id,
+                PidEntry::Service(_id, srvctype) => {
+                    if *srvctype == ServiceType::OneShot {
+                        trace!("Save oneshot service as exited. PID: {}", pid);
+                        pid_table_locked.insert(pid, PidEntry::OneshotExited(code));
+                        return Ok(());
+                    }
+                }
                 PidEntry::Helper(_id, srvc_name) => {
                     trace!(
                         "Helper process for service: {} exited with: {:?}",
@@ -40,18 +48,48 @@ pub fn service_exit_handler(
                         code
                     );
                     // this will be collected by the thread that waits for the helper process to exit
-                    pid_table_locked.insert(pid, PidEntry::Exited(code));
+                    pid_table_locked.insert(pid, PidEntry::HelperExited(code));
                     return Ok(());
                 }
-                PidEntry::Exited(_) => {
+                PidEntry::HelperExited(_) => {
+                    // TODO is this sensibel? How do we handle this?
+                    error!("Pid exited that was already saved as exited");
+                    return Ok(());
+                }
+                PidEntry::OneshotExited(_) => {
                     // TODO is this sensibel? How do we handle this?
                     error!("Pid exited that was already saved as exited");
                     return Ok(());
                 }
             },
             None => {
-                warn!("All spawned processes should have a pid entry");
+                warn!(
+                    "All spawned processes should have a pid entry. This did not: {}",
+                    pid
+                );
                 return Ok(());
+            }
+        }
+    }
+
+    let srvc_id = {
+        let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
+        let entry = pid_table_locked.remove(&pid);
+        match entry {
+            Some(entry) => match entry {
+                PidEntry::Service(id, _) => id,
+                PidEntry::Helper(_id, _srvc_name) => {
+                    unreachable!();
+                }
+                PidEntry::HelperExited(_) => {
+                    unreachable!();
+                }
+                PidEntry::OneshotExited(_) => {
+                    unreachable!();
+                }
+            },
+            None => {
+                unreachable!();
             }
         }
     };
