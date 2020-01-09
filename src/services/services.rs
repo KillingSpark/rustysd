@@ -71,8 +71,7 @@ impl Service {
             trace!("Start service {}", name);
             super::prepare_service::prepare_service(self, name, &notification_socket_path)?;
 
-            self.run_prestart(id, name, pid_table.clone())
-                .map_err(|e| format!("Some prestart command failed for service {}: {}", name, e))?;
+            self.run_prestart(id, name, pid_table.clone())?;
             {
                 let mut pid_table_locked = pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
@@ -89,7 +88,9 @@ impl Service {
                 super::fork_parent::wait_for_service(self, name, &*sock.lock().unwrap())?;
             }
             self.run_poststart(id, name, pid_table.clone())
-                .map_err(|e| format!("Some poststart command failed for service {}: {}", name, e))?;
+                .map_err(|e| {
+                    format!("Some poststart command failed for service {}: {}", name, e)
+                })?;
             Ok(StartResult::Started)
         } else {
             trace!(
@@ -102,7 +103,7 @@ impl Service {
     }
 
     fn stop(&mut self, id: UnitId, name: &str, pid_table: ArcMutPidTable) -> Result<(), String> {
-        let res = self.run_stop_cmd(id, name, pid_table.clone());
+        let stop_res = self.run_stop_cmd(id, name, pid_table.clone());
         if let Some(proc_group) = self.process_group {
             match nix::sys::signal::kill(proc_group, nix::sys::signal::Signal::SIGKILL) {
                 Ok(_) => trace!("Success killing process group for service {}", name,),
@@ -113,11 +114,27 @@ impl Service {
         }
         self.pid = None;
         self.process_group = None;
-        if res.is_err() {
-            return res;
-        }
+        let poststop_res = self.run_poststop(id, name, pid_table.clone());
 
-        self.run_poststop(id, name, pid_table.clone())
+        if poststop_res.is_err() && stop_res.is_err() {
+            Err(format!(
+                "Errors while running both stop commands {} and poststop commands {}",
+                stop_res.err().unwrap(),
+                poststop_res.err().unwrap()
+            ))
+        } else if stop_res.is_err() {
+            Err(format!(
+                "Errors while running stop commands {}",
+                stop_res.err().unwrap()
+            ))
+        } else if poststop_res.is_err() {
+            Err(format!(
+                "Errors while running poststop commands {}",
+                poststop_res.err().unwrap()
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn kill(
@@ -226,7 +243,7 @@ impl Service {
                                 "Error while waiting on {} for service {}: {}",
                                 cmd_str, name, e
                             ))
-                        }else{
+                        } else {
                             Ok(())
                         }
                         // TODO return error or something
@@ -236,7 +253,7 @@ impl Service {
                         if let Some(status) = exitstatus {
                             if status.success() {
                                 Ok(())
-                            }else{
+                            } else {
                                 Err(format!("return status: {}", status))
                             }
                         } else {
@@ -254,7 +271,10 @@ impl Service {
                         trace!("Timeout running {} for service: {}", cmd_str, name);
                         // TODO handle timeout
                         let _ = child.kill();
-                        Err(format!("Timeout ({:?}) reached while running {} for service: {}", timeout, cmd_str, name))
+                        Err(format!(
+                            "Timeout ({:?}) reached while running {} for service: {}",
+                            timeout, cmd_str, name
+                        ))
                     }
                 };
                 {
@@ -331,7 +351,15 @@ impl Service {
                 let timeout = self.get_start_timeout();
                 // TODO handle return of false
                 let cmds = conf.startpre.clone();
-                self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+                let res = self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+                    .map_err(|e| {
+                        format!("Some prestart command failed for service {}: {}", name, e)
+                    });
+                if let Err(e) = res {
+                    Err(self.run_poststop_because_err(id, name, pid_table, e))
+                }else{
+                    Ok(())
+                }
             }
             None => return Ok(()),
         }
@@ -350,11 +378,48 @@ impl Service {
                 let timeout = self.get_start_timeout();
                 // TODO handle return of false
                 let cmds = conf.startpost.clone();
-                self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+                let res = self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+                    .map_err(|e| {
+                        format!("Some prestart command failed for service {}: {}", name, e)
+                    });
+                if let Err(e) = res {
+                    Err(self.run_poststop_because_err(id, name, pid_table, e))
+                }else{
+                    Ok(())
+                }
             }
             None => Ok(()),
         }
     }
+
+    fn run_poststop_because_err(
+        &mut self,
+        id: UnitId,
+        name: &str,
+        pid_table: ArcMutPidTable,
+        previous_err: String,
+    ) -> String {
+        let poststop_res = self.run_poststop(id, name, pid_table.clone());
+
+        if poststop_res.is_err() {
+            format!(
+                "Errors while running both commands {} and poststop commands {}",
+                previous_err,
+                poststop_res.err().unwrap()
+            )
+        } else if poststop_res.is_err() {
+            format!(
+                "Errors while running poststop commands {}",
+                poststop_res.err().unwrap()
+            )
+        } else {
+            format!(
+                "Errors while running commands {}",
+                poststop_res.err().unwrap()
+            )
+        }
+    }
+
     fn run_poststop(
         &mut self,
         id: UnitId,
