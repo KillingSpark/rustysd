@@ -23,18 +23,13 @@ pub fn handle_signals(
                             let eventfds_clone = eventfds.clone();
                             let run_info_clone = run_info.clone();
                             match val {
-                                Ok((pid, code)) => match services::service_exit_handler(
+                                Ok((pid, code)) => services::service_exit_handler_new_thread(
                                     pid,
                                     code,
                                     run_info_clone,
                                     note_sock_path,
-                                    &eventfds_clone,
-                                ) {
-                                    Ok(()) => { /* Happy */ }
-                                    Err(e) => {
-                                        error!("{}", e);
-                                    }
-                                },
+                                    eventfds_clone,
+                                ),
                                 Err(e) => {
                                     error!("{}", e);
                                 }
@@ -42,88 +37,8 @@ pub fn handle_signals(
                         });
                 }
                 signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
-                    trace!("Shutting down");
-                    trace!("Get unit lock");
-                    let unit_table_locked = run_info.unit_table.write().unwrap();
-                    trace!("Kill all services");
-                    for (id, unit) in unit_table_locked.iter() {
-                        if id.0 != UnitIdKind::Service {
-                            continue;
-                        }
-                        trace!("Lock to kill service unit: {}", id);
-                        let unit_locked = &mut *unit.lock().unwrap();
-                        match &mut unit_locked.specialized {
-                            UnitSpecialized::Service(srvc) => {
-                                {
-                                    trace!("Get status lock");
-                                    let status_table_locked =
-                                        run_info.status_table.write().unwrap();
-                                    trace!("Set service status: {}", unit_locked.conf.name());
-                                    let status = status_table_locked.get(&unit_locked.id).unwrap();
-                                    let mut status_locked = status.lock().unwrap();
-                                    *status_locked = UnitStatus::Stopping;
-                                }
-                                {
-                                    let kill_res = srvc.kill(
-                                        unit_locked.id,
-                                        &unit_locked.conf.name(),
-                                        run_info.pid_table.clone(),
-                                    );
-                                    match kill_res {
-                                        Ok(()) => {
-                                            trace!("Killed service unit: {}", unit_locked.conf.name());
-                                        }
-                                        Err(e) => error!("{}", e),
-                                    }
-                                }
-                                {
-                                    trace!("Get status lock");
-                                    let status_table_locked =
-                                        run_info.status_table.write().unwrap();
-                                    trace!("Set service status: {}", unit_locked.conf.name());
-                                    let status = status_table_locked.get(&unit_locked.id).unwrap();
-                                    let mut status_locked = status.lock().unwrap();
-                                    *status_locked = UnitStatus::Stopping;
-                                }
-                            }
-                            UnitSpecialized::Socket(_) => {
-                                // closed below
-                            }
-                            UnitSpecialized::Target => {
-                                // Nothing to do
-                            }
-                        }
-                    }
-                    trace!("Killed all services");
-                    for (id, unit) in unit_table_locked.iter() {
-                        if id.0 != UnitIdKind::Socket {
-                            continue;
-                        }
-
-                        trace!("Lock to close socket unit: {}", id);
-                        let unit_locked = &mut *unit.lock().unwrap();
-                        match &mut unit_locked.specialized {
-                            UnitSpecialized::Service(_) => {
-                                // killed above
-                            }
-                            UnitSpecialized::Socket(sock) => {
-                                trace!("Close socket unit: {}", unit_locked.conf.name());
-                                match sock.close_all(
-                                    unit_locked.conf.name(),
-                                    &mut *run_info.fd_store.write().unwrap(),
-                                ) {
-                                    Err(e) => error!("Error while closing sockets: {}", e),
-                                    Ok(()) => {}
-                                }
-                                trace!("Closed socket unit: {}", unit_locked.conf.name());
-                            }
-                            UnitSpecialized::Target => {
-                                // Nothing to do
-                            }
-                        }
-                    }
-                    println!("Received termination signal. Rustysd checking out.");
-                    break 'outer;
+                    println!("Received termination signal. Rustysd checking out");
+                    shutdown_sequence(run_info.clone());
                 }
 
                 _ => unreachable!(),
@@ -132,11 +47,106 @@ pub fn handle_signals(
     }
 }
 
-#[derive(Debug)]
+fn shutdown_sequence(run_info: ArcRuntimeInfo) {
+    std::thread::spawn(move || {
+        trace!("Shutting down");
+        trace!("Get unit lock");
+        let unit_table_locked = run_info.unit_table.write().unwrap();
+        trace!("Kill all services");
+        for (id, unit) in unit_table_locked.iter() {
+            if id.0 != UnitIdKind::Service {
+                continue;
+            }
+            trace!("Lock to kill service unit: {}", id);
+            let unit_locked = &mut *unit.lock().unwrap();
+            match &mut unit_locked.specialized {
+                UnitSpecialized::Service(srvc) => {
+                    {
+                        trace!("Get status lock");
+                        let status_table_locked = run_info.status_table.write().unwrap();
+                        trace!("Set service status: {}", unit_locked.conf.name());
+                        let status = status_table_locked.get(&unit_locked.id).unwrap();
+                        let mut status_locked = status.lock().unwrap();
+                        *status_locked = UnitStatus::Stopping;
+                    }
+                    {
+                        let kill_res = srvc.kill(
+                            unit_locked.id,
+                            &unit_locked.conf.name(),
+                            run_info.pid_table.clone(),
+                        );
+                        match kill_res {
+                            Ok(()) => {
+                                trace!("Killed service unit: {}", unit_locked.conf.name());
+                            }
+                            Err(e) => error!("{}", e),
+                        }
+                    }
+                    {
+                        trace!("Get status lock");
+                        let status_table_locked = run_info.status_table.write().unwrap();
+                        trace!("Set service status: {}", unit_locked.conf.name());
+                        let status = status_table_locked.get(&unit_locked.id).unwrap();
+                        let mut status_locked = status.lock().unwrap();
+                        *status_locked = UnitStatus::Stopping;
+                    }
+                }
+                UnitSpecialized::Socket(_) => {
+                    // closed below
+                }
+                UnitSpecialized::Target => {
+                    // Nothing to do
+                }
+            }
+        }
+        trace!("Killed all services");
+        for (id, unit) in unit_table_locked.iter() {
+            if id.0 != UnitIdKind::Socket {
+                continue;
+            }
+
+            trace!("Lock to close socket unit: {}", id);
+            let unit_locked = &mut *unit.lock().unwrap();
+            match &mut unit_locked.specialized {
+                UnitSpecialized::Service(_) => {
+                    // killed above
+                }
+                UnitSpecialized::Socket(sock) => {
+                    trace!("Close socket unit: {}", unit_locked.conf.name());
+                    match sock.close_all(
+                        unit_locked.conf.name(),
+                        &mut *run_info.fd_store.write().unwrap(),
+                    ) {
+                        Err(e) => error!("Error while closing sockets: {}", e),
+                        Ok(()) => {}
+                    }
+                    trace!("Closed socket unit: {}", unit_locked.conf.name());
+                }
+                UnitSpecialized::Target => {
+                    // Nothing to do
+                }
+            }
+        }
+        println!("Shutdown finished");
+        std::process::exit(0);
+    });
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum ChildTermination {
     Signal(nix::sys::signal::Signal),
     Exit(i32),
 }
+
+impl ChildTermination {
+    pub fn success(&self) -> bool {
+        match self {
+            ChildTermination::Signal(_) => false,
+            ChildTermination::Exit(code) => *code == 0,
+        }
+    }
+}
+
 type ChildIterElem = Result<(nix::unistd::Pid, ChildTermination), nix::Error>;
 
 fn get_next_exited_child() -> Option<ChildIterElem> {

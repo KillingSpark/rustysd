@@ -82,12 +82,11 @@ pub fn lock_all(
     units_locked
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum PidEntry {
     Service(UnitId),
-    Stop(UnitId),
-    PreStart(UnitId),
-    PostStart(UnitId),
+    Helper(UnitId, String),
+    Exited(crate::signal_handler::ChildTermination),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]

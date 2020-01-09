@@ -214,69 +214,77 @@ impl Service {
 
         trace!("Run {} for service: {}", cmd_str, name);
         // TODO check return value
-        match cmd.spawn() {
-            Ok(mut child) => {
-                pid_table.lock().unwrap().insert(
+        let spawn_result = {
+            let mut pid_table_locked = pid_table.lock().unwrap();
+            let res = cmd.spawn();
+            if let Ok(child) = &res {
+                pid_table_locked.insert(
                     nix::unistd::Pid::from_raw(child.id() as i32),
-                    PidEntry::Stop(id),
+                    PidEntry::Helper(id, name.to_string()),
                 );
+            }
+            res
+        };
+        match spawn_result {
+            Ok(mut child) => {
                 trace!("Wait for {} for service: {}", cmd_str, name);
-                let wait_result: Result<(), String> = match wait_for_child(&mut child, timeout) {
-                    WaitResult::Success(Err(e)) => {
-                        // This might also happen because it was collected by the signal_handler.
-                        // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
-                        // that has not been ported to rust
-                        let found = {
-                            let pid_table_locked = pid_table.lock().unwrap();
-                            if pid_table_locked
-                                .contains_key(&nix::unistd::Pid::from_raw(child.id() as i32))
-                            {
-                                // Got collected by the signal handler
-                                // TODO collect return value in signal handler and check here
-                                true
+                let wait_result: Result<(), String> =
+                    match wait_for_child(&mut child, pid_table.clone(), timeout) {
+                        WaitResult::Success(Err(e)) => {
+                            // This might also happen because it was collected by the signal_handler.
+                            // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
+                            // that has not been ported to rust
+                            let found = {
+                                let pid_table_locked = pid_table.lock().unwrap();
+                                if pid_table_locked
+                                    .contains_key(&nix::unistd::Pid::from_raw(child.id() as i32))
+                                {
+                                    // Got collected by the signal handler
+                                    // TODO collect return value in signal handler and check here
+                                    true
+                                } else {
+                                    false
+                                }
+                            };
+                            if !found {
+                                Err(format!(
+                                    "Error while waiting on {} for service {}: {}",
+                                    cmd_str, name, e
+                                ))
                             } else {
-                                false
-                            }
-                        };
-                        if !found {
-                            Err(format!(
-                                "Error while waiting on {} for service {}: {}",
-                                cmd_str, name, e
-                            ))
-                        } else {
-                            Ok(())
-                        }
-                        // TODO return error or something
-                    }
-                    WaitResult::Success(Ok(exitstatus)) => {
-                        trace!("success running {} for service: {}", cmd_str, name);
-                        if let Some(status) = exitstatus {
-                            if status.success() {
                                 Ok(())
-                            } else {
-                                Err(format!("return status: {}", status))
                             }
-                        } else {
-                            // TODO clean this mess up. Store results in the pid table
-                            let _res = pid_table
-                                .lock()
-                                .unwrap()
-                                .get(&nix::unistd::Pid::from_raw(child.id() as i32))
-                                .unwrap();
-                            Ok(())
+                            // TODO return error or something
                         }
-                        // Happy
-                    }
-                    WaitResult::TimedOut => {
-                        trace!("Timeout running {} for service: {}", cmd_str, name);
-                        // TODO handle timeout
-                        let _ = child.kill();
-                        Err(format!(
-                            "Timeout ({:?}) reached while running {} for service: {}",
-                            timeout, cmd_str, name
-                        ))
-                    }
-                };
+                        WaitResult::Success(Ok(exitstatus)) => {
+                            trace!("success running {} for service: {}", cmd_str, name);
+                            if let Some(status) = exitstatus {
+                                if status.success() {
+                                    Ok(())
+                                } else {
+                                    Err(format!("return status: {:?}", status))
+                                }
+                            } else {
+                                // TODO clean this mess up. Store results in the pid table
+                                let _res = pid_table
+                                    .lock()
+                                    .unwrap()
+                                    .get(&nix::unistd::Pid::from_raw(child.id() as i32))
+                                    .unwrap();
+                                Ok(())
+                            }
+                            // Happy
+                        }
+                        WaitResult::TimedOut => {
+                            trace!("Timeout running {} for service: {}", cmd_str, name);
+                            // TODO handle timeout
+                            let _ = child.kill();
+                            Err(format!(
+                                "Timeout ({:?}) reached while running {} for service: {}",
+                                timeout, cmd_str, name
+                            ))
+                        }
+                    };
                 {
                     use std::io::Read;
                     if let Some(stream) = &mut child.stderr {
@@ -351,13 +359,14 @@ impl Service {
                 let timeout = self.get_start_timeout();
                 // TODO handle return of false
                 let cmds = conf.startpre.clone();
-                let res = self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+                let res = self
+                    .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
                     .map_err(|e| {
                         format!("Some prestart command failed for service {}: {}", name, e)
                     });
                 if let Err(e) = res {
                     Err(self.run_poststop_because_err(id, name, pid_table, e))
-                }else{
+                } else {
                     Ok(())
                 }
             }
@@ -378,13 +387,14 @@ impl Service {
                 let timeout = self.get_start_timeout();
                 // TODO handle return of false
                 let cmds = conf.startpost.clone();
-                let res = self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+                let res = self
+                    .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
                     .map_err(|e| {
                         format!("Some prestart command failed for service {}: {}", name, e)
                     });
                 if let Err(e) = res {
                     Err(self.run_poststop_because_err(id, name, pid_table, e))
-                }else{
+                } else {
                     Ok(())
                 }
             }
@@ -403,7 +413,7 @@ impl Service {
 
         if poststop_res.is_err() {
             format!(
-                "Errors while running both commands {} and poststop commands {}",
+                "Errors while running both helper commands {} and poststop commands {}",
                 previous_err,
                 poststop_res.err().unwrap()
             )
@@ -413,10 +423,7 @@ impl Service {
                 poststop_res.err().unwrap()
             )
         } else {
-            format!(
-                "Errors while running commands {}",
-                poststop_res.err().unwrap()
-            )
+            format!("Errors while running helper commands {}", previous_err)
         }
     }
 
@@ -443,7 +450,7 @@ impl Service {
 
 enum WaitResult {
     TimedOut,
-    Success(std::io::Result<Option<std::process::ExitStatus>>),
+    Success(std::io::Result<Option<crate::signal_handler::ChildTermination>>),
 }
 
 /// Wait for the termination of a subprocess, with an optional timeout.
@@ -453,8 +460,10 @@ enum WaitResult {
 /// that has not been ported to rust
 fn wait_for_child(
     child: &mut std::process::Child,
+    pid_table: ArcMutPidTable,
     time_out: Option<std::time::Duration>,
 ) -> WaitResult {
+    let pid = nix::unistd::Pid::from_raw(child.id() as i32);
     let mut counter = 1u64;
     let start_time = std::time::Instant::now();
     loop {
@@ -463,21 +472,32 @@ fn wait_for_child(
                 return WaitResult::TimedOut;
             }
         }
-        match child.try_wait() {
-            Err(e) => {
-                // This might also happen because it was collected by the signal_handler.
-                // This could be fixed by using the waitid() with WNOWAIT in the signal handler but
-                // that has not been ported to rust
-
-                // in any case it probably means that the process has exited...
-                return WaitResult::Success(Err(e));
-            }
-            Ok(Some(x)) => {
-                // Happy
-                return WaitResult::Success(Ok(Some(x)));
-            }
-            Ok(None) => {
-                // Happy but need to wait longer
+        {
+            let mut pid_table_locked = pid_table.lock().unwrap();
+            match pid_table_locked.get(&pid) {
+                Some(entry) => {
+                    match entry {
+                        PidEntry::Service(_) => {
+                            // Should never happen
+                            unreachable!(
+                            "Was waiting on helper process but pid got saved as PidEntry::Service"
+                        );
+                        }
+                        PidEntry::Helper(_, _) => {
+                            // Need to wait longer
+                        }
+                        PidEntry::Exited(_) => {
+                            let entry_owned = pid_table_locked.remove(&pid).unwrap();
+                            if let PidEntry::Exited(termination_owned) = entry_owned {
+                                return WaitResult::Success(Ok(Some(termination_owned)));
+                            }
+                        }
+                    }
+                }
+                None => {
+                    // Should not happen. Either there is an Helper entry oder a Exited entry
+                    unreachable!("No entry for child found")
+                }
             }
         }
         // exponential backoff to get low latencies for fast processes

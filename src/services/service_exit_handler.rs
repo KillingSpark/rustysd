@@ -3,6 +3,22 @@ use crate::signal_handler::ChildTermination;
 use crate::units::*;
 use std::sync::Arc;
 
+pub fn service_exit_handler_new_thread(
+    pid: nix::unistd::Pid,
+    code: ChildTermination,
+    run_info: ArcRuntimeInfo,
+    notification_socket_path: std::path::PathBuf,
+    eventfds: Vec<EventFd>,
+) {
+    std::thread::spawn(move || {
+        if let Err(e) =
+            service_exit_handler(pid, code, run_info, notification_socket_path, &eventfds)
+        {
+            error!("{}", e);
+        }
+    });
+}
+
 pub fn service_exit_handler(
     pid: nix::unistd::Pid,
     code: ChildTermination,
@@ -12,63 +28,24 @@ pub fn service_exit_handler(
 ) -> Result<(), String> {
     trace!("Exit handler with pid: {}", pid);
     let srvc_id = {
-        let unit_table_locked = run_info.unit_table.read().unwrap();
-        let entry = {
-            let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-            pid_table_locked.get(&pid).map(|x| {
-                let y: PidEntry = *x;
-                y
-            })
-        };
+        let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
+        let entry = pid_table_locked.remove(&pid);
         match entry {
             Some(entry) => match entry {
                 PidEntry::Service(id) => id,
-                PidEntry::Stop(id) => {
+                PidEntry::Helper(_id, srvc_name) => {
                     trace!(
-                        "Stop process for service: {} exited with: {:?}",
-                        unit_table_locked
-                            .get(&id)
-                            .unwrap()
-                            .lock()
-                            .unwrap()
-                            .conf
-                            .name(),
+                        "Helper process for service: {} exited with: {:?}",
+                        srvc_name,
                         code
                     );
-                    let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-                    pid_table_locked.remove(&pid);
+                    // this will be collected by the thread that waits for the helper process to exit
+                    pid_table_locked.insert(pid, PidEntry::Exited(code));
                     return Ok(());
                 }
-                PidEntry::PreStart(id) => {
-                    trace!(
-                        "PreStart process for service: {} exited with: {:?}",
-                        unit_table_locked
-                            .get(&id)
-                            .unwrap()
-                            .lock()
-                            .unwrap()
-                            .conf
-                            .name(),
-                        code
-                    );
-                    let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-                    pid_table_locked.remove(&pid);
-                    return Ok(());
-                }
-                PidEntry::PostStart(id) => {
-                    trace!(
-                        "PostStart process for service: {} exited with: {:?}",
-                        unit_table_locked
-                            .get(&id)
-                            .unwrap()
-                            .lock()
-                            .unwrap()
-                            .conf
-                            .name(),
-                        code
-                    );
-                    let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
-                    pid_table_locked.remove(&pid);
+                PidEntry::Exited(_) => {
+                    // TODO is this sensibel? How do we handle this?
+                    error!("Pid exited that was already saved as exited");
                     return Ok(());
                 }
             },
