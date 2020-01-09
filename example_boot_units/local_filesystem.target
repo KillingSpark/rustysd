@@ -1,0 +1,5 @@
+[Unit]
+Description= All local filesystems are mounted before this target is started. Network shares will be mounted later.
+
+[Install]
+RequiredBy=default.target

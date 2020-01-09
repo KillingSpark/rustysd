@@ -1,0 +1,5 @@
+[Unit]
+Description= All getty instances have been started before this target is reached
+
+[Install]
+RequiredBy=default.target

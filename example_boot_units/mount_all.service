@@ -1,0 +1,10 @@
+[Unit]
+Description= Mount all files in /etc/fstab
+
+[Service]
+Type= oneshot
+ExecStart= /sbin/mount -a
+
+
+[Install]
+WantedBy= local_filesystem.target
