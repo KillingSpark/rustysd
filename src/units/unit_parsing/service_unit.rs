@@ -29,8 +29,11 @@ pub fn parse_service(
 
     let service_config = if let Some(service_config) = service_config {
         service_config
-    }else{
-        return Err(ParsingError::from(format!("Service unit {:?} did not contain a service section", path)));
+    } else {
+        return Err(ParsingError::from(format!(
+            "Service unit {:?} did not contain a service section",
+            path
+        )));
     };
 
     Ok(Unit {
