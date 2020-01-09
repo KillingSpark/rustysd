@@ -2,7 +2,7 @@
 Description= Start getty on /dev/tty1
 
 [Service]
-ExecStart=-/sbin/agetty -o '-p -- \\u' /dev/tty1
+ExecStart=/sbin/agetty -o '-p -- \\u' /dev/tty1
 Type=simple
 Restart=always
 
