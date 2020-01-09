@@ -8,10 +8,7 @@ fn start_service_with_filedescriptors(
     fd_store: &FDStore,
 ) -> Result<(), String> {
     // check if executable even exists
-    let split: Vec<&str> = match &srvc.service_config {
-        Some(conf) => conf.exec.split(' ').collect(),
-        None => unreachable!(),
-    };
+    let split: Vec<&str> = srvc.service_config.exec.split(' ').collect();
 
     let cmd = std::path::PathBuf::from(split[0]);
     if !cmd.exists() {
@@ -85,16 +82,12 @@ fn start_service_with_filedescriptors(
 }
 
 pub fn start_service(srvc: &mut Service, name: &str, fd_store: &FDStore) -> Result<(), String> {
-    if let Some(conf) = &srvc.service_config {
-        if conf.accept {
-            warn!("Inetd style accepting is not supported");
-            Err("Inetd style accepting is not supported".into())
-        } else {
-            start_service_with_filedescriptors(srvc, name, fd_store)?;
-            srvc.runtime_info.up_since = Some(std::time::Instant::now());
-            Ok(())
-        }
+    if srvc.service_config.accept {
+        warn!("Inetd style accepting is not supported");
+        Err("Inetd style accepting is not supported".into())
     } else {
-        unreachable!();
+        start_service_with_filedescriptors(srvc, name, fd_store)?;
+        srvc.runtime_info.up_since = Some(std::time::Instant::now());
+        Ok(())
     }
 }

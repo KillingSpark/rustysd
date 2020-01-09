@@ -96,9 +96,7 @@ pub fn insert_new_unit(
             names_needed.extend(sock.services.iter().cloned());
         }
         if let units::UnitSpecialized::Service(srvc) = &new_unit.specialized {
-            if let Some(conf) = &srvc.service_config {
-                names_needed.extend(conf.sockets.iter().cloned());
-            }
+            names_needed.extend(srvc.service_config.sockets.iter().cloned());
         }
         let mut names_needed: std::collections::HashMap<_, _> =
             names_needed.iter().map(|name| (name, ())).collect();

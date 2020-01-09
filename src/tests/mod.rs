@@ -81,18 +81,14 @@ fn test_service_parsing() {
         panic!("No install config found, but there should be one");
     }
     if let crate::units::UnitSpecialized::Service(srvc) = service.specialized {
-        if let Some(conf) = srvc.service_config {
-            assert_eq!(conf.exec, service_execstart);
-            assert_eq!(conf.startpre, vec![service_execpre]);
-            assert_eq!(conf.startpost, vec![service_execpost]);
-            assert_eq!(conf.stop, vec![service_stop]);
-            assert_eq!(
-                conf.sockets,
-                vec!["socket_name1".to_owned(), "socket_name2".to_owned()]
-            );
-        } else {
-            panic!("No service config found, but there should be one");
-        }
+        assert_eq!(srvc.service_config.exec, service_execstart);
+        assert_eq!(srvc.service_config.startpre, vec![service_execpre]);
+        assert_eq!(srvc.service_config.startpost, vec![service_execpost]);
+        assert_eq!(srvc.service_config.stop, vec![service_stop]);
+        assert_eq!(
+            srvc.service_config.sockets,
+            vec!["socket_name1".to_owned(), "socket_name2".to_owned()]
+        );
     } else {
         panic!("Not a service, but it should be");
     }

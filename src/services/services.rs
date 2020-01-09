@@ -16,7 +16,7 @@ pub struct ServiceRuntimeInfo {
 #[derive(Debug)]
 pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
-    pub service_config: Option<ServiceConfig>,
+    pub service_config: ServiceConfig,
 
     pub socket_names: Vec<String>,
 
@@ -79,10 +79,11 @@ impl Service {
                 // fast and inserting the new pid into the pid table
                 start_service(self, name.clone(), &*fd_store.read().unwrap())?;
                 if let Some(new_pid) = self.pid {
-                    if let Some(conf) = &self.service_config {
-                        pid_table_locked.insert(new_pid, PidEntry::Service(id, conf.srcv_type));
-                        crate::platform::notify_event_fds(&eventfds);
-                    }
+                    pid_table_locked.insert(
+                        new_pid,
+                        PidEntry::Service(id, self.service_config.srcv_type),
+                    );
+                    crate::platform::notify_event_fds(&eventfds);
                 }
             }
             if let Some(sock) = &self.notifications {
@@ -153,51 +154,41 @@ impl Service {
         self.stop(id, name, pid_table)
     }
 
-    fn get_start_timeout(&self) -> Option<std::time::Duration> {
-        match &self.service_config {
-            Some(conf) => {
-                if let Some(timeout) = &conf.starttimeout {
-                    match timeout {
-                        Timeout::Duration(dur) => Some(*dur),
-                        Timeout::Infinity => None,
-                    }
-                } else {
-                    if let Some(timeout) = &conf.generaltimeout {
-                        match timeout {
-                            Timeout::Duration(dur) => Some(*dur),
-                            Timeout::Infinity => None,
-                        }
-                    } else {
-                        // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                        None
-                    }
-                }
+    pub fn get_start_timeout(&self) -> Option<std::time::Duration> {
+        if let Some(timeout) = &self.service_config.starttimeout {
+            match timeout {
+                Timeout::Duration(dur) => Some(*dur),
+                Timeout::Infinity => None,
             }
-            None => None,
+        } else {
+            if let Some(timeout) = &self.service_config.generaltimeout {
+                match timeout {
+                    Timeout::Duration(dur) => Some(*dur),
+                    Timeout::Infinity => None,
+                }
+            } else {
+                // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                None
+            }
         }
     }
 
     fn get_stop_timeout(&self) -> Option<std::time::Duration> {
-        match &self.service_config {
-            Some(conf) => {
-                if let Some(timeout) = &conf.stoptimeout {
-                    match timeout {
-                        Timeout::Duration(dur) => Some(*dur),
-                        Timeout::Infinity => None,
-                    }
-                } else {
-                    if let Some(timeout) = &conf.generaltimeout {
-                        match timeout {
-                            Timeout::Duration(dur) => Some(*dur),
-                            Timeout::Infinity => None,
-                        }
-                    } else {
-                        // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                        None
-                    }
-                }
+        if let Some(timeout) = &self.service_config.stoptimeout {
+            match timeout {
+                Timeout::Duration(dur) => Some(*dur),
+                Timeout::Infinity => None,
             }
-            None => None,
+        } else {
+            if let Some(timeout) = &self.service_config.generaltimeout {
+                match timeout {
+                    Timeout::Duration(dur) => Some(*dur),
+                    Timeout::Infinity => None,
+                }
+            } else {
+                // TODO add default timeout if neither starttimeout nor generaltimeout was set
+                None
+            }
         }
     }
 
@@ -301,17 +292,12 @@ impl Service {
         name: &str,
         pid_table: ArcMutPidTable,
     ) -> Result<(), String> {
-        match &self.service_config {
-            Some(conf) => {
-                if conf.stop.is_empty() {
-                    return Ok(());
-                }
-                let timeout = self.get_stop_timeout();
-                let cmds = conf.stop.clone();
-                self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
-            }
-            None => Ok(()),
+        if self.service_config.stop.is_empty() {
+            return Ok(());
         }
+        let timeout = self.get_stop_timeout();
+        let cmds = self.service_config.stop.clone();
+        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
     }
     fn run_prestart(
         &mut self,
@@ -319,25 +305,18 @@ impl Service {
         name: &str,
         pid_table: ArcMutPidTable,
     ) -> Result<(), String> {
-        match &self.service_config {
-            Some(conf) => {
-                if conf.startpre.is_empty() {
-                    return Ok(());
-                }
-                let timeout = self.get_start_timeout();
-                let cmds = conf.startpre.clone();
-                let res = self
-                    .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
-                    .map_err(|e| {
-                        format!("Some prestart command failed for service {}: {}", name, e)
-                    });
-                if let Err(e) = res {
-                    Err(self.run_poststop_because_err(id, name, pid_table, e))
-                } else {
-                    Ok(())
-                }
-            }
-            None => return Ok(()),
+        if self.service_config.startpre.is_empty() {
+            return Ok(());
+        }
+        let timeout = self.get_start_timeout();
+        let cmds = self.service_config.startpre.clone();
+        let res = self
+            .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+            .map_err(|e| format!("Some prestart command failed for service {}: {}", name, e));
+        if let Err(e) = res {
+            Err(self.run_poststop_because_err(id, name, pid_table, e))
+        } else {
+            Ok(())
         }
     }
     fn run_poststart(
@@ -346,25 +325,18 @@ impl Service {
         name: &str,
         pid_table: ArcMutPidTable,
     ) -> Result<(), String> {
-        match &self.service_config {
-            Some(conf) => {
-                if conf.startpost.is_empty() {
-                    return Ok(());
-                }
-                let timeout = self.get_start_timeout();
-                let cmds = conf.startpost.clone();
-                let res = self
-                    .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
-                    .map_err(|e| {
-                        format!("Some prestart command failed for service {}: {}", name, e)
-                    });
-                if let Err(e) = res {
-                    Err(self.run_poststop_because_err(id, name, pid_table, e))
-                } else {
-                    Ok(())
-                }
-            }
-            None => Ok(()),
+        if self.service_config.startpost.is_empty() {
+            return Ok(());
+        }
+        let timeout = self.get_start_timeout();
+        let cmds = self.service_config.startpost.clone();
+        let res = self
+            .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+            .map_err(|e| format!("Some prestart command failed for service {}: {}", name, e));
+        if let Err(e) = res {
+            Err(self.run_poststop_because_err(id, name, pid_table, e))
+        } else {
+            Ok(())
         }
     }
 
@@ -399,17 +371,12 @@ impl Service {
         name: &str,
         pid_table: ArcMutPidTable,
     ) -> Result<(), String> {
-        match &self.service_config {
-            Some(conf) => {
-                if conf.startpost.is_empty() {
-                    return Ok(());
-                }
-                let timeout = self.get_start_timeout();
-                let cmds = conf.stoppost.clone();
-                self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
-            }
-            None => Ok(()),
+        if self.service_config.startpost.is_empty() {
+            return Ok(());
         }
+        let timeout = self.get_start_timeout();
+        let cmds = self.service_config.stoppost.clone();
+        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
     }
 }
 

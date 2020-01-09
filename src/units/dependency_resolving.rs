@@ -389,24 +389,22 @@ pub fn apply_sockets_to_services(
                     }
 
                     // add sockets to services that specify that the socket belongs to them
-                    if let Some(srvc_conf) = &srvc.service_config {
-                        if srvc_conf.sockets.contains(&sock_unit.conf.name())
-                            && !srvc.socket_names.contains(&sock_unit.conf.name())
-                        {
-                            trace!(
-                                "add socket: {} to service: {}",
-                                sock_unit.conf.name(),
-                                srvc_unit.conf.name()
-                            );
-                            srvc.socket_names.push(sock_unit.conf.name());
-                            add_sock_srvc_relations(
-                                srvc_unit.id,
-                                &mut srvc_unit.install,
-                                sock_unit.id,
-                                &mut sock_unit.install,
-                            );
-                            counter += 1;
-                        }
+                    if srvc.service_config.sockets.contains(&sock_unit.conf.name())
+                        && !srvc.socket_names.contains(&sock_unit.conf.name())
+                    {
+                        trace!(
+                            "add socket: {} to service: {}",
+                            sock_unit.conf.name(),
+                            srvc_unit.conf.name()
+                        );
+                        srvc.socket_names.push(sock_unit.conf.name());
+                        add_sock_srvc_relations(
+                            srvc_unit.id,
+                            &mut srvc_unit.install,
+                            sock_unit.id,
+                            &mut sock_unit.install,
+                        );
+                        counter += 1;
                     }
                 }
             }

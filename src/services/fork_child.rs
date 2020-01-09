@@ -132,10 +132,7 @@ fn dup_fds(name: &str, sockets: Vec<RawFd>) -> Result<(), String> {
 }
 
 fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CString>) {
-    let split: Vec<&str> = match &srvc.service_config {
-        Some(conf) => conf.exec.split(' ').collect(),
-        None => unreachable!(),
-    };
+    let split: Vec<&str> = srvc.service_config.exec.split(' ').collect();
 
     let cmd = std::ffi::CString::new(split[0]).unwrap();
     let mut args = Vec::new();

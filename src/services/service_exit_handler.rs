@@ -117,13 +117,9 @@ pub fn service_exit_handler(
                 code
             );
 
-            if let Some(conf) = &srvc.service_config {
-                if conf.restart == ServiceRestart::Always {
-                    let sockets = srvc.socket_names.clone();
-                    (name, sockets, true)
-                } else {
-                    (name, Vec::new(), false)
-                }
+            if srvc.service_config.restart == ServiceRestart::Always {
+                let sockets = srvc.socket_names.clone();
+                (name, sockets, true)
             } else {
                 (name, Vec::new(), false)
             }

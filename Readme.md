@@ -139,6 +139,7 @@ Requiring bigger changes or seem complicated:
 * The rest of the sd_notify API (with storing filedescriptors and such)
 
 Requiring small changes / additions transparent to the other modules:
+* prune sockets that are only pulled in  because they are referenced by sockets.target 
 * Change user to drop privileges
 * Patching unit definitions with dropin files
 * Socket options like MaxConnections=/KeepAlive=
