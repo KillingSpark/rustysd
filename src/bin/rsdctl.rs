@@ -27,7 +27,11 @@ fn main() {
         return;
     }
 
-    let addr = args.remove(0);
+    let addr = if std::env::var("RSDCTL_ADDR").is_ok() {
+        std::env::var("RSDCTL_ADDR").unwrap()
+    } else {
+        args.remove(0)
+    };
     let args = args;
 
     let params = if args.len() == 2 {
