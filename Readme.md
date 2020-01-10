@@ -89,7 +89,7 @@ For an in-depth comparison of systemd and rustysd see the feature-comparison.md 
 It currently is somewhat pessimistic, I will work on improving the comparison of the features rustysd actually does support (see below for a list of supported features).
 
 ### General features
-
+Of rustysd itself
 * Parsing of service files (a subset of the settings are recognized)
 * Parsing of socket files (a subset of the settings are recognized)
 * Ordering of services according to the before/after relations
@@ -104,7 +104,11 @@ It currently is somewhat pessimistic, I will work on improving the comparison of
 * Send SIGKILL to whole processgroup when killing a service
 * Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
 * Pruning the set of loaded units to only the needed ones to reach the target unit
+
+With the control interface (see rsdctl) 
 * Adding new units while running
+* Restarting units
+* Stopping units
 
 ### Optional build features
 There are some features behind flags because they are either platform dependent or not necessarily needed for most of the use-cases
@@ -150,7 +154,6 @@ Requiring small changes / additions transparent to the other modules:
     1. Abstract namespace for unix sockets (but thats linux specific anyways and rust stdlib doesnt support it.....)
 * Service type idle is missing (not even sure if its a good idea to support this)
 * A systemctl equivalent to control/query rustysd (there is a small jsonrpc2 API but that might change again)
-    * Killing is missing
     * Disabling of units is missing
     * A better UI than pretty-printed json is missing
 * Many of the missing features in feature-comparison.md are relatively simple issues
