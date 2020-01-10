@@ -189,7 +189,6 @@ fn find_unit_with_name(unit_name: &str, unit_table_locked: &UnitTable) -> Option
         .values()
         .filter(|unit| {
             let name = unit.lock().unwrap().conf.name();
-            trace!("Name: {}", name);
             unit_name.starts_with(&name) && unit.lock().unwrap().is_service()
         })
         .cloned()
@@ -211,7 +210,6 @@ fn find_units_with_pattern(
         .values()
         .filter(|unit| {
             let name = unit.lock().unwrap().conf.name();
-            trace!("Name: {}", name);
             name_pattern.starts_with(&name) && unit.lock().unwrap().is_service()
         })
         .cloned()
