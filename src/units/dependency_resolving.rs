@@ -352,7 +352,7 @@ fn add_sock_srvc_relations(
     srvc_install.after.push(sock_id);
     srvc_install.requires.push(sock_id);
     sock_install.before.push(srvc_id);
-    srvc_install.required_by.push(sock_id);
+    sock_install.required_by.push(srvc_id);
 }
 
 pub fn apply_sockets_to_services(
