@@ -105,7 +105,7 @@ Of rustysd itself
 * Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
 * Pruning the set of loaded units to only the needed ones to reach the target unit
 
-With the control interface (see rsdctl) 
+With the control interface (see rsdctl, and the mod.rs doc int the control module for a description of the jsonrpc API) 
 * Adding new units while running
 * Restarting units
 * Stopping units
