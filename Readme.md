@@ -43,11 +43,11 @@ What is explicitly in scope of this project
 1. Kill services that have dependencies on failed services
 
 What is explicitly out of scope (for now, this project is still very young):
-1. Timers
-1. Mounts
-1. Device
-1. Path activation
-1. Scopes
+1. Timers (Cron should do fine for 99% of usecases)
+1. Mounts (It is actually useful to have these as units but I don't think the gains outweigh the added complexity)
+1. Device (Same argument as for Mount)
+1. Path activation (Might get included.)
+1. Scopes (Nope. If you start processes outside of rustysd you need to manage them yourself. Maybe a second instance of rustysd? ;))
 1. Slices (this might be added as it is fairly important if you are not running inside of a container)
 
 [![Gitter](https://badges.gitter.im/rustysd/community.svg)](https://gitter.im/rustysd/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
