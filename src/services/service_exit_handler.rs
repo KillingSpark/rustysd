@@ -127,6 +127,16 @@ pub fn service_exit_handler(
             (name, Vec::new(), false)
         }
     };
+
+    let restart_unit = if restart_unit {
+        let status_table_locked = run_info.status_table.read().unwrap();
+        let status_locked = &*status_table_locked.get(&srvc_id).unwrap().lock().unwrap();
+        // if thats not the case this service got killed by something else so dont interfere
+        *status_locked == UnitStatus::Started
+    } else {
+        false
+    };
+
     if restart_unit {
         {
             // tell socket activation to listen to these sockets again
@@ -147,13 +157,8 @@ pub fn service_exit_handler(
             Arc::new(eventfds.to_vec()),
         )?;
     } else {
-        let unit_locked = unit.lock().unwrap();
-        trace!(
-            "Killing all services requiring service {}: {:?}",
-            name,
-            unit_locked.install.required_by
-        );
-        crate::units::deactivate_units(unit_locked.install.required_by.clone(), run_info.clone());
+        trace!("Recursively killing all services requiring service {}", name);
+        crate::units::deactivate_unit_recursive(srvc_id, true, run_info.clone());
     }
     Ok(())
 }

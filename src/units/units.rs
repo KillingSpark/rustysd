@@ -211,8 +211,9 @@ impl Unit {
         pid_table: ArcMutPidTable,
         fd_store: ArcMutFDStore,
     ) -> Result<(), String> {
+        trace!("Deactivate unit: {}", self.conf.name());
         match &mut self.specialized {
-            UnitSpecialized::Target => trace!("Deactivated target {}", self.conf.name()),
+            UnitSpecialized::Target => {/* nothing to do */},
             UnitSpecialized::Socket(sock) => {
                 sock.close_all(self.conf.name(), &mut *fd_store.write().unwrap())
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;

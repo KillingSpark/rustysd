@@ -7,6 +7,8 @@ pub enum Command {
     Status(Option<String>),
     Restart(String),
     LoadNew(String),
+    Stop(String),
+    Shutdown,
 }
 
 enum ParseError {
@@ -48,8 +50,27 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
             };
             Command::Restart(name)
         }
+        "stop" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => s.clone(),
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => {
+                    return Err(ParseError::ParamsInvalid(format!(
+                        "Params must be a single string"
+                    )))
+                }
+            };
+            Command::Stop(name)
+        }
         // TODO parse filters for the listing
         "list-units" => Command::ListUnits(None),
+        "shutdown" => Command::Shutdown,
         "enable" => {
             let name = match &call.params {
                 Some(params) => match params {
@@ -142,6 +163,9 @@ pub fn execute_command(
 ) -> Result<serde_json::Value, String> {
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
+        Command::Shutdown => {
+            crate::signal_handler::shutdown_sequence(run_info);
+        }
         Command::Restart(unit_name) => {
             trace!("Find unit for name: {}", unit_name);
             let id = {
@@ -168,56 +192,57 @@ pub fn execute_command(
                 std::sync::Arc::new(Vec::new()),
             )?;
         }
+        Command::Stop(unit_name) => {
+            trace!("Find unit for name: {}", unit_name);
+            let id = {
+                let unit_table_locked = run_info.unit_table.read().unwrap();
+                trace!("Find unit for name: {}", unit_name);
+                let mut srvc: Vec<_> = unit_table_locked
+                    .iter()
+                    .filter(|(_id, unit)| {
+                        let name = unit.lock().unwrap().conf.name();
+                        trace!("Name: {}", name);
+                        unit_name.starts_with(&name) && unit.lock().unwrap().is_service()
+                    })
+                    .collect();
+                if srvc.len() != 1 {
+                    return Err(format!("No service found with name: {}", unit_name));
+                }
+                *srvc.remove(0).0
+            };
+
+            crate::units::deactivate_unit_recursive(id, true, run_info);
+        }
         Command::Status(unit_name) => {
             match unit_name {
                 Some(name) => {
                     //list specific
+                    let unit_table_locked = run_info.unit_table.read().unwrap();
+                    let mut unit: Vec<_> = unit_table_locked
+                        .values()
+                        .filter(|unit| unit.lock().unwrap().conf.name() == name)
+                        .collect();
+                    if unit.len() != 1 {
+                        return Err(format!("No service found with name: {}", name));
+                    }
+                    let unit = unit.remove(0);
                     if name.ends_with(".service") {
-                        let name = name.trim_end_matches(".service");
-                        let unit_table_locked = run_info.unit_table.read().unwrap();
-                        let mut srvc: Vec<_> = unit_table_locked
-                            .iter()
-                            .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
-                            .map(|(_id, unit)| format_service(&unit.lock().unwrap()))
-                            .collect();
-                        if srvc.len() != 1 {
-                            return Err(format!("No service found with name: {}", name));
-                        }
-
-                        result_vec.as_array_mut().unwrap().push(srvc.remove(0));
+                        result_vec
+                            .as_array_mut()
+                            .unwrap()
+                            .push(format_service(&unit.lock().unwrap()));
                     } else if name.ends_with(".socket") {
-                        let name = name.trim_end_matches(".socket");
-                        let unit_table_locked = run_info.unit_table.read().unwrap();
-                        let mut sock: Vec<_> = unit_table_locked
-                            .iter()
-                            .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
-                            .map(|(_id, unit)| format_socket(&unit.lock().unwrap()))
-                            .collect();
-                        if sock.len() != 1 {
-                            return Err(format!("No service found with name: {}", name));
-                        }
-
-                        result_vec.as_array_mut().unwrap().push(sock.remove(0));
+                        result_vec
+                            .as_array_mut()
+                            .unwrap()
+                            .push(format_socket(&unit.lock().unwrap()));
+                    } else if name.ends_with(".target") {
+                        result_vec
+                            .as_array_mut()
+                            .unwrap()
+                            .push(format_target(&unit.lock().unwrap()));
                     } else {
-                        // name was already short
-                        let unit_table_locked = run_info.unit_table.read().unwrap();
-                        let mut unit: Vec<_> = unit_table_locked
-                            .iter()
-                            .filter(|(_id, unit)| unit.lock().unwrap().conf.name() == name)
-                            .map(|(_id, unit)| {
-                                let unit_locked = &unit.lock().unwrap();
-                                match unit_locked.specialized {
-                                    UnitSpecialized::Socket(_) => format_socket(&unit_locked),
-                                    UnitSpecialized::Service(_) => format_service(&unit_locked),
-                                    UnitSpecialized::Target => format_target(&unit_locked),
-                                }
-                            })
-                            .collect();
-                        if unit.len() != 1 {
-                            return Err(format!("No unit found with name: {}", name));
-                        }
-
-                        result_vec.as_array_mut().unwrap().push(unit.remove(0));
+                        return Err("Name suffix not recognized".into());
                     }
                 }
                 None => {

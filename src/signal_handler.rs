@@ -48,7 +48,7 @@ pub fn handle_signals(
 }
 
 // TODO maybe this should be available everywhere for situations where normally a panic would occur?
-fn shutdown_sequence(run_info: ArcRuntimeInfo) {
+pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
     std::thread::spawn(move || {
         trace!("Shutting down");
         trace!("Get unit lock");
