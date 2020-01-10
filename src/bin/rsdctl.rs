@@ -55,12 +55,23 @@ fn main() {
     };
     let str_call = serde_json::to_string(&call.to_json()).unwrap();
 
-    let mut stream = std::net::TcpStream::connect(addr).unwrap();
-    println!("Write cmd: {}", str_call);
-    stream.write_all(str_call.as_bytes()).unwrap();
-    stream.shutdown(std::net::Shutdown::Write).unwrap();
-    println!("Wait for response");
-    let resp: Value = serde_json::from_reader(&mut stream).unwrap();
-    println!("Got response");
-    println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+    if addr.starts_with('/') {
+        let mut stream = std::os::unix::net::UnixStream::connect(&addr).unwrap();
+        println!("Write cmd: {}", str_call);
+        stream.write_all(str_call.as_bytes()).unwrap();
+        stream.shutdown(std::net::Shutdown::Write).unwrap();
+        println!("Wait for response");
+        let resp: Value = serde_json::from_reader(&mut stream).unwrap();
+        println!("Got response");
+        println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+    } else {
+        let mut stream = std::net::TcpStream::connect(addr).unwrap();
+        println!("Write cmd: {}", str_call);
+        stream.write_all(str_call.as_bytes()).unwrap();
+        stream.shutdown(std::net::Shutdown::Write).unwrap();
+        println!("Wait for response");
+        let resp: Value = serde_json::from_reader(&mut stream).unwrap();
+        println!("Got response");
+        println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+    };
 }
