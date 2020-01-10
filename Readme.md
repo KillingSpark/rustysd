@@ -52,6 +52,19 @@ What is explicitly out of scope (for now, this project is still very young):
 
 [![Gitter](https://badges.gitter.im/rustysd/community.svg)](https://gitter.im/rustysd/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
+### About slices
+I dont think it is viable for a cross-platform project to support slices. In general I think it would be more sensible to put that weight on other tools.
+
+I imagine something along the lines of dockers 'runc' but maybe not specialized to the container environment. Let's call the imaginary tool 'restrict', the usage I 
+imagine would be along the lines of: 
+
+`restrict -cmd "/my/binary arg1 arg2 arg3" -mem_max=5G -io_max=10G/s`
+
+This would setup the process with the given restrictions and then exec into the given cmd. with this kind of tool there are a few benefits:
+1. Rustysd doesnt have to concern itself with how a platform does resource restriction, but there can be separate tools for each platform (if possible)
+1. Clear separation of concerns. Rustysd manages service lifetimes. It does not (or only for relatively trivial stuff) manage the runtime environment for those services.
+1. The tool can be useful to other contexts aswell  
+
 ## Goals
 Since this project is very young and wasn't started with any particular goal in mind, I am open to any and all ideas. Here are some that have been 
 brought up that seem sensible. None of this is definitive though.
