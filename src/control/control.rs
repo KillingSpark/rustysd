@@ -3,7 +3,7 @@ use serde_json::Value;
 
 #[derive(Debug)]
 pub enum Command {
-    ListUnits(Option<UnitSpecialized>),
+    ListUnits(Option<UnitIdKind>),
     Status(Option<String>),
     Restart(String),
     LoadNew(String),
@@ -69,7 +69,33 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
             Command::Stop(name)
         }
         // TODO parse filters for the listing
-        "list-units" => Command::ListUnits(None),
+        "list-units" => {
+            let kind = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => {
+                        let kind = match s.as_str() {
+                            "target" => UnitIdKind::Target,
+                            "socket" => UnitIdKind::Socket,
+                            "service" => UnitIdKind::Service,
+                            _ => {
+                                return Err(ParseError::ParamsInvalid(format!(
+                                    "Kind not recognized: {}",
+                                    s
+                                )))
+                            }
+                        };
+                        Some(kind)
+                    }
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => None,
+            };
+            Command::ListUnits(kind)
+        }
         "shutdown" => Command::Shutdown,
         "enable" => {
             let name = match &call.params {
@@ -156,6 +182,43 @@ pub fn format_service(srvc_unit: &Unit) -> Value {
     Value::Object(map)
 }
 
+use std::sync::{Arc, Mutex};
+fn find_unit_with_name(unit_name: &str, unit_table_locked: &UnitTable) -> Option<Arc<Mutex<Unit>>> {
+    trace!("Find unit for name: {}", unit_name);
+    let mut srvc: Vec<_> = unit_table_locked
+        .values()
+        .filter(|unit| {
+            let name = unit.lock().unwrap().conf.name();
+            trace!("Name: {}", name);
+            unit_name.starts_with(&name) && unit.lock().unwrap().is_service()
+        })
+        .cloned()
+        .collect();
+    if srvc.len() != 1 {
+        None
+    } else {
+        Some(srvc.remove(0))
+    }
+}
+
+// TODO make this some kind of regex pattern matching
+fn find_units_with_pattern(
+    name_pattern: &str,
+    unit_table_locked: &UnitTable,
+) -> Vec<Arc<Mutex<Unit>>> {
+    trace!("Find units matching pattern: {}", name_pattern);
+    let units: Vec<_> = unit_table_locked
+        .values()
+        .filter(|unit| {
+            let name = unit.lock().unwrap().conf.name();
+            trace!("Name: {}", name);
+            name_pattern.starts_with(&name) && unit.lock().unwrap().is_service()
+        })
+        .cloned()
+        .collect();
+    units
+}
+
 pub fn execute_command(
     cmd: Command,
     run_info: ArcRuntimeInfo,
@@ -167,22 +230,12 @@ pub fn execute_command(
             crate::signal_handler::shutdown_sequence(run_info);
         }
         Command::Restart(unit_name) => {
-            trace!("Find unit for name: {}", unit_name);
-            let id = {
-                let unit_table_locked = run_info.unit_table.read().unwrap();
-                trace!("Find unit for name: {}", unit_name);
-                let mut srvc: Vec<_> = unit_table_locked
-                    .iter()
-                    .filter(|(_id, unit)| {
-                        let name = unit.lock().unwrap().conf.name();
-                        trace!("Name: {}", name);
-                        unit_name.starts_with(&name) && unit.lock().unwrap().is_service()
-                    })
-                    .collect();
-                if srvc.len() != 1 {
-                    return Err(format!("No service found with name: {}", unit_name));
-                }
-                *srvc.remove(0).0
+            let id = if let Some(unit) =
+                find_unit_with_name(&unit_name, &*run_info.unit_table.read().unwrap())
+            {
+                unit.lock().unwrap().id
+            } else {
+                return Err(format!("No unit found with name: {}", unit_name));
             };
 
             crate::units::reactivate_unit(
@@ -193,22 +246,12 @@ pub fn execute_command(
             )?;
         }
         Command::Stop(unit_name) => {
-            trace!("Find unit for name: {}", unit_name);
-            let id = {
-                let unit_table_locked = run_info.unit_table.read().unwrap();
-                trace!("Find unit for name: {}", unit_name);
-                let mut srvc: Vec<_> = unit_table_locked
-                    .iter()
-                    .filter(|(_id, unit)| {
-                        let name = unit.lock().unwrap().conf.name();
-                        trace!("Name: {}", name);
-                        unit_name.starts_with(&name) && unit.lock().unwrap().is_service()
-                    })
-                    .collect();
-                if srvc.len() != 1 {
-                    return Err(format!("No service found with name: {}", unit_name));
-                }
-                *srvc.remove(0).0
+            let id = if let Some(unit) =
+                find_unit_with_name(&unit_name, &*run_info.unit_table.read().unwrap())
+            {
+                unit.lock().unwrap().id
+            } else {
+                return Err(format!("No unit found with name: {}", unit_name));
             };
 
             crate::units::deactivate_unit_recursive(id, true, run_info);
@@ -217,32 +260,27 @@ pub fn execute_command(
             match unit_name {
                 Some(name) => {
                     //list specific
-                    let unit_table_locked = run_info.unit_table.read().unwrap();
-                    let mut unit: Vec<_> = unit_table_locked
-                        .values()
-                        .filter(|unit| unit.lock().unwrap().conf.name() == name)
-                        .collect();
-                    if unit.len() != 1 {
-                        return Err(format!("No service found with name: {}", name));
-                    }
-                    let unit = unit.remove(0);
-                    if name.ends_with(".service") {
-                        result_vec
-                            .as_array_mut()
-                            .unwrap()
-                            .push(format_service(&unit.lock().unwrap()));
-                    } else if name.ends_with(".socket") {
-                        result_vec
-                            .as_array_mut()
-                            .unwrap()
-                            .push(format_socket(&unit.lock().unwrap()));
-                    } else if name.ends_with(".target") {
-                        result_vec
-                            .as_array_mut()
-                            .unwrap()
-                            .push(format_target(&unit.lock().unwrap()));
-                    } else {
-                        return Err("Name suffix not recognized".into());
+                    let unit_table_locked = &*run_info.unit_table.read().unwrap();
+                    let units = find_units_with_pattern(&name, unit_table_locked);
+                    for unit in units {
+                        if name.ends_with(".service") {
+                            result_vec
+                                .as_array_mut()
+                                .unwrap()
+                                .push(format_service(&unit.lock().unwrap()));
+                        } else if name.ends_with(".socket") {
+                            result_vec
+                                .as_array_mut()
+                                .unwrap()
+                                .push(format_socket(&unit.lock().unwrap()));
+                        } else if name.ends_with(".target") {
+                            result_vec
+                                .as_array_mut()
+                                .unwrap()
+                                .push(format_target(&unit.lock().unwrap()));
+                        } else {
+                            return Err("Name suffix not recognized".into());
+                        }
                     }
                 }
                 None => {
@@ -265,15 +303,22 @@ pub fn execute_command(
                 }
             }
         }
-        Command::ListUnits(_kind) => {
+        Command::ListUnits(kind) => {
             // TODO list units of kind or all
             let unit_table_locked = run_info.unit_table.read().unwrap();
-            for unit in unit_table_locked.values() {
-                let unit_locked = unit.lock().unwrap();
-                result_vec
-                    .as_array_mut()
-                    .unwrap()
-                    .push(Value::String(unit_locked.conf.name()));
+            for (id, unit) in unit_table_locked.iter() {
+                let include = if let Some(kind) = kind {
+                    id.0 == kind
+                } else {
+                    true
+                };
+                if include {
+                    let unit_locked = unit.lock().unwrap();
+                    result_vec
+                        .as_array_mut()
+                        .unwrap()
+                        .push(Value::String(unit_locked.conf.name()));
+                }
             }
         }
         Command::LoadNew(name) => {
