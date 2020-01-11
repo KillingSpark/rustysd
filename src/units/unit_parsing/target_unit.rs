@@ -5,25 +5,27 @@ pub fn parse_target(
     parsed_file: ParsedFile,
     path: &PathBuf,
     chosen_id: UnitId,
-) -> Result<Unit, String> {
+) -> Result<Unit, ParsingErrorReason> {
     let mut install_config = None;
     let mut unit_config = None;
 
     for (name, section) in parsed_file {
         match name.as_str() {
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section, path));
+                unit_config = Some(parse_unit_section(section, path)?);
             }
             "[Install]" => {
-                install_config = Some(parse_install_section(section));
+                install_config = Some(parse_install_section(section)?);
             }
-            _ => panic!("Unknown section name: {}", name),
+            _ => return Err(ParsingErrorReason::UnknownSection(name.to_owned())),
         }
     }
 
     let conf = match unit_config {
         Some(conf) => conf,
-        None => return Err(format!("Didn't find a unit config for file: {:?}", path)),
+        None => {
+            return Err(ParsingErrorReason::SectionNotFound("Unit".to_owned()));
+        }
     };
 
     Ok(Unit {

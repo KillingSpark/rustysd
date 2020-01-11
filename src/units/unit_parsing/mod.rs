@@ -10,17 +10,106 @@ pub use unit_parser::*;
 
 #[derive(Debug)]
 pub struct ParsingError {
-    pub reason: Option<Box<dyn std::error::Error>>,
-    pub msg: Option<String>,
+    inner: ParsingErrorReason,
+    path: std::path::PathBuf,
+}
+
+impl ParsingError {
+    pub fn new(reason: ParsingErrorReason, path: std::path::PathBuf) -> ParsingError {
+        ParsingError {
+            inner: reason,
+            path,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ParsingErrorReason {
+    UnknownSetting(String, String),
+    UnusedSetting(String),
+    UnsupportedSetting(String),
+    MissingSetting(String),
+    SettingTooManyValues(String, Vec<String>),
+    SectionTooOften(String),
+    SectionNotFound(String),
+    UnknownSection(String),
+    UnknownSocketAddr(String),
+    FileError(Box<dyn std::error::Error>),
+    Generic(String),
 }
 
 impl std::fmt::Display for ParsingError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(msg) = &self.msg {
-            write!(f, "{}", msg)?;
-        }
-        if let Some(err) = &self.reason {
-            write!(f, "source error:_{}", err)?;
+        match &self.inner {
+            ParsingErrorReason::UnknownSetting(name, value) => {
+                write!(
+                    f,
+                    "In file {:?}: setting {} was set to unrecognized value: {}",
+                    self.path, name, value
+                )?;
+            }
+            ParsingErrorReason::UnusedSetting(name) => {
+                write!(
+                    f,
+                    "In file {:?}: unused setting {} occured",
+                    self.path, name
+                )?;
+            }
+            ParsingErrorReason::MissingSetting(name) => {
+                write!(
+                    f,
+                    "In file {:?}: required setting {} missing",
+                    self.path, name
+                )?;
+            }
+            ParsingErrorReason::SectionNotFound(name) => {
+                write!(
+                    f,
+                    "In file {:?}: Section {} wasn't found but is required",
+                    self.path, name
+                )?;
+            }
+            ParsingErrorReason::UnknownSection(name) => {
+                write!(
+                    f,
+                    "In file {:?}: Section {} is unknown",
+                    self.path, name
+                )?;
+            }
+            ParsingErrorReason::SectionTooOften(name) => {
+                write!(
+                    f,
+                    "In file {:?}: section {} occured multiple times",
+                    self.path, name
+                )?;
+            }
+            ParsingErrorReason::UnknownSocketAddr(addr) => {
+                write!(
+                    f,
+                    "In file {:?}: Can not open sockets of addr: {}",
+                    self.path, addr
+                )?;
+            }
+            ParsingErrorReason::UnsupportedSetting(addr) => {
+                write!(
+                    f,
+                    "In file {:?}: Setting not supported by this build (maybe need to enable feature flag?): {}",
+                    self.path, addr
+                )?;
+            }
+            ParsingErrorReason::SettingTooManyValues(name, values) => {
+                write!(
+                    f,
+                    "In file {:?}: setting {} occured with too many values: {:?}",
+                    self.path, name, values
+                )?;
+            }
+            ParsingErrorReason::FileError(e) => {
+                write!(f, "While parsing file {:?}: {}", self.path, e)?;
+            }
+            ParsingErrorReason::Generic(e) => {
+                write!(f, "While parsing file {:?}: {}", self.path, e)?;
+            }
         }
 
         Ok(())
@@ -31,7 +120,7 @@ impl std::fmt::Display for ParsingError {
 impl std::error::Error for ParsingError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         // Generic error, underlying cause isn't tracked.
-        if let Some(err) = &self.reason {
+        if let ParsingErrorReason::FileError(err) = &self.inner {
             Some(err.as_ref())
         } else {
             None
@@ -39,20 +128,8 @@ impl std::error::Error for ParsingError {
     }
 }
 
-impl std::convert::From<String> for ParsingError {
-    fn from(s: String) -> Self {
-        ParsingError {
-            reason: None,
-            msg: Some(s),
-        }
-    }
-}
-
-impl std::convert::From<Box<dyn std::error::Error>> for ParsingError {
-    fn from(err: Box<dyn std::error::Error>) -> Self {
-        ParsingError {
-            reason: Some(err),
-            msg: None,
-        }
+impl std::convert::From<Box<std::io::Error>> for ParsingErrorReason {
+    fn from(err: Box<std::io::Error>) -> Self {
+        ParsingErrorReason::FileError(err)
     }
 }

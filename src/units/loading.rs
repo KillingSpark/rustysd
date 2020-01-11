@@ -2,10 +2,40 @@ use crate::units::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[derive(Debug)]
+pub enum LoadingError {
+    Parsing(ParsingError),
+    Dependency(DependencyError),
+}
+
+
+#[derive(Debug)]
+pub struct DependencyError {
+    msg: String,
+}
+
+impl std::fmt::Display for DependencyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Dependency resolving error: {}", self.msg)
+    }
+}
+
+impl std::convert::From<DependencyError> for LoadingError {
+    fn from(s: DependencyError) -> Self {
+        LoadingError::Dependency(s)
+    }
+}
+
+impl std::convert::From<ParsingError> for LoadingError {
+    fn from(s: ParsingError) -> Self {
+        LoadingError::Parsing(s)
+    }
+}
+
 pub fn load_all_units(
     paths: &[PathBuf],
     base_id: &mut u64,
-) -> Result<HashMap<UnitId, Unit>, ParsingError> {
+) -> Result<HashMap<UnitId, Unit>, LoadingError> {
     let mut service_unit_table = HashMap::new();
     let mut socket_unit_table = HashMap::new();
     let mut target_unit_table = HashMap::new();
@@ -37,7 +67,8 @@ pub fn load_all_units(
         }
     }
 
-    apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)?;
+    apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)
+        .map_err(|e| DependencyError { msg: e })?;
     let mut unit_table = std::collections::HashMap::new();
     unit_table.extend(service_unit_table);
     unit_table.extend(socket_unit_table);
@@ -53,20 +84,18 @@ fn parse_all_units(
     path: &PathBuf,
     last_id: &mut u64,
 ) -> Result<(), ParsingError> {
-    let files = get_file_list(path)?;
+    let files = get_file_list(path)
+        .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?;
     for entry in files {
         if entry.path().is_dir() {
             parse_all_units(services, sockets, targets, path, last_id)?;
         } else {
-            let raw = std::fs::read_to_string(&entry.path()).map_err(|e| ParsingError {
-                msg: Some(format!("Error opening file: {:?} error: {}", path, e)),
-                reason: Some(Box::new(e)),
+            let raw = std::fs::read_to_string(&entry.path()).map_err(|e| {
+                ParsingError::new(ParsingErrorReason::from(Box::new(e)), path.clone())
             })?;
 
-            let parsed_file = parse_file(&raw).map_err(|err| ParsingError {
-                reason: Some(Box::new(err)),
-                msg: Some(format!("In file: {:?}", path)),
-            })?;
+            let parsed_file = parse_file(&raw)
+                .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?;
 
             if entry.path().to_str().unwrap().ends_with(".service") {
                 *last_id += 1;
@@ -74,7 +103,9 @@ fn parse_all_units(
                 let new_id = UnitId(UnitIdKind::Service, *last_id);
                 services.insert(
                     new_id,
-                    parse_service(parsed_file, &entry.path(), new_id.clone())?,
+                    parse_service(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
+                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
+                    })?,
                 );
             } else if entry.path().to_str().unwrap().ends_with(".socket") {
                 *last_id += 1;
@@ -82,7 +113,9 @@ fn parse_all_units(
                 let new_id = UnitId(UnitIdKind::Socket, *last_id);
                 sockets.insert(
                     new_id,
-                    parse_socket(parsed_file, &entry.path(), new_id.clone())?,
+                    parse_socket(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
+                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
+                    })?,
                 );
             } else if entry.path().to_str().unwrap().ends_with(".target") {
                 *last_id += 1;
@@ -90,7 +123,9 @@ fn parse_all_units(
                 let new_id = UnitId(UnitIdKind::Target, *last_id);
                 targets.insert(
                     new_id,
-                    parse_target(parsed_file, &entry.path(), new_id.clone())?,
+                    parse_target(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
+                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
+                    })?,
                 );
             }
         }

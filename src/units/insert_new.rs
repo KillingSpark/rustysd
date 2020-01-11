@@ -33,31 +33,35 @@ pub fn load_new_unit(
     next_id: u64,
 ) -> Result<units::Unit, String> {
     if let Some(unit_path) = find_new_unit_path(unit_dirs, find_name)? {
-        let content = fs::read_to_string(&unit_path)
-            .map_err(|e| format!("Error while reading file {:?}: {}", unit_path, e))?;
+        let content = fs::read_to_string(&unit_path).map_err(|e| {
+            format!(
+                "{}",
+                units::ParsingError::new(units::ParsingErrorReason::from(Box::new(e)), unit_path.clone())
+            )
+        })?;
         let parsed = units::parse_file(&content)
-            .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?;
+            .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path.clone())))?;
         let unit = if find_name.ends_with(".service") {
             units::parse_service(
                 parsed,
                 &unit_path,
                 units::UnitId(units::UnitIdKind::Service, next_id),
             )
-            .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?
+            .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
         } else if find_name.ends_with(".socket") {
             units::parse_socket(
                 parsed,
                 &unit_path,
                 units::UnitId(units::UnitIdKind::Socket, next_id),
             )
-            .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?
+            .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
         } else if find_name.ends_with(".target") {
             units::parse_target(
                 parsed,
                 &unit_path,
                 units::UnitId(units::UnitIdKind::Target, next_id),
             )
-            .map_err(|e| format!("Error while parsing unit file {:?}: {}", unit_path, e))?
+            .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
         } else {
             return Err(format!(
                 "File suffix not recognized for file {:?}",

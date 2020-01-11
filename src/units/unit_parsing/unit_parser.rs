@@ -8,7 +8,7 @@ use std::path::PathBuf;
 pub type ParsedSection = HashMap<String, Vec<(u32, String)>>;
 pub type ParsedFile = HashMap<String, ParsedSection>;
 
-pub fn parse_file(content: &str) -> Result<ParsedFile, ParsingError> {
+pub fn parse_file(content: &str) -> Result<ParsedFile, ParsingErrorReason> {
     let mut sections = HashMap::new();
     let lines: Vec<&str> = content.split('\n').collect();
     let lines: Vec<_> = lines.iter().map(|s| s.trim()).collect();
@@ -29,10 +29,9 @@ pub fn parse_file(content: &str) -> Result<ParsedFile, ParsingError> {
 
         if line.starts_with('[') {
             if sections.contains_key(&current_section_name) {
-                return Err(ParsingError::from(format!(
-                    "Section {} occured mutliple times",
-                    current_section_name
-                )));
+                return Err(ParsingErrorReason::SectionTooOften(
+                    current_section_name.to_owned(),
+                ));
             } else {
                 sections.insert(
                     current_section_name.clone(),
@@ -49,10 +48,9 @@ pub fn parse_file(content: &str) -> Result<ParsedFile, ParsingError> {
 
     // insert last section
     if sections.contains_key(&current_section_name) {
-        return Err(ParsingError::from(format!(
-            "Section {} occured mutliple times",
-            current_section_name
-        )));
+        return Err(ParsingErrorReason::SectionTooOften(
+            current_section_name.to_owned(),
+        ));
     } else {
         sections.insert(current_section_name, parse_section(&current_section_lines));
     }
@@ -72,7 +70,10 @@ pub fn string_to_bool(s: &str) -> bool {
     *s_upper == *"YES" || *s_upper == *"TRUE" || is_num_and_one
 }
 
-pub fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitConfig {
+pub fn parse_unit_section(
+    mut section: ParsedSection,
+    path: &PathBuf,
+) -> Result<UnitConfig, ParsingErrorReason> {
     let wants = section.remove("WANTS");
     let requires = section.remove("REQUIRES");
     let after = section.remove("AFTER");
@@ -80,23 +81,22 @@ pub fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitCon
     let description = section.remove("DESCRIPTION");
 
     if !section.is_empty() {
-        panic!(
-            "Unit section has unrecognized/unimplemented options: {:?}",
-            section
-        );
+        return Err(ParsingErrorReason::UnusedSetting(
+            section.keys().next().unwrap().to_owned(),
+        ));
     }
 
-    UnitConfig {
+    Ok(UnitConfig {
         filepath: path.clone(),
         description: description.map(|x| (x[0]).1.clone()).unwrap_or_default(),
         wants: map_tupels_to_second(wants.unwrap_or_default()),
         requires: map_tupels_to_second(requires.unwrap_or_default()),
         after: map_tupels_to_second(after.unwrap_or_default()),
         before: map_tupels_to_second(before.unwrap_or_default()),
-    }
+    })
 }
 
-pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, ParsingError> {
+pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, ParsingErrorReason> {
     let user = section.remove("USER");
     let group = section.remove("GROUP");
     let supplementary_groups = section.remove("SUPPLEMENTARYGROUPS");
@@ -107,7 +107,10 @@ pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, Par
             if vec.len() == 1 {
                 Some(vec.remove(0).1)
             } else if vec.len() > 1 {
-                return Err(ParsingError::from(format!("Too many names in User")));
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "User".into(),
+                    super::map_tupels_to_second(vec),
+                ));
             } else {
                 None
             }
@@ -120,7 +123,10 @@ pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, Par
             if vec.len() == 1 {
                 Some(vec.remove(0).1)
             } else if vec.len() > 1 {
-                return Err(ParsingError::from(format!("Too many names in Group")));
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "Group".into(),
+                    super::map_tupels_to_second(vec),
+                ));
             } else {
                 None
             }
@@ -142,29 +148,36 @@ pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, Par
     })
 }
 
-pub fn parse_install_section(mut section: ParsedSection) -> InstallConfig {
+pub fn parse_install_section(
+    mut section: ParsedSection,
+) -> Result<InstallConfig, ParsingErrorReason> {
     let wantedby = section.remove("WANTEDBY");
     let requiredby = section.remove("REQUIREDBY");
 
     if !section.is_empty() {
-        panic!(
-            "Install section has unrecognized/unimplemented options: {:?}",
-            section
-        );
+        return Err(ParsingErrorReason::UnusedSetting(
+            section.keys().next().unwrap().to_owned(),
+        ));
     }
 
-    InstallConfig {
+    Ok(InstallConfig {
         wanted_by: map_tupels_to_second(wantedby.unwrap_or_default()),
         required_by: map_tupels_to_second(requiredby.unwrap_or_default()),
-    }
+    })
 }
 
-pub fn get_file_list(path: &PathBuf) -> Result<Vec<std::fs::DirEntry>, String> {
+pub fn get_file_list(path: &PathBuf) -> Result<Vec<std::fs::DirEntry>, ParsingErrorReason> {
     if !path.exists() {
-        return Err(format!("Path to services does not exist: {:?}", path));
+        return Err(ParsingErrorReason::Generic(format!(
+            "Path to services does not exist: {:?}",
+            path
+        )));
     }
     if !path.is_dir() {
-        return Err(format!("Path to services does not exist: {:?}", path));
+        return Err(ParsingErrorReason::Generic(format!(
+            "Path to services does not exist: {:?}",
+            path
+        )));
     }
     let mut files: Vec<_> = match std::fs::read_dir(path) {
         Ok(iter) => {
@@ -175,7 +188,7 @@ pub fn get_file_list(path: &PathBuf) -> Result<Vec<std::fs::DirEntry>, String> {
                             files.push(f);
                             Ok(files)
                         }
-                        Err(e) => Err(format!("Couldnt read dir entry: {}", e)),
+                        Err(e) => Err(e),
                     }
                 } else {
                     acc
@@ -183,10 +196,10 @@ pub fn get_file_list(path: &PathBuf) -> Result<Vec<std::fs::DirEntry>, String> {
             });
             match files_vec {
                 Ok(files) => files,
-                Err(e) => return Err(e),
+                Err(e) => return Err(ParsingErrorReason::FileError(Box::new(e))),
             }
         }
-        Err(e) => return Err(format!("Error while reading dir: {}", e)),
+        Err(e) => return Err(ParsingErrorReason::FileError(Box::new(e))),
     };
     files.sort_by(|l, r| l.path().cmp(&r.path()));
 

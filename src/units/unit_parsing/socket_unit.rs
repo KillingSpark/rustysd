@@ -6,7 +6,7 @@ pub fn parse_socket(
     parsed_file: ParsedFile,
     path: &PathBuf,
     chosen_id: UnitId,
-) -> Result<Unit, ParsingError> {
+) -> Result<Unit, ParsingErrorReason> {
     let mut socket_configs = None;
     let mut install_config = None;
     let mut unit_config = None;
@@ -18,43 +18,28 @@ pub fn parse_socket(
                 exec_config = Some(super::parse_exec_section(&mut section)?);
                 socket_configs = match parse_socket_section(section) {
                     Ok(conf) => Some(conf),
-                    Err(e) => {
-                        return Err(ParsingError::from(format!(
-                            "Parsing error in file: {:?} :: {}",
-                            path, e
-                        )))
-                    }
+                    Err(e) => return Err(e),
                 };
             }
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section, path));
+                unit_config = Some(parse_unit_section(section, path)?);
             }
             "[Install]" => {
-                install_config = Some(parse_install_section(section));
+                install_config = Some(parse_install_section(section)?);
             }
 
-            _ => panic!("Unknown section name: {}", name),
+            _ => return Err(ParsingErrorReason::UnknownSection(name.to_owned())),
         }
     }
 
     let (sock_name, services, sock_configs) = match socket_configs {
         Some(triple) => triple,
-        None => {
-            return Err(ParsingError::from(format!(
-                "Didn't find socket config in file: {:?}",
-                path
-            )))
-        }
+        None => return Err(ParsingErrorReason::SectionNotFound("Socket".to_owned())),
     };
 
     let conf = match unit_config {
         Some(conf) => conf,
-        None => {
-            return Err(ParsingError::from(format!(
-                "Didn't find a unit config for file: {:?}",
-                path
-            )))
-        }
+        None => return Err(ParsingErrorReason::SectionNotFound("Unit".to_owned())),
     };
 
     let exec_config = exec_config.unwrap();
@@ -101,7 +86,7 @@ fn parse_unix_addr(addr: &str) -> Result<String, ()> {
 
 fn parse_socket_section(
     mut section: ParsedSection,
-) -> Result<(String, Vec<String>, Vec<SocketConfig>), ParsingError> {
+) -> Result<(String, Vec<String>, Vec<SocketConfig>), ParsingErrorReason> {
     let fdname = section.remove("FILEDESCRIPTORNAME");
     let services = section.remove("SERVICE");
     let streams = section.remove("LISTENSTREAM");
@@ -110,18 +95,18 @@ fn parse_socket_section(
     let fifos = section.remove("LISTENFIFO");
 
     if !section.is_empty() {
-        panic!(
-            "Service section has unrecognized/unimplemented options: {:?}",
-            section
-        );
+        return Err(ParsingErrorReason::UnusedSetting(
+            section.keys().next().unwrap().to_owned(),
+        ));
     }
     let fdname = match fdname {
         None => None,
         Some(mut vec) => {
             if vec.len() > 1 {
-                return Err(ParsingError::from(format!(
-                    "Too many entries for FileDescriptorName: []"
-                )));
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "FileDescriptorName".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             } else if vec.len() == 0 {
                 None
             } else {
@@ -176,20 +161,14 @@ fn parse_socket_section(
                         path: std::path::PathBuf::from(addr),
                     })
                 } else {
-                    return Err(ParsingError::from(format!(
-                        "No specialized config for fifo found for fifo addr: {}",
-                        addr
-                    )));
+                    return Err(ParsingErrorReason::UnknownSocketAddr(addr.to_owned()));
                 }
             }
             SocketKind::Sequential(addr) => {
                 if parse_unix_addr(addr).is_ok() {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig::Sequential(addr.clone()))
                 } else {
-                    return Err(ParsingError::from(format!(
-                        "No specialized config for socket found for socket addr: {}",
-                        addr
-                    )));
+                    return Err(ParsingErrorReason::UnknownSocketAddr(addr.to_owned()));
                 }
             }
             SocketKind::Stream(addr) => {
@@ -204,10 +183,7 @@ fn parse_socket_section(
                         addr: std::net::SocketAddr::V6(addr),
                     })
                 } else {
-                    return Err(ParsingError::from(format!(
-                        "No specialized config for socket found for socket addr: {}",
-                        addr
-                    )));
+                    return Err(ParsingErrorReason::UnknownSocketAddr(addr.to_owned()));
                 }
             }
             SocketKind::Datagram(addr) => {
@@ -222,10 +198,7 @@ fn parse_socket_section(
                         addr: std::net::SocketAddr::V6(addr),
                     })
                 } else {
-                    return Err(ParsingError::from(format!(
-                        "No specialized config for socket found for socket addr: {}",
-                        addr
-                    )));
+                    return Err(ParsingErrorReason::UnknownSocketAddr(addr.to_owned()));
                 }
             }
         };

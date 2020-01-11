@@ -6,7 +6,7 @@ pub fn parse_service(
     parsed_file: ParsedFile,
     path: &PathBuf,
     chosen_id: UnitId,
-) -> Result<Unit, ParsingError> {
+) -> Result<Unit, ParsingErrorReason> {
     let mut service_config = None;
     let mut install_config = None;
     let mut unit_config = None;
@@ -17,23 +17,20 @@ pub fn parse_service(
                 service_config = Some(parse_service_section(section)?);
             }
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section, path));
+                unit_config = Some(parse_unit_section(section, path)?);
             }
             "[Install]" => {
-                install_config = Some(parse_install_section(section));
+                install_config = Some(parse_install_section(section)?);
             }
 
-            _ => panic!("Unknown section name: {}", name),
+            _ => return Err(ParsingErrorReason::UnknownSection(name.to_owned())),
         }
     }
 
     let service_config = if let Some(service_config) = service_config {
         service_config
     } else {
-        return Err(ParsingError::from(format!(
-            "Service unit {:?} did not contain a service section",
-            path
-        )));
+        return Err(ParsingErrorReason::SectionNotFound("Service".to_owned()));
     };
 
     let uid = if let Some(user) = &service_config.exec_config.user {
@@ -41,11 +38,11 @@ pub fn parse_service(
             Some(nix::unistd::Uid::from_raw(uid))
         } else {
             if let Ok(pwentry) =
-                crate::platform::pwnam::getpwnam(&user).map_err(|e| ParsingError::from(e))
+                crate::platform::pwnam::getpwnam(&user).map_err(|e| ParsingErrorReason::Generic(e))
             {
                 Some(pwentry.uid)
             } else {
-                return Err(ParsingError::from(format!(
+                return Err(ParsingErrorReason::Generic(format!(
                     "Couldnt get uid for username: {}",
                     user
                 )));
@@ -61,11 +58,11 @@ pub fn parse_service(
             Some(nix::unistd::Gid::from_raw(gid))
         } else {
             if let Ok(groupentry) =
-                crate::platform::grnam::getgrnam(&group).map_err(|e| ParsingError::from(e))
+                crate::platform::grnam::getgrnam(&group).map_err(|e| ParsingErrorReason::Generic(e))
             {
                 Some(groupentry.gid)
             } else {
-                return Err(ParsingError::from(format!(
+                return Err(ParsingErrorReason::Generic(format!(
                     "Couldnt get gid for groupname: {}",
                     group
                 )));
@@ -83,11 +80,11 @@ pub fn parse_service(
             nix::unistd::Gid::from_raw(gid)
         } else {
             if let Ok(groupentry) =
-                crate::platform::grnam::getgrnam(&group).map_err(|e| ParsingError::from(e))
+                crate::platform::grnam::getgrnam(&group).map_err(|e| ParsingErrorReason::Generic(e))
             {
                 groupentry.gid
             } else {
-                return Err(ParsingError::from(format!(
+                return Err(ParsingErrorReason::Generic(format!(
                     "Couldnt get gid for groupname: {}",
                     group
                 )));
@@ -174,7 +171,7 @@ fn parse_timeout(descr: &str) -> Timeout {
     }
 }
 
-fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingError> {
+fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingErrorReason> {
     let exec = section.remove("EXECSTART");
     let stop = section.remove("EXECSTOP");
     let stoppost = section.remove("EXECSTOPPOST");
@@ -194,10 +191,9 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     let exec_config = super::parse_exec_section(&mut section)?;
 
     if !section.is_empty() {
-        panic!(
-            "Service section has unrecognized/unimplemented options: {:?}",
-            section
-        );
+        return Err(ParsingErrorReason::UnusedSetting(
+            section.keys().next().unwrap().to_owned(),
+        ));
     }
 
     let starttimeout = match starttimeout {
@@ -205,7 +201,10 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
             if vec.len() == 1 {
                 Some(parse_timeout(&vec[0].1))
             } else {
-                panic!("TimeoutStartSec had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "TimeoutStartSec".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => None,
@@ -215,7 +214,10 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
             if vec.len() == 1 {
                 Some(parse_timeout(&vec[0].1))
             } else {
-                panic!("TimeoutStopSec had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "TimeoutStopSec".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => None,
@@ -225,7 +227,10 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
             if vec.len() == 1 {
                 Some(parse_timeout(&vec[0].1))
             } else {
-                panic!("TimeoutSec had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "TimeoutSec".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => None,
@@ -236,7 +241,10 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
             if vec.len() == 1 {
                 vec.remove(0).1
             } else {
-                panic!("Exec had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "ExecStart".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => "".to_string(),
@@ -253,13 +261,25 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
                         if cfg!(feature = "dbus_support") {
                             ServiceType::Dbus
                         } else {
-                            return Err(ParsingError::from(format!("Dbus service found but rustysd was built without the feature dbus_support")));
+                            return Err(ParsingErrorReason::UnsupportedSetting(
+                                "Type=dbus".to_owned(),
+                            ));
                         }
                     }
-                    _ => panic!("Unknown service type: {}", vec[0].1),
+                    name => {
+                        return Err(ParsingErrorReason::UnknownSetting(
+                            "Type".to_owned(),
+                            name.to_owned(),
+                        ))
+                    }
                 }
+            } else if vec.len() == 0 {
+                return Err(ParsingErrorReason::MissingSetting("Type".to_owned()));
             } else {
-                panic!("Type had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "Type".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => ServiceType::Simple,
@@ -273,10 +293,18 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
                     "main" => NotifyKind::Main,
                     "exec" => NotifyKind::Exec,
                     "none" => NotifyKind::None,
-                    _ => panic!("Unknown notify access: {}", vec[0].1),
+                    name => {
+                        return Err(ParsingErrorReason::UnknownSetting(
+                            "NotifyAccess".to_owned(),
+                            name.to_owned(),
+                        ))
+                    }
                 }
             } else {
-                panic!("Notifyaccess had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "NotifyAccess".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => NotifyKind::Main,
@@ -305,12 +333,19 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
                 match vec[0].1.to_uppercase().as_str() {
                     "ALWAYS" => ServiceRestart::Always,
                     "NO" => ServiceRestart::No,
-                    unknown_setting => {
-                        panic!("Restart had to unknown setting: {}", unknown_setting)
+
+                    name => {
+                        return Err(ParsingErrorReason::UnknownSetting(
+                            "Restart".to_owned(),
+                            name.to_owned(),
+                        ))
                     }
                 }
             } else {
-                panic!("Restart had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "Restart".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => ServiceRestart::No,
@@ -320,7 +355,10 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
             if vec.len() == 1 {
                 string_to_bool(&vec[0].1)
             } else {
-                panic!("Accept had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "Accept".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => false,
@@ -330,7 +368,10 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
             if vec.len() == 1 {
                 Some(vec[0].1.to_owned())
             } else {
-                panic!("BusName had to many entries: {:?}", vec);
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "BusName".to_owned(),
+                    super::map_tupels_to_second(vec),
+                ));
             }
         }
         None => None,
@@ -338,7 +379,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
 
     if let ServiceType::Dbus = srcv_type {
         if dbus_name.is_none() {
-            panic!("BusName not specified but service type is dbus");
+            return Err(ParsingErrorReason::MissingSetting("BusName".to_owned()));
         }
     }
 
