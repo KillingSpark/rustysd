@@ -96,6 +96,52 @@ pub fn parse_unit_section(mut section: ParsedSection, path: &PathBuf) -> UnitCon
     }
 }
 
+pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, ParsingError> {
+    let user = section.remove("USER");
+    let group = section.remove("GROUP");
+    let supplementary_groups = section.remove("SUPPLEMENTARYGROUPS");
+
+    let user = match user {
+        None => None,
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                Some(vec.remove(0).1)
+            } else if vec.len() > 1 {
+                return Err(ParsingError::from(format!("Too many names in User")));
+            } else {
+                None
+            }
+        }
+    };
+
+    let group = match group {
+        None => None,
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                Some(vec.remove(0).1)
+            } else if vec.len() > 1 {
+                return Err(ParsingError::from(format!("Too many names in Group")));
+            } else {
+                None
+            }
+        }
+    };
+
+    let supplementary_groups = match supplementary_groups {
+        None => Vec::new(),
+        Some(vec) => vec.iter().fold(Vec::new(), |mut acc, (_id, list)| {
+            acc.extend(list.split(' ').map(|x| x.to_string()));
+            acc
+        }),
+    };
+
+    Ok(ExecConfig {
+        user,
+        group,
+        supplementary_groups,
+    })
+}
+
 pub fn parse_install_section(mut section: ParsedSection) -> InstallConfig {
     let wantedby = section.remove("WANTEDBY");
     let requiredby = section.remove("REQUIREDBY");

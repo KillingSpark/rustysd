@@ -6,17 +6,24 @@ pub fn parse_socket(
     parsed_file: ParsedFile,
     path: &PathBuf,
     chosen_id: UnitId,
-) -> Result<Unit, String> {
+) -> Result<Unit, ParsingError> {
     let mut socket_configs = None;
     let mut install_config = None;
     let mut unit_config = None;
+    let mut exec_config = None;
 
-    for (name, section) in parsed_file {
+    for (name, mut section) in parsed_file {
         match name.as_str() {
             "[Socket]" => {
+                exec_config = Some(super::parse_exec_section(&mut section)?);
                 socket_configs = match parse_socket_section(section) {
                     Ok(conf) => Some(conf),
-                    Err(e) => return Err(format!("Parsing error in file: {:?} :: {}", path, e)),
+                    Err(e) => {
+                        return Err(ParsingError::from(format!(
+                            "Parsing error in file: {:?} :: {}",
+                            path, e
+                        )))
+                    }
                 };
             }
             "[Unit]" => {
@@ -32,13 +39,25 @@ pub fn parse_socket(
 
     let (sock_name, services, sock_configs) = match socket_configs {
         Some(triple) => triple,
-        None => return Err(format!("Didn't find socket config in file: {:?}", path)),
+        None => {
+            return Err(ParsingError::from(format!(
+                "Didn't find socket config in file: {:?}",
+                path
+            )))
+        }
     };
 
     let conf = match unit_config {
         Some(conf) => conf,
-        None => return Err(format!("Didn't find a unit config for file: {:?}", path)),
+        None => {
+            return Err(ParsingError::from(format!(
+                "Didn't find a unit config for file: {:?}",
+                path
+            )))
+        }
     };
+
+    let exec_config = exec_config.unwrap();
 
     Ok(Unit {
         conf,
@@ -57,6 +76,7 @@ pub fn parse_socket(
             name: sock_name,
             sockets: sock_configs,
             services,
+            exec_config,
         }),
     })
 }
@@ -80,49 +100,65 @@ fn parse_unix_addr(addr: &str) -> Result<String, ()> {
 }
 
 fn parse_socket_section(
-    section: ParsedSection,
-) -> Result<(String, Vec<String>, Vec<SocketConfig>), String> {
-    let mut fdname: Option<String> = None;
-    let mut socket_kinds: Vec<(u32, SocketKind)> = Vec::new();
-    let mut services: Vec<String> = Vec::new();
+    mut section: ParsedSection,
+) -> Result<(String, Vec<String>, Vec<SocketConfig>), ParsingError> {
+    let fdname = section.remove("FILEDESCRIPTORNAME");
+    let services = section.remove("SERVICE");
+    let streams = section.remove("LISTENSTREAM");
+    let datagrams = section.remove("LISTENDATAGRAM");
+    let seqpacks = section.remove("LISTENSEQUENTIALPACKET");
+    let fifos = section.remove("LISTENFIFO");
 
-    // TODO check that there is indeed exactly one value per name
-    for (name, mut values) in section {
-        match name.as_str() {
-            "FILEDESCRIPTORNAME" => {
-                fdname = Some(values.remove(0).1);
+    if !section.is_empty() {
+        panic!(
+            "Service section has unrecognized/unimplemented options: {:?}",
+            section
+        );
+    }
+    let fdname = match fdname {
+        None => None,
+        Some(mut vec) => {
+            if vec.len() > 1 {
+                return Err(ParsingError::from(format!(
+                    "Too many entries for FileDescriptorName: []"
+                )));
+            } else if vec.len() == 0 {
+                None
+            } else {
+                Some(vec.remove(0).1)
             }
-            "LISTENSTREAM" => {
-                for _ in 0..values.len() {
-                    let (entry_num, value) = values.remove(0);
-                    socket_kinds.push((entry_num, SocketKind::Stream(value)));
-                }
-            }
-            "LISTENDATAGRAM" => {
-                for _ in 0..values.len() {
-                    let (entry_num, value) = values.remove(0);
-                    socket_kinds.push((entry_num, SocketKind::Datagram(value)));
-                }
-            }
-            "LISTENSEQUENTIALPACKET" => {
-                for _ in 0..values.len() {
-                    let (entry_num, value) = values.remove(0);
-                    socket_kinds.push((entry_num, SocketKind::Sequential(value)));
-                }
-            }
-            "LISTENFIFO" => {
-                for _ in 0..values.len() {
-                    let (entry_num, value) = values.remove(0);
-                    socket_kinds.push((entry_num, SocketKind::Fifo(value)));
-                }
-            }
-            "SERVICE" => {
-                for _ in 0..values.len() {
-                    let (_, value) = values.remove(0);
-                    services.push(value);
-                }
-            }
-            _ => panic!("Unknown parameter name: {}", name),
+        }
+    };
+
+    let fdname = fdname.unwrap_or("unknown".into());
+
+    let services = services
+        .map(|vec| super::map_tupels_to_second(vec))
+        .unwrap_or_default();
+
+    let mut socket_kinds: Vec<(u32, SocketKind)> = Vec::new();
+    if let Some(mut streams) = streams {
+        for _ in 0..streams.len() {
+            let (entry_num, value) = streams.remove(0);
+            socket_kinds.push((entry_num, SocketKind::Stream(value)));
+        }
+    }
+    if let Some(mut datagrams) = datagrams {
+        for _ in 0..datagrams.len() {
+            let (entry_num, value) = datagrams.remove(0);
+            socket_kinds.push((entry_num, SocketKind::Datagram(value)));
+        }
+    }
+    if let Some(mut seqpacks) = seqpacks {
+        for _ in 0..seqpacks.len() {
+            let (entry_num, value) = seqpacks.remove(0);
+            socket_kinds.push((entry_num, SocketKind::Sequential(value)));
+        }
+    }
+    if let Some(mut fifos) = fifos {
+        for _ in 0..fifos.len() {
+            let (entry_num, value) = fifos.remove(0);
+            socket_kinds.push((entry_num, SocketKind::Fifo(value)));
         }
     }
 
@@ -140,20 +176,20 @@ fn parse_socket_section(
                         path: std::path::PathBuf::from(addr),
                     })
                 } else {
-                    return Err(format!(
+                    return Err(ParsingError::from(format!(
                         "No specialized config for fifo found for fifo addr: {}",
                         addr
-                    ));
+                    )));
                 }
             }
             SocketKind::Sequential(addr) => {
                 if parse_unix_addr(addr).is_ok() {
                     SpecializedSocketConfig::UnixSocket(UnixSocketConfig::Sequential(addr.clone()))
                 } else {
-                    return Err(format!(
+                    return Err(ParsingError::from(format!(
                         "No specialized config for socket found for socket addr: {}",
                         addr
-                    ));
+                    )));
                 }
             }
             SocketKind::Stream(addr) => {
@@ -168,10 +204,10 @@ fn parse_socket_section(
                         addr: std::net::SocketAddr::V6(addr),
                     })
                 } else {
-                    return Err(format!(
+                    return Err(ParsingError::from(format!(
                         "No specialized config for socket found for socket addr: {}",
                         addr
-                    ));
+                    )));
                 }
             }
             SocketKind::Datagram(addr) => {
@@ -186,10 +222,10 @@ fn parse_socket_section(
                         addr: std::net::SocketAddr::V6(addr),
                     })
                 } else {
-                    return Err(format!(
+                    return Err(ParsingError::from(format!(
                         "No specialized config for socket found for socket addr: {}",
                         addr
-                    ));
+                    )));
                 }
             }
         };
@@ -197,10 +233,5 @@ fn parse_socket_section(
         socket_configs.push(SocketConfig { kind, specialized });
     }
 
-    let name = match fdname {
-        Some(name) => name,
-        None => "unknown".into(),
-    };
-
-    Ok((name, services, socket_configs))
+    Ok((fdname, services, socket_configs))
 }

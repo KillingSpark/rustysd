@@ -128,6 +128,8 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     let accept = section.remove("ACCEPT");
     let dbus_name = section.remove("BUSNAME");
 
+    let exec_config = super::parse_exec_section(&mut section)?;
+
     if !section.is_empty() {
         panic!(
             "Service section has unrecognized/unimplemented options: {:?}",
@@ -278,6 +280,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     }
 
     Ok(ServiceConfig {
+        exec_config,
         srcv_type,
         notifyaccess,
         restart,

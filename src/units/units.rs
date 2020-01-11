@@ -213,7 +213,7 @@ impl Unit {
     ) -> Result<(), String> {
         trace!("Deactivate unit: {}", self.conf.name());
         match &mut self.specialized {
-            UnitSpecialized::Target => {/* nothing to do */},
+            UnitSpecialized::Target => { /* nothing to do */ }
             UnitSpecialized::Socket(sock) => {
                 sock.close_all(self.conf.name(), &mut *fd_store.write().unwrap())
                     .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
@@ -313,6 +313,13 @@ pub enum Timeout {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub struct ExecConfig {
+    pub user: Option<String>,
+    pub group: Option<String>,
+    pub supplementary_groups: Vec<String>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {
     pub restart: ServiceRestart,
     pub accept: bool,
@@ -326,6 +333,8 @@ pub struct ServiceConfig {
     pub starttimeout: Option<Timeout>,
     pub stoptimeout: Option<Timeout>,
     pub generaltimeout: Option<Timeout>,
+
+    pub exec_config: ExecConfig,
 
     pub dbus_name: Option<String>,
 
