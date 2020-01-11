@@ -63,6 +63,10 @@ pub fn map_tupels_to_second<X, Y: Clone>(v: Vec<(X, Y)>) -> Vec<Y> {
 }
 
 pub fn string_to_bool(s: &str) -> bool {
+    if s.len() == 0 {
+        return false;
+    }
+    
     let s_upper = &s.to_uppercase();
     let c: char = s_upper.chars().nth(0).unwrap();
 
