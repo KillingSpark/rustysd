@@ -35,6 +35,9 @@ pub struct Service {
     pub notifications_buffer: String,
     pub stdout_buffer: Vec<u8>,
     pub stderr_buffer: Vec<u8>,
+    pub uid: nix::unistd::Uid,
+    pub gid: nix::unistd::Gid,
+    pub supp_gids: Vec<nix::unistd::Gid>,
 }
 
 pub enum StartResult {

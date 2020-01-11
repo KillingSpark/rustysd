@@ -36,6 +36,66 @@ pub fn parse_service(
         )));
     };
 
+    let uid = if let Some(user) = &service_config.exec_config.user {
+        if let Ok(uid) = user.parse::<u32>() {
+            Some(nix::unistd::Uid::from_raw(uid))
+        } else {
+            if let Ok(pwentry) =
+                crate::platform::pwnam::getpwnam(&user).map_err(|e| ParsingError::from(e))
+            {
+                Some(pwentry.uid)
+            } else {
+                return Err(ParsingError::from(format!(
+                    "Couldnt get uid for username: {}",
+                    user
+                )));
+            }
+        }
+    } else {
+        None
+    };
+    let uid = uid.unwrap_or(nix::unistd::getuid());
+
+    let gid = if let Some(group) = &service_config.exec_config.group {
+        if let Ok(gid) = group.parse::<u32>() {
+            Some(nix::unistd::Gid::from_raw(gid))
+        } else {
+            if let Ok(groupentry) =
+                crate::platform::grnam::getgrnam(&group).map_err(|e| ParsingError::from(e))
+            {
+                Some(groupentry.gid)
+            } else {
+                return Err(ParsingError::from(format!(
+                    "Couldnt get gid for groupname: {}",
+                    group
+                )));
+            }
+        }
+    } else {
+        None
+    };
+    trace!("GID: {:?}", gid);
+    let gid = gid.unwrap_or(nix::unistd::getgid());
+
+    let mut supp_gids = Vec::new();
+    for group in &service_config.exec_config.supplementary_groups {
+        let gid = if let Ok(gid) = group.parse::<u32>() {
+            nix::unistd::Gid::from_raw(gid)
+        } else {
+            if let Ok(groupentry) =
+                crate::platform::grnam::getgrnam(&group).map_err(|e| ParsingError::from(e))
+            {
+                groupentry.gid
+            } else {
+                return Err(ParsingError::from(format!(
+                    "Couldnt get gid for groupname: {}",
+                    group
+                )));
+            }
+        };
+        supp_gids.push(gid);
+    }
+
     Ok(Unit {
         id: chosen_id,
         conf: unit_config.unwrap_or(UnitConfig {
@@ -58,6 +118,9 @@ pub fn parse_service(
             install_config,
         },
         specialized: UnitSpecialized::Service(Service {
+            supp_gids,
+            uid,
+            gid,
             pid: None,
             signaled_ready: false,
 

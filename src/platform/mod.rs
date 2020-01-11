@@ -29,6 +29,8 @@ mod drop_privileges;
 pub use eventfd::*;
 pub use subreaper::*;
 pub use drop_privileges::*;
+pub mod pwnam;
+pub mod grnam;
 
 #[cfg(any(
     target_os = "freebsd",
