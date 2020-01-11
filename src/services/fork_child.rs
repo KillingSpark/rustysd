@@ -200,12 +200,23 @@ pub fn after_fork_child(
     }
 
     if let Err(e) = dup_fds(name, fds) {
-        eprintln!("[FORK_CHILD {}]{}", name, e);
+        eprintln!("[FORK_CHILD {}] error while duping fds: {}", name, e);
+        std::process::exit(1);
     }
-
+    
     setup_env_vars(names, notify_socket_env_var);
     let (cmd, args) = prepare_exec_args(srvc);
-
+    
+    if nix::unistd::getuid().is_root() {
+        match crate::platform::drop_privileges(srvc.gid, &srvc.supp_gids, srvc.uid) {
+            Ok(()) => {/* Happy */},
+            Err(e) =>  {
+                eprintln!("[FORK_CHILD {}] could not drop privileges because: {}", name, e);
+                std::process::exit(1);
+            }
+        }
+    }
+    
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
     match nix::unistd::execv(&cmd, &args) {
         Ok(_) => {
@@ -216,6 +227,7 @@ pub fn after_fork_child(
         }
         Err(e) => {
             eprintln!("[FORK_CHILD {}] execv errored: {:?}", name, e);
+            std::process::exit(1);
         }
     }
 }

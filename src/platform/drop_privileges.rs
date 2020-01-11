@@ -8,18 +8,19 @@ use std::io::Read;
 /// They additionally have some checking if setgroups is possible
 ///
 /// I dont think this needs to explicitly drop any capabilities on linux. At least thats how I understood the man page
-pub fn drop_privileges(gid: Gid, uid: Uid) -> Result<(), String> {
+pub fn drop_privileges(gid: Gid, supp_gids: &Vec<Gid>, uid: Uid) -> Result<(), String> {
     setresgid(gid, gid, gid).map_err(|e| format!("Error while setting groupid: {}", e))?;
-    maybe_drop_groups()?;
+    maybe_set_groups(supp_gids)?;
     setresuid(uid, uid, uid).map_err(|e| format!("Error while setting userid: {}", e))?;
     Ok(())
 }
 
 const ALLOW_READ: [u8; 5] = [b'a', b'l', b'l', b'o', b'w'];
 
-fn maybe_drop_groups() -> Result<(), String> {
+fn maybe_set_groups(supp_gids: &Vec<Gid>) -> Result<(), String> {
     if can_drop_groups()? {
-        nix::unistd::setgroups(&vec![]).map_err(|e| format!("Error while calling setgroups: {}", e))
+        nix::unistd::setgroups(supp_gids)
+            .map_err(|e| format!("Error while calling setgroups: {}", e))
     } else {
         // TODO check if this is sensible.
         // We just ignore groups if the kernel says we cant drop them. Maybe we should just not start the servcie then?
