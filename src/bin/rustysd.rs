@@ -8,9 +8,26 @@ use rustysd::logging;
 use rustysd::notification_handler;
 use rustysd::platform;
 use rustysd::signal_handler;
+use rustysd::socket_activation;
 use rustysd::units;
-use rustysd::wait_for_socket_activation;
 use signal_hook::iterator::Signals;
+use std::sync::{Arc, Mutex, RwLock};
+
+pub fn unrecoverable_error(error: String) {
+    if nix::unistd::getpid().as_raw() == 1 {
+        eprintln!("Unrecoverable error: {}", error);
+        let res = nix::unistd::execve(
+            &std::ffi::CString::new("/sbin/sh").unwrap(),
+            &vec![],
+            &vec![],
+        );
+        eprintln!("Error execing: {:?}", res);
+        std::thread::sleep(std::time::Duration::from_secs(1_000_000));
+        std::process::exit(1);
+    } else {
+        panic!("{}", error);
+    }
+}
 
 fn move_to_new_session() -> bool {
     match nix::unistd::fork() {
@@ -45,41 +62,7 @@ fn pid1_specific_setup() {
 #[cfg(not(target_os = "linux"))]
 fn pid1_specific_setup() {}
 
-fn main() {
-    pid1_specific_setup();
-
-    let (log_conf, conf) = config::load_config(None);
-
-    logging::setup_logging(&log_conf).unwrap();
-    let conf = match conf {
-        Ok(conf) => conf,
-        Err(e) => {
-            error!("Error while loading the conf: {}", e);
-            panic!(
-                "Reading conf did not work. See stdout or log at: {:?}",
-                log_conf.log_dir
-            );
-        }
-    };
-
-    // TODO make configurable
-    let should_go_to_new_session = false;
-    if should_go_to_new_session {
-        if !move_to_new_session() {
-            return;
-        }
-    }
-
-    rustysd::platform::become_subreaper(true);
-
-    let signals = Signals::new(&[
-        signal_hook::SIGCHLD,
-        signal_hook::SIGTERM,
-        signal_hook::SIGINT,
-        signal_hook::SIGQUIT,
-    ])
-    .expect("Couldnt setup listening to the signals");
-
+fn prepare_runtimeinfo(conf: &config::Config) -> Arc<units::RuntimeInfo> {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let mut first_id = 0;
@@ -95,10 +78,9 @@ fn main() {
         .contains(&"--dry-run".to_owned())
     {
         warn!("Exit after loading because --dry-run was passed");
-        return;
+        unrecoverable_error("Started as dry-run".into());
     }
 
-    use std::sync::{Arc, Mutex, RwLock};
     // wrap units into mutexes
     let unit_table: std::collections::HashMap<_, _> = unit_table
         .into_iter()
@@ -125,27 +107,82 @@ fn main() {
         config: conf.clone(),
     });
 
-    // listen on user commands like listunits/kill/restart...
-    let control_sock_path = conf.notification_sockets_dir.join("control.socket");
-    if control_sock_path.exists() {
-        std::fs::remove_file(&control_sock_path).unwrap();
-    }
+    run_info
+}
+
+fn start_notification_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
+    std::thread::spawn(move || {
+        notification_handler::handle_all_streams(eventfd, run_info.unit_table.clone());
+    });
+}
+fn start_stdout_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
+    std::thread::spawn(move || {
+        notification_handler::handle_all_std_out(eventfd, run_info.unit_table.clone());
+    });
+}
+fn start_stderr_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
+    std::thread::spawn(move || {
+        notification_handler::handle_all_std_err(eventfd, run_info.unit_table.clone());
+    });
+}
+fn start_signal_handler_thread(
+    signals: Signals,
+    run_info: units::ArcRuntimeInfo,
+    conf: &config::Config,
+    eventfds: Vec<platform::EventFd>,
+) -> std::thread::JoinHandle<()> {
+    let note_conf_dir = conf.notification_sockets_dir.clone();
+    let handle = std::thread::spawn(move || {
+        // listen on signals from the child processes
+        signal_handler::handle_signals(signals, run_info, note_conf_dir, eventfds);
+    });
+    handle
+}
+
+fn main() {
+    pid1_specific_setup();
+
+    let (log_conf, conf) = config::load_config(None);
+
+    logging::setup_logging(&log_conf).unwrap();
+    let conf = match conf {
+        Ok(conf) => conf,
+        Err(e) => {
+            error!("Error while loading the conf: {}", e);
+            unrecoverable_error(format!(
+                "Reading conf did not work. See stdout or log at: {:?}",
+                log_conf.log_dir
+            ));
+            // unrecoverable_error always shutsdown rustysd
+            unreachable!("");
+        }
+    };
 
     // TODO make configurable
-    use std::os::unix::net::UnixListener;
-    std::fs::create_dir_all(&conf.notification_sockets_dir).unwrap();
-    let unixsock = UnixListener::bind(&control_sock_path).unwrap();
-    control::accept_control_connections_unix_socket(
-        run_info.clone(),
-        conf.notification_sockets_dir.clone(),
-        unixsock,
-    );
-    let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
-    control::accept_control_connections_tcp(
-        run_info.clone(),
-        conf.notification_sockets_dir.clone(),
-        tcpsock,
-    );
+    let should_go_to_new_session = false;
+    if should_go_to_new_session {
+        if !move_to_new_session() {
+            return;
+        }
+    }
+
+    rustysd::platform::become_subreaper(true);
+
+    let signals = match Signals::new(&[
+        signal_hook::SIGCHLD,
+        signal_hook::SIGTERM,
+        signal_hook::SIGINT,
+        signal_hook::SIGQUIT,
+    ]) {
+        Ok(signals) => signals,
+        Err(e) => {
+            unrecoverable_error(format!("Couldnt setup listening to the signals: {}", e));
+            // unrecoverable_error always shutsdown rustysd
+            unreachable!("");
+        }
+    };
+
+    let run_info = prepare_runtimeinfo(&conf);
 
     let notification_eventfd = platform::make_event_fd().unwrap();
     let stdout_eventfd = platform::make_event_fd().unwrap();
@@ -158,129 +195,22 @@ fn main() {
         sock_act_eventfd,
     ];
 
-    let unit_table_clone = unit_table.clone();
-    std::thread::spawn(move || {
-        notification_handler::handle_all_streams(notification_eventfd, unit_table_clone);
-    });
-
-    let unit_table_clone = unit_table.clone();
-    std::thread::spawn(move || {
-        notification_handler::handle_all_std_out(stdout_eventfd, unit_table_clone);
-    });
-
-    let unit_table_clone = unit_table.clone();
-    std::thread::spawn(move || {
-        notification_handler::handle_all_std_err(stderr_eventfd, unit_table_clone);
-    });
-
-    let run_info_clone = run_info.clone();
-    let note_sock_path_clone = conf.notification_sockets_dir.clone();
-    let eventfds_clone = Arc::new(eventfds.clone());
-    std::thread::spawn(move || loop {
-        match wait_for_socket_activation::wait_for_socket(
-            sock_act_eventfd,
-            run_info_clone.unit_table.clone(),
-            run_info_clone.fd_store.clone(),
-        ) {
-            Ok(ids) => {
-                for socket_id in ids {
-                    let unit_table_locked = run_info_clone.unit_table.read().unwrap();
-                    {
-                        let socket_name = {
-                            let sock_unit = unit_table_locked.get(&socket_id).unwrap();
-                            let sock_unit_locked = sock_unit.lock().unwrap();
-                            sock_unit_locked.conf.name()
-                        };
-
-                        let mut srvc_unit_id = None;
-                        for unit in unit_table_locked.values() {
-                            let unit_locked = unit.lock().unwrap();
-                            if let crate::units::UnitSpecialized::Service(srvc) =
-                                &unit_locked.specialized
-                            {
-                                if srvc.socket_names.contains(&socket_name) {
-                                    srvc_unit_id = Some(unit_locked.id);
-                                    trace!(
-                                        "Start service {} by socket activation",
-                                        unit_locked.conf.name()
-                                    );
-                                }
-                            }
-                        }
-
-                        if let Some(srvc_unit_id) = srvc_unit_id {
-                            if let Some(status) = run_info_clone
-                                .status_table
-                                .read()
-                                .unwrap()
-                                .get(&srvc_unit_id)
-                            {
-                                let srvc_status = {
-                                    let status_locked = status.lock().unwrap();
-                                    *status_locked
-                                };
-
-                                if srvc_status != units::UnitStatus::StartedWaitingForSocket {
-                                    trace!(
-                                        "Ignore socket activation. Service has status: {:?}",
-                                        srvc_status
-                                    );
-                                    let sock_unit = unit_table_locked.get(&socket_id).unwrap();
-                                    let mut sock_unit_locked = sock_unit.lock().unwrap();
-                                    if let units::UnitSpecialized::Socket(sock) =
-                                        &mut sock_unit_locked.specialized
-                                    {
-                                        sock.activated = true;
-                                    }
-                                } else {
-                                    match crate::units::activate_unit(
-                                        srvc_unit_id,
-                                        run_info_clone.clone(),
-                                        note_sock_path_clone.clone(),
-                                        eventfds_clone.clone(),
-                                        false,
-                                    ) {
-                                        Ok(_) => {
-                                            let sock_unit =
-                                                unit_table_locked.get(&socket_id).unwrap();
-                                            let mut sock_unit_locked = sock_unit.lock().unwrap();
-                                            if let units::UnitSpecialized::Socket(sock) =
-                                                &mut sock_unit_locked.specialized
-                                            {
-                                                sock.activated = true;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            format!(
-                                                "Error while starting service from socket activation: {}",
-                                                e
-                                            );
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Error in socket activation loop: {}", e);
-                break;
-            }
-        }
-    });
-
-    platform::notify_event_fds(&eventfds);
-
     // listen to signals
-    let run_info_clone = run_info.clone();
-    let note_dir_clone = conf.notification_sockets_dir.clone();
-    let eventfds_clone = eventfds.clone();
-    let handle = std::thread::spawn(move || {
-        // listen on signals from the child processes
-        signal_handler::handle_signals(signals, run_info_clone, note_dir_clone, eventfds_clone);
-    });
+    let handle = start_signal_handler_thread(signals, run_info.clone(), &conf, eventfds.clone());
+
+    // listen on user commands like listunits/kill/restart...
+    control::open_all_sockets(run_info.clone(), &conf);
+
+    start_notification_handler_thread(run_info.clone(), notification_eventfd);
+    start_stdout_handler_thread(run_info.clone(), stdout_eventfd);
+    start_stderr_handler_thread(run_info.clone(), stderr_eventfd);
+
+    socket_activation::start_socketactivation_thread(
+        run_info.clone(),
+        conf.notification_sockets_dir.clone(),
+        sock_act_eventfd,
+        Arc::new(eventfds.clone()),
+    );
 
     // parallel startup of all services
     units::activate_units(

@@ -32,7 +32,7 @@ pub mod services;
 pub mod signal_handler;
 pub mod sockets;
 pub mod units;
-pub mod wait_for_socket_activation;
+pub mod socket_activation;
 
 #[macro_use]
 extern crate log;
