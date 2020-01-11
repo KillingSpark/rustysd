@@ -13,17 +13,63 @@ use rustysd::units;
 use signal_hook::iterator::Signals;
 use std::sync::{Arc, Mutex, RwLock};
 
-pub fn unrecoverable_error(error: String) {
+fn find_shell_path() -> Option<std::path::PathBuf> {
+    let possible_paths = vec![
+        std::path::PathBuf::from("/sbin/sh"),
+        std::path::PathBuf::from("/bin/sh"),
+        std::path::PathBuf::from("/usr/bin/sh"),
+    ];
+
+    // TODO make configurable
+    for p in possible_paths {
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+fn unrecoverable_error(error: String) {
     if nix::unistd::getpid().as_raw() == 1 {
         eprintln!("Unrecoverable error: {}", error);
-        let res = nix::unistd::execve(
-            &std::ffi::CString::new("/sbin/sh").unwrap(),
-            &vec![],
-            &vec![],
-        );
-        eprintln!("Error execing: {:?}", res);
-        std::thread::sleep(std::time::Duration::from_secs(1_000_000));
-        std::process::exit(1);
+        if let Some(shell_path) = find_shell_path() {
+            match std::process::Command::new(shell_path).spawn() {
+                Ok(mut child) => match child.wait() {
+                    Ok(_) => {
+                        let dur = std::time::Duration::from_secs(10);
+                        eprintln!("Returned from shell. Will exit after sleeping: {:?}", dur);
+                        std::thread::sleep(dur);
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        let dur = std::time::Duration::from_secs(1_000_000);
+                        eprintln!(
+                            "Error while waiting on the shell: {}. Will sleep for {:?} and then exit",
+                            e, dur
+                        );
+                        std::thread::sleep(dur);
+                        std::process::exit(1);
+                    }
+                },
+                Err(e) => {
+                    let dur = std::time::Duration::from_secs(1_000_000);
+                    eprintln!(
+                        "Error while starting the shell: {}. Will sleep for {:?} and then exit",
+                        e, dur
+                    );
+                    std::thread::sleep(dur);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            let dur = std::time::Duration::from_secs(1_000_000);
+            eprintln!(
+                "Cannot find a shell for emergency. Will sleep for {:?} and then exit",
+                dur
+            );
+            std::thread::sleep(dur);
+            std::process::exit(1);
+        }
     } else {
         panic!("{}", error);
     }
