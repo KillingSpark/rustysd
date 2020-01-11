@@ -168,6 +168,7 @@ pub fn activate_units(
         }
     }
 
+    // TODO make configurable or at least make guess about amount fo threads
     let tpool = ThreadPool::new(6);
     let eventfds_arc = Arc::new(eventfds);
     activate_units_recursive(
