@@ -40,6 +40,6 @@ pub fn getgrnam(groupname: &str) -> Result<GroupEntry, String> {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn getpwnam(username: &str) -> Result<PwEntry, String> {
+pub fn getgrnam(username: &str) -> Result<PwEntry, String> {
     Err("getpwnam is not yet implemented for this platform".into())
 }
