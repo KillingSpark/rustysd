@@ -2,8 +2,73 @@
 
 use super::units::*;
 use crate::platform::EventFd;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
+
+pub struct UnitOperationError {
+    pub reason: UnitOperationErrorReason,
+    pub unit_name: String,
+    pub unit_id: UnitId,
+}
+
+pub enum UnitOperationErrorReason {
+    GenericStartError(String),
+    GenericStopError(String),
+    SocketOpenError(String),
+    SocketCloseError(String),
+    ServiceStartError(String),
+    ServiceStopError(String),
+}
+
+impl std::fmt::Display for UnitOperationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.reason {
+            UnitOperationErrorReason::GenericStartError(msg) => {
+                write!(
+                    f,
+                    "Unit {} (ID {}) failed to start because: {}",
+                    self.unit_name, self.unit_id, msg
+                )?;
+            }
+            UnitOperationErrorReason::GenericStopError(msg) => {
+                write!(
+                    f,
+                    "Unit {} (ID {}) failed to stop cleanly because: {}",
+                    self.unit_name, self.unit_id, msg
+                )?;
+            }
+            UnitOperationErrorReason::ServiceStartError(msg) => {
+                write!(
+                    f,
+                    "Service {} (ID {}) failed to start because: {}",
+                    self.unit_name, self.unit_id, msg
+                )?;
+            }
+            UnitOperationErrorReason::ServiceStopError(msg) => {
+                write!(
+                    f,
+                    "Service {} (ID {}) failed to stop cleanly because: {}",
+                    self.unit_name, self.unit_id, msg
+                )?;
+            }
+            UnitOperationErrorReason::SocketOpenError(msg) => {
+                write!(
+                    f,
+                    "Socket {} (ID {}) failed to open because: {}",
+                    self.unit_name, self.unit_id, msg
+                )?;
+            }
+            UnitOperationErrorReason::SocketCloseError(msg) => {
+                write!(
+                    f,
+                    "Socket {} (ID {}) failed to close cleanly because: {}",
+                    self.unit_name, self.unit_id, msg
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
 
 fn activate_units_recursive(
     ids_to_start: Vec<UnitId>,
@@ -11,19 +76,28 @@ fn activate_units_recursive(
     tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
+    errors: Arc<Mutex<Vec<UnitOperationError>>>,
 ) {
     for id in ids_to_start {
         let run_info_copy = run_info.clone();
         let tpool_copy = tpool.clone();
         let note_sock_copy = notification_socket_path.clone();
         let eventfds_copy = eventfds.clone();
+        let errors_copy = errors.clone();
         tpool.execute(move || {
             let run_info_copy2 = run_info_copy.clone();
             let tpool_copy2 = tpool_copy.clone();
             let note_sock_copy2 = note_sock_copy.clone();
             let eventfds_copy2 = eventfds_copy.clone();
+            let errors_copy2 = errors_copy.clone();
 
-            match activate_unit(id, run_info_copy, note_sock_copy, eventfds_copy, true) {
+            match activate_unit(
+                id,
+                run_info_copy.clone(),
+                note_sock_copy,
+                eventfds_copy,
+                true,
+            ) {
                 Ok(StartResult::Started(next_services_ids)) => {
                     let next_services_job = move || {
                         activate_units_recursive(
@@ -32,15 +106,18 @@ fn activate_units_recursive(
                             tpool_copy2,
                             note_sock_copy2,
                             eventfds_copy2,
+                            errors_copy2,
                         );
                     };
                     tpool_copy.execute(next_services_job);
                 }
-                Ok(StartResult::Ignored) => {
-                    // Thats ok
+                Ok(StartResult::WaitForDependencies) => {
+                    // Thats ok. The unit is waiting for more dependencies
+                    // TODO make this more explicit
                 }
                 Err(e) => {
                     error!("Error while activating unit {}", e);
+                    errors_copy.lock().unwrap().push(e);
                 }
             }
         });
@@ -49,7 +126,7 @@ fn activate_units_recursive(
 
 pub enum StartResult {
     Started(Vec<UnitId>),
-    Ignored,
+    WaitForDependencies,
 }
 
 pub fn activate_unit(
@@ -58,7 +135,7 @@ pub fn activate_unit(
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
     allow_ignore: bool,
-) -> std::result::Result<StartResult, std::string::String> {
+) -> std::result::Result<StartResult, UnitOperationError> {
     trace!("Activate id: {:?}", id_to_start);
 
     // 1) First lock the unit itself
@@ -70,7 +147,15 @@ pub fn activate_unit(
         match units_locked.get(&id_to_start) {
             Some(unit) => Arc::clone(unit),
             None => {
-                panic!("Tried to run a unit that has been removed from the map");
+                // If this occurs, there is a flaw in the handling of dependencies
+                // IDs should be purged globally when units get removed
+                return Err(UnitOperationError {
+                    reason: UnitOperationErrorReason::GenericStartError(
+                        "Tried to activate a unit that can not be found".into(),
+                    ),
+                    unit_name: "unknown unit".into(),
+                    unit_id: id_to_start,
+                });
             }
         }
     };
@@ -83,22 +168,27 @@ pub fn activate_unit(
 
     // if not all dependencies are yet started ignore this call. This unit will be activated again when
     // the next dependency gets ready
-    let all_deps_ready = unit_locked.install.after.iter().fold(true, |acc, elem| {
-        let is_started = {
+    let unstarted_deps = unit_locked
+        .install
+        .after
+        .iter()
+        .fold(Vec::new(), |mut acc, elem| {
             let status = status_table_locked.get(elem).unwrap();
             let status_locked = status.lock().unwrap();
-            *status_locked == UnitStatus::Started
-                || *status_locked == UnitStatus::StartedWaitingForSocket
-        };
-        acc && is_started
-    });
-    if !all_deps_ready {
+            let ready = *status_locked == UnitStatus::Started
+                || *status_locked == UnitStatus::StartedWaitingForSocket;
+            if !ready {
+                acc.push(elem);
+            }
+            acc
+        });
+    if !unstarted_deps.is_empty() {
         trace!(
-            "Unit: {} ignores activation. Not all dependencies have been started (needs: {:?})",
+            "Unit: {} ignores activation. Not all dependencies have been started (still waiting for: {:?})",
             unit_locked.conf.name(),
-            unit_locked.install.after,
+            unstarted_deps,
         );
-        return Ok(StartResult::Ignored);
+        return Ok(StartResult::WaitForDependencies);
     }
 
     // Check if the unit is currently starting. Update the status to starting if not
@@ -119,7 +209,7 @@ pub fn activate_unit(
                 unit_locked.conf.name(),
                 *status_locked
             );
-            return Ok(StartResult::Ignored);
+            return Ok(StartResult::WaitForDependencies);
         }
         if needs_intial_run {
             *status_locked = UnitStatus::Starting;
@@ -143,12 +233,14 @@ pub fn activate_unit(
             *status_locked = new_status;
             StartResult::Started(next_services_ids)
         })
-        .map_err(|e| {
-            format!(
+        .map_err(|e| UnitOperationError {
+            unit_name: unit_locked.conf.name(),
+            unit_id: unit_locked.id,
+            reason: UnitOperationErrorReason::ServiceStartError(format!(
                 "Error while starting unit {}: {}",
                 unit_locked.conf.name(),
                 e
-            )
+            )),
         })
     // drop all the locks "at once". Ordering of dropping should be irrelevant?
 }
@@ -171,13 +263,16 @@ pub fn activate_units(
     // TODO make configurable or at least make guess about amount fo threads
     let tpool = ThreadPool::new(6);
     let eventfds_arc = Arc::new(eventfds);
+    let errors = Arc::new(Mutex::new(Vec::new()));
     activate_units_recursive(
         root_units,
         run_info,
         tpool.clone(),
         notification_socket_path,
         eventfds_arc,
+        errors.clone(),
     );
 
     tpool.join();
+    // TODO handle errors
 }

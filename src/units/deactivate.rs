@@ -72,7 +72,7 @@ pub fn reactivate_unit(
     run_info: ArcRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
-) -> std::result::Result<(), std::string::String> {
+) -> std::result::Result<(), UnitOperationError> {
     deactivate_unit(id_to_restart, false, run_info.clone());
     crate::units::activate_unit(
         id_to_restart,

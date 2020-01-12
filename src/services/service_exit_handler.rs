@@ -155,9 +155,13 @@ pub fn service_exit_handler(
             run_info,
             notification_socket_path,
             Arc::new(eventfds.to_vec()),
-        )?;
+        )
+        .map_err(|e| format!("{}", e))?;
     } else {
-        trace!("Recursively killing all services requiring service {}", name);
+        trace!(
+            "Recursively killing all services requiring service {}",
+            name
+        );
         crate::units::deactivate_unit_recursive(srvc_id, true, run_info.clone());
     }
     Ok(())

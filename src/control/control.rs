@@ -263,7 +263,7 @@ pub fn execute_command(
                 run_info,
                 notification_socket_path,
                 std::sync::Arc::new(Vec::new()),
-            )?;
+            ).map_err(|e| format!("{}", e))?;
         }
         Command::Stop(unit_name) => {
             let id = if let Some(unit) =
