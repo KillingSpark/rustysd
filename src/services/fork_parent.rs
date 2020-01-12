@@ -1,3 +1,4 @@
+use crate::services::RunCmdError;
 use crate::services::Service;
 use crate::units::*;
 use std::os::unix::net::UnixDatagram;
@@ -7,7 +8,7 @@ pub fn wait_for_service(
     name: &str,
     stream: &UnixDatagram,
     pid_table: ArcMutPidTable,
-) -> Result<(), String> {
+) -> Result<(), RunCmdError> {
     trace!(
         "[FORK_PARENT] Service: {} forked with pid: {}",
         name,
@@ -30,7 +31,10 @@ pub fn wait_for_service(
                     let duration_elapsed = start_time.elapsed();
                     if duration_elapsed > duration_timeout {
                         trace!("[FORK_PARENT] Service {} notification timed out", name);
-                        return Err(format!("Timeout reached"));
+                        return Err(RunCmdError::Timeout(
+                            srvc.service_config.exec.clone(),
+                            format!("{:?}", duration_timeout),
+                        ));
                     } else {
                         let duration_till_timeout = duration_timeout - duration_elapsed;
                         stream
@@ -72,7 +76,10 @@ pub fn wait_for_service(
                 if let Some(time_out) = duration_timeout {
                     if start_time.elapsed() >= time_out {
                         error!("oneshot service {} reached timeout", name);
-                        return Err(format!("Timeout reached"));
+                        return Err(RunCmdError::Timeout(
+                            srvc.service_config.exec.clone(),
+                            format!("{:?}", duration_timeout),
+                        ));
                     }
                 }
                 {
@@ -138,18 +145,24 @@ pub fn wait_for_service(
                         }
                         crate::dbus_wait::WaitResult::Timedout => {
                             warn!("[FORK_PARENT] Did not find dbus name on bus: {}", dbus_name);
-                            return Err(format!("Timeout reached"));
+                            return Err(RunCmdError::Timeout(
+                                srvc.service_config.exec.clone(),
+                                format!("{:?}", duration_timeout),
+                            ));
                         }
                     },
                     Err(e) => {
-                        return Err(format!("Error while waiting for dbus name: {}", e));
+                        return Err(RunCmdError::WaitError(
+                            srvc.service_config.exec.clone(),
+                            format!("Error while waiting for dbus name: {}", e),
+                        ));
                     }
                 }
             } else {
-                return Err(format!(
+                return Err(RunCmdError::Generic(format!(
                     "[FORK_PARENT] No busname given for service: {:?}",
                     name
-                ));
+                )));
             }
         }
     }

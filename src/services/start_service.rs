@@ -1,12 +1,13 @@
 use super::fork_child;
 use crate::fd_store::FDStore;
+use crate::services::RunCmdError;
 use crate::services::Service;
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
     name: &str,
     fd_store: &FDStore,
-) -> Result<(), String> {
+) -> Result<(), RunCmdError> {
     // check if executable even exists
     let split: Vec<&str> = srvc.service_config.exec.split(' ').collect();
 
@@ -16,9 +17,9 @@ fn start_service_with_filedescriptors(
             "The service {} specified an executable that does not exist: {:?}",
             name, &cmd
         );
-        return Err(format!(
-            "The service {} specified an executable that does not exist: {:?}",
-            name, &cmd
+        return Err(RunCmdError::SpawnError(
+            split[0].to_owned(),
+            format!("Executable does not exist"),
         ));
     }
     if !cmd.is_file() {
@@ -26,9 +27,9 @@ fn start_service_with_filedescriptors(
             "The service {} specified an executable that is not a file: {:?}",
             name, &cmd
         );
-        return Err(format!(
-            "The service {} specified an executable that is not a file: {:?}",
-            name, &cmd
+        return Err(RunCmdError::SpawnError(
+            split[0].to_owned(),
+            format!("Executable does not exist (is a directory)"),
         ));
     }
 
@@ -81,13 +82,13 @@ fn start_service_with_filedescriptors(
     Ok(())
 }
 
-pub fn start_service(srvc: &mut Service, name: &str, fd_store: &FDStore) -> Result<(), String> {
-    if srvc.service_config.accept {
-        warn!("Inetd style accepting is not supported");
-        Err("Inetd style accepting is not supported".into())
-    } else {
-        start_service_with_filedescriptors(srvc, name, fd_store)?;
-        srvc.runtime_info.up_since = Some(std::time::Instant::now());
-        Ok(())
-    }
+pub fn start_service(
+    srvc: &mut Service,
+    name: &str,
+    fd_store: &FDStore,
+) -> Result<(), super::RunCmdError> {
+    // TODO check for inetd style activation
+    start_service_with_filedescriptors(srvc, name, fd_store)?;
+    srvc.runtime_info.up_since = Some(std::time::Instant::now());
+    Ok(())
 }

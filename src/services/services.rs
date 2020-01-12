@@ -45,19 +45,19 @@ pub enum RunCmdError {
     SpawnError(String, String),
     WaitError(String, String),
     BadExitCode(String, crate::signal_handler::ChildTermination),
+    Generic(String),
 }
 
 impl std::fmt::Display for RunCmdError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
             RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
-            RunCmdError::SpawnError(cmd, exit) => {
-                format!("{} failed to spawn with: {:?}", cmd, exit)
+            RunCmdError::SpawnError(cmd, err) => format!("{} failed to spawn with: {:?}", cmd, err),
+            RunCmdError::WaitError(cmd, err) => {
+                format!("{} could not be waited on because: {:?}", cmd, err)
             }
-            RunCmdError::WaitError(cmd, exit) => {
-                format!("{} could not be waited on because: {:?}", cmd, exit)
-            }
-            RunCmdError::Timeout(cmd, exit) => format!("{} reached its timeout: {:?}", cmd, exit),
+            RunCmdError::Timeout(cmd, err) => format!("{} reached its timeout: {:?}", cmd, err),
+            RunCmdError::Generic(err) => format!("Generic error: {}", err),
         };
         fmt.write_str(format!("{}", msg).as_str())
     }
@@ -71,7 +71,7 @@ pub enum StartResult {
 pub enum ServiceErrorReason {
     PrestartFailed(RunCmdError),
     PoststartFailed(RunCmdError),
-    StartFailed(String),
+    StartFailed(RunCmdError),
     PoststopFailed(RunCmdError),
     StopFailed(RunCmdError),
     PreparingFailed(String),
@@ -96,7 +96,9 @@ impl std::fmt::Display for ServiceErrorReason {
             ServiceErrorReason::AlreadyHasPGID(e) => {
                 format!("Tried to start already running service: (PGID: {})", e)
             }
-            ServiceErrorReason::PreparingFailed(e) => format!("Preparing of service failed because: {}", e),
+            ServiceErrorReason::PreparingFailed(e) => {
+                format!("Preparing of service failed because: {}", e)
+            }
         };
         fmt.write_str(format!("{}", msg).as_str())
     }
