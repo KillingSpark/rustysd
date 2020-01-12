@@ -162,7 +162,8 @@ pub fn service_exit_handler(
             "Recursively killing all services requiring service {}",
             name
         );
-        crate::units::deactivate_unit_recursive(srvc_id, true, run_info.clone());
+        crate::units::deactivate_unit_recursive(srvc_id, true, run_info.clone())
+            .map_err(|e| format!("{}", e))?;
     }
     Ok(())
 }

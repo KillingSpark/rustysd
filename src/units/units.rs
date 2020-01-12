@@ -2,6 +2,7 @@ use crate::fd_store::FDStore;
 use crate::platform::EventFd;
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
+use crate::units::*;
 
 use nix::unistd::Pid;
 use std::collections::HashMap;
@@ -210,16 +211,25 @@ impl Unit {
         &mut self,
         pid_table: ArcMutPidTable,
         fd_store: ArcMutFDStore,
-    ) -> Result<(), String> {
+    ) -> Result<(), UnitOperationError> {
         trace!("Deactivate unit: {}", self.conf.name());
         match &mut self.specialized {
             UnitSpecialized::Target => { /* nothing to do */ }
             UnitSpecialized::Socket(sock) => {
                 sock.close_all(self.conf.name(), &mut *fd_store.write().unwrap())
-                    .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
+                    .map_err(|e| UnitOperationError {
+                        unit_name: self.conf.name(),
+                        unit_id: self.id,
+                        reason: UnitOperationErrorReason::SocketCloseError(e),
+                    })?;
             }
             UnitSpecialized::Service(srvc) => {
-                srvc.kill(self.id, &self.conf.name(), pid_table)?;
+                srvc.kill(self.id, &self.conf.name(), pid_table)
+                    .map_err(|e| UnitOperationError {
+                        unit_name: self.conf.name(),
+                        unit_id: self.id,
+                        reason: UnitOperationErrorReason::ServiceStopError(e),
+                    })?;
             }
         }
         Ok(())
