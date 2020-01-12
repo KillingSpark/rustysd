@@ -806,7 +806,7 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$USER">$USER</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27USER%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>The user id can be set for starting services. Currently only done for the main executable</td>
+  <td></td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$LOGNAME">$LOGNAME</a></td>
