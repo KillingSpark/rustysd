@@ -181,23 +181,33 @@ impl Unit {
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
-    ) -> Result<UnitStatus, String> {
+    ) -> Result<UnitStatus, UnitOperationError> {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
                 sock.open_all(self.conf.name(), self.id, &mut *fd_store.write().unwrap())
-                    .map_err(|e| format!("Error opening socket {}: {}", self.conf.name(), e))?;
+                    .map_err(|e| UnitOperationError {
+                        unit_name: self.conf.name(),
+                        unit_id: self.id,
+                        reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
+                    })?;
             }
             UnitSpecialized::Service(srvc) => {
-                match srvc.start(
-                    self.id,
-                    &self.conf.name(),
-                    fd_store,
-                    pid_table,
-                    notification_socket_path,
-                    eventfds,
-                    allow_ignore,
-                )? {
+                match srvc
+                    .start(
+                        self.id,
+                        &self.conf.name(),
+                        fd_store,
+                        pid_table,
+                        notification_socket_path,
+                        eventfds,
+                        allow_ignore,
+                    )
+                    .map_err(|e| UnitOperationError {
+                        unit_name: self.conf.name(),
+                        unit_id: self.id,
+                        reason: UnitOperationErrorReason::ServiceStartError(e),
+                    })? {
                     crate::services::StartResult::Started => return Ok(UnitStatus::Started),
                     crate::services::StartResult::WaitingForSocket => {
                         return Ok(UnitStatus::StartedWaitingForSocket)

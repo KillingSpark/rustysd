@@ -40,9 +40,66 @@ pub struct Service {
     pub supp_gids: Vec<nix::unistd::Gid>,
 }
 
+pub enum RunCmdError {
+    Timeout(String, String),
+    SpawnError(String, String),
+    WaitError(String, String),
+    BadExitCode(String, crate::signal_handler::ChildTermination),
+}
+
+impl std::fmt::Display for RunCmdError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let msg = match self {
+            RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
+            RunCmdError::SpawnError(cmd, exit) => {
+                format!("{} failed to spawn with: {:?}", cmd, exit)
+            }
+            RunCmdError::WaitError(cmd, exit) => {
+                format!("{} could not be waited on because: {:?}", cmd, exit)
+            }
+            RunCmdError::Timeout(cmd, exit) => format!("{} reached its timeout: {:?}", cmd, exit),
+        };
+        fmt.write_str(format!("{}", msg).as_str())
+    }
+}
+
 pub enum StartResult {
     Started,
     WaitingForSocket,
+}
+
+pub enum ServiceErrorReason {
+    PrestartFailed(RunCmdError),
+    PoststartFailed(RunCmdError),
+    StartFailed(String),
+    PoststopFailed(RunCmdError),
+    StopFailed(RunCmdError),
+    PreparingFailed(String),
+    Generic(String),
+
+    AlreadyHasPID(nix::unistd::Pid),
+    AlreadyHasPGID(nix::unistd::Pid),
+}
+
+impl std::fmt::Display for ServiceErrorReason {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let msg = match self {
+            ServiceErrorReason::PrestartFailed(e) => format!("Perstart failed: {}", e),
+            ServiceErrorReason::PoststartFailed(e) => format!("Poststart failed: {}", e),
+            ServiceErrorReason::StartFailed(e) => format!("Start failed: {}", e),
+            ServiceErrorReason::StopFailed(e) => format!("Stop failed: {}", e),
+            ServiceErrorReason::PoststopFailed(e) => format!("Poststop failed: {}", e),
+            ServiceErrorReason::Generic(e) => format!("Service error: {}", e),
+            ServiceErrorReason::AlreadyHasPID(e) => {
+                format!("Tried to start already running service (PID: {})", e)
+            }
+            ServiceErrorReason::AlreadyHasPGID(e) => {
+                format!("Tried to start already running service: (PGID: {})", e)
+            }
+            ServiceErrorReason::PreparingFailed(e) => format!("Preparing of service failed because: {}", e),
+        };
+        fmt.write_str(format!("{}", msg).as_str())
+    }
 }
 
 impl Service {
@@ -55,32 +112,28 @@ impl Service {
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
-    ) -> Result<StartResult, String> {
-        if self.pid.is_some() {
-            return Err(format!(
-                "Service {} has already a pid {:?}",
-                name,
-                self.pid.unwrap()
-            ));
+    ) -> Result<StartResult, ServiceErrorReason> {
+        if let Some(pid) = self.pid {
+            return Err(ServiceErrorReason::AlreadyHasPID(pid));
         }
-        if self.process_group.is_some() {
-            return Err(format!(
-                "Service {} has already a pgid {:?}",
-                name,
-                self.process_group.unwrap()
-            ));
+        if let Some(pgid) = self.process_group {
+            return Err(ServiceErrorReason::AlreadyHasPID(pgid));
         }
         if !allow_ignore || self.socket_names.is_empty() {
             trace!("Start service {}", name);
-            super::prepare_service::prepare_service(self, name, &notification_socket_path)?;
 
-            self.run_prestart(id, name, pid_table.clone())?;
+            super::prepare_service::prepare_service(self, name, &notification_socket_path)
+                .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
+            // TODO run poststop if failed
+            self.run_prestart(id, name, pid_table.clone())
+                .map_err(|e| ServiceErrorReason::PrestartFailed(e))?;
             {
                 let mut pid_table_locked = pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
                 // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
-                start_service(self, name.clone(), &*fd_store.read().unwrap())?;
+                start_service(self, name.clone(), &*fd_store.read().unwrap())
+                    .map_err(|e| ServiceErrorReason::StartFailed(e))?;
                 if let Some(new_pid) = self.pid {
                     pid_table_locked.insert(
                         new_pid,
@@ -96,12 +149,12 @@ impl Service {
                     name,
                     &*sock.lock().unwrap(),
                     pid_table.clone(),
-                )?;
+                )
+                .map_err(|e| ServiceErrorReason::StartFailed(e))?;
             }
+            // TODO run poststop if failed
             self.run_poststart(id, name, pid_table.clone())
-                .map_err(|e| {
-                    format!("Some poststart command failed for service {}: {}", name, e)
-                })?;
+                .map_err(|e| ServiceErrorReason::PoststartFailed(e))?;
             Ok(StartResult::Started)
         } else {
             trace!(
@@ -113,7 +166,12 @@ impl Service {
         }
     }
 
-    fn stop(&mut self, id: UnitId, name: &str, pid_table: ArcMutPidTable) -> Result<(), String> {
+    fn stop(
+        &mut self,
+        id: UnitId,
+        name: &str,
+        pid_table: ArcMutPidTable,
+    ) -> Result<(), RunCmdError> {
         let stop_res = self.run_stop_cmd(id, name, pid_table.clone());
         if let Some(proc_group) = self.process_group {
             match nix::sys::signal::kill(proc_group, nix::sys::signal::Signal::SIGKILL) {
@@ -125,27 +183,7 @@ impl Service {
         }
         self.pid = None;
         self.process_group = None;
-        let poststop_res = self.run_poststop(id, name, pid_table.clone());
-
-        if poststop_res.is_err() && stop_res.is_err() {
-            Err(format!(
-                "Errors while running both stop commands {} and poststop commands {}",
-                stop_res.err().unwrap(),
-                poststop_res.err().unwrap()
-            ))
-        } else if stop_res.is_err() {
-            Err(format!(
-                "Errors while running stop commands {}",
-                stop_res.err().unwrap()
-            ))
-        } else if poststop_res.is_err() {
-            Err(format!(
-                "Errors while running poststop commands {}",
-                poststop_res.err().unwrap()
-            ))
-        } else {
-            Ok(())
-        }
+        stop_res
     }
 
     pub fn kill(
@@ -153,8 +191,11 @@ impl Service {
         id: UnitId,
         name: &str,
         pid_table: ArcMutPidTable,
-    ) -> Result<(), String> {
-        self.stop(id, name, pid_table)
+    ) -> Result<(), ServiceErrorReason> {
+        self.stop(id, name, pid_table.clone())
+            .map_err(|e| ServiceErrorReason::StopFailed(e))?;
+        self.run_poststop(id, name, pid_table.clone())
+            .map_err(|e| ServiceErrorReason::PoststopFailed(e))
     }
 
     pub fn get_start_timeout(&self) -> Option<std::time::Duration> {
@@ -202,7 +243,7 @@ impl Service {
         name: &str,
         timeout: Option<std::time::Duration>,
         pid_table: ArcMutPidTable,
-    ) -> Result<(), String> {
+    ) -> Result<(), RunCmdError> {
         let split = cmd_str.split(' ').collect::<Vec<_>>();
         let mut cmd = Command::new(split[0]);
         for part in &split[1..] {
@@ -226,25 +267,28 @@ impl Service {
         match spawn_result {
             Ok(mut child) => {
                 trace!("Wait for {} for service: {}", cmd_str, name);
-                let wait_result: Result<(), String> =
+                let wait_result: Result<(), RunCmdError> =
                     match wait_for_helper_child(&mut child, pid_table.clone(), timeout) {
                         WaitResult::InTime(Err(e)) => {
-                            return Err(format!("error while waiting on {}: {}", cmd_str, e));
+                            return Err(RunCmdError::WaitError(
+                                cmd_str.to_owned(),
+                                format!("{}", e),
+                            ));
                         }
                         WaitResult::InTime(Ok(exitstatus)) => {
                             trace!("success running {} for service: {}", cmd_str, name);
                             if exitstatus.success() {
                                 Ok(())
                             } else {
-                                Err(format!("{} returned status: {:?}", cmd_str, exitstatus))
+                                Err(RunCmdError::BadExitCode(cmd_str.to_owned(), exitstatus))
                             }
                         }
                         WaitResult::TimedOut => {
                             trace!("Timeout running {} for service: {}", cmd_str, name);
                             let _ = child.kill();
-                            Err(format!(
-                                "Timeout ({:?}) reached while running {} for service: {}",
-                                timeout, cmd_str, name
+                            Err(RunCmdError::Timeout(
+                                cmd_str.to_owned(),
+                                format!("Timeout ({:?}) reached", timeout),
                             ))
                         }
                     };
@@ -268,9 +312,9 @@ impl Service {
                     .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
                 wait_result
             }
-            Err(e) => Err(format!(
-                "Error while spawning child process {}, {}",
-                cmd_str, e
+            Err(e) => Err(RunCmdError::SpawnError(
+                cmd_str.to_owned(),
+                format!("{}", e),
             )),
         }
     }
@@ -282,7 +326,7 @@ impl Service {
         name: &str,
         timeout: Option<std::time::Duration>,
         pid_table: ArcMutPidTable,
-    ) -> Result<(), String> {
+    ) -> Result<(), RunCmdError> {
         for cmd in cmds {
             self.run_cmd(cmd, id, name, timeout, pid_table.clone())?;
         }
@@ -294,7 +338,7 @@ impl Service {
         id: UnitId,
         name: &str,
         pid_table: ArcMutPidTable,
-    ) -> Result<(), String> {
+    ) -> Result<(), RunCmdError> {
         if self.service_config.stop.is_empty() {
             return Ok(());
         }
@@ -307,65 +351,26 @@ impl Service {
         id: UnitId,
         name: &str,
         pid_table: ArcMutPidTable,
-    ) -> Result<(), String> {
+    ) -> Result<(), RunCmdError> {
         if self.service_config.startpre.is_empty() {
             return Ok(());
         }
         let timeout = self.get_start_timeout();
         let cmds = self.service_config.startpre.clone();
-        let res = self
-            .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
-            .map_err(|e| format!("Some prestart command failed for service {}: {}", name, e));
-        if let Err(e) = res {
-            Err(self.run_poststop_because_err(id, name, pid_table, e))
-        } else {
-            Ok(())
-        }
+        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
     }
     fn run_poststart(
         &mut self,
         id: UnitId,
         name: &str,
         pid_table: ArcMutPidTable,
-    ) -> Result<(), String> {
+    ) -> Result<(), RunCmdError> {
         if self.service_config.startpost.is_empty() {
             return Ok(());
         }
         let timeout = self.get_start_timeout();
         let cmds = self.service_config.startpost.clone();
-        let res = self
-            .run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
-            .map_err(|e| format!("Some prestart command failed for service {}: {}", name, e));
-        if let Err(e) = res {
-            Err(self.run_poststop_because_err(id, name, pid_table, e))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn run_poststop_because_err(
-        &mut self,
-        id: UnitId,
-        name: &str,
-        pid_table: ArcMutPidTable,
-        previous_err: String,
-    ) -> String {
-        let poststop_res = self.run_poststop(id, name, pid_table.clone());
-
-        if poststop_res.is_err() {
-            format!(
-                "Errors while running both helper commands {} and poststop commands {}",
-                previous_err,
-                poststop_res.err().unwrap()
-            )
-        } else if poststop_res.is_err() {
-            format!(
-                "Errors while running poststop commands {}",
-                poststop_res.err().unwrap()
-            )
-        } else {
-            format!("Errors while running helper commands {}", previous_err)
-        }
+        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
     }
 
     fn run_poststop(
@@ -373,7 +378,7 @@ impl Service {
         id: UnitId,
         name: &str,
         pid_table: ArcMutPidTable,
-    ) -> Result<(), String> {
+    ) -> Result<(), RunCmdError> {
         if self.service_config.startpost.is_empty() {
             return Ok(());
         }

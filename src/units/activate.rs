@@ -4,6 +4,7 @@ use super::units::*;
 use crate::platform::EventFd;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
+use crate::services::ServiceErrorReason;
 
 pub struct UnitOperationError {
     pub reason: UnitOperationErrorReason,
@@ -16,8 +17,8 @@ pub enum UnitOperationErrorReason {
     GenericStopError(String),
     SocketOpenError(String),
     SocketCloseError(String),
-    ServiceStartError(String),
-    ServiceStopError(String),
+    ServiceStartError(ServiceErrorReason),
+    ServiceStopError(ServiceErrorReason),
 }
 
 impl std::fmt::Display for UnitOperationError {
@@ -232,15 +233,6 @@ pub fn activate_unit(
             let mut status_locked = status.lock().unwrap();
             *status_locked = new_status;
             StartResult::Started(next_services_ids)
-        })
-        .map_err(|e| UnitOperationError {
-            unit_name: unit_locked.conf.name(),
-            unit_id: unit_locked.id,
-            reason: UnitOperationErrorReason::ServiceStartError(format!(
-                "Error while starting unit {}: {}",
-                unit_locked.conf.name(),
-                e
-            )),
         })
     // drop all the locks "at once". Ordering of dropping should be irrelevant?
 }

@@ -143,10 +143,8 @@ impl UnixSocketConfig {
             std::fs::remove_file(&path)
                 .map_err(|e| format!("Error removing file {:?}: {}", path, e))?;
         }
-
-        // TODO check if the FD is already closed or if it is still open
-        // If it is still open how can it be closed?
-        close_raw_fd(raw_fd);
+        
+        close_raw_fd(rawfd);
         Ok(())
     }
 
