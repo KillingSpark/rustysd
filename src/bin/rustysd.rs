@@ -62,7 +62,7 @@ fn unrecoverable_error(error: String) {
                 }
             }
         } else {
-            let dur = std::time::Duration::from_secs(1_000_000);
+            let dur = std::time::Duration::from_secs(10);
             eprintln!(
                 "Cannot find a shell for emergency. Will sleep for {:?} and then exit",
                 dur
