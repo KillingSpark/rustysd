@@ -12,6 +12,20 @@ use std::{
 use crate::fd_store::FDStore;
 use crate::units::*;
 
+fn close_raw_fd(fd: RawFd) {
+    loop {
+        match nix::unistd::close(fd) {
+            Ok(()) => break,
+            Err(e) => {
+                if let Some(nix::errno::Errno::EBADF) = e.as_errno() {
+                    break;
+                }
+                // Other errors (EINTR and EIO) mean that we should try again
+            }
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SocketKind {
     Stream(String),
@@ -62,7 +76,8 @@ pub struct FifoConfig {
 impl FifoConfig {
     fn open(&self) -> Result<Box<dyn AsRawFd + Send + Sync>, String> {
         if self.path.exists() {
-            std::fs::remove_file(&self.path).unwrap();
+            std::fs::remove_file(&self.path)
+                .map_err(|e| format!("Error removing file {:?}: {}", self.path, e))?;
         }
         let mode = nix::sys::stat::Mode::S_IRWXU;
         nix::unistd::mkfifo(&self.path, mode)
@@ -72,16 +87,19 @@ impl FifoConfig {
         let mut open_flags = nix::fcntl::OFlag::empty();
         open_flags.insert(nix::fcntl::OFlag::O_RDWR);
         //open_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
-        let fifo_fd = nix::fcntl::open(&self.path, open_flags, mode).unwrap();
+        let fifo_fd = nix::fcntl::open(&self.path, open_flags, mode)
+            .map_err(|e| format!("Error opening fifo file {:?}: {}", self.path, e))?;
         // need to make a file out of that so AsRawFd is implemented (it's not implmeneted for RawFd itself...)
         let fifo = unsafe { std::fs::File::from_raw_fd(fifo_fd) };
         Ok(Box::new(fifo))
     }
 
     fn close(&self, rawfd: RawFd) -> Result<(), String> {
-        std::fs::remove_file(&self.path)
-            .map_err(|e| format!("Error removing file {:?}: {}", self.path, e))?;
-        nix::unistd::close(rawfd).unwrap();
+        if self.path.exists() {
+            std::fs::remove_file(&self.path)
+                .map_err(|e| format!("Error removing file {:?}: {}", self.path, e))?;
+        }
+        close_raw_fd(rawfd);
         Ok(())
     }
 }
@@ -107,12 +125,7 @@ impl Drop for UnixSeqPacket {
 impl UnixSeqPacket {
     fn close(&mut self) {
         if let Some(fd) = self.0 {
-            if let Err(e) = nix::unistd::close(fd) {
-                error!(
-                    "Error while closing unix sequential packet socket (fd: {}): {}",
-                    fd, e
-                );
-            }
+            close_raw_fd(fd);
         }
         self.0 = None;
     }
@@ -126,10 +139,14 @@ impl UnixSocketConfig {
             UnixSocketConfig::Sequential(s) => s,
         };
         let path = std::path::PathBuf::from(strpath);
-        std::fs::remove_file(&path)
-            .map_err(|e| format!("Error removing file {:?}: {}", path, e))?;
-        nix::unistd::close(rawfd)
-            .map_err(|e| format!("Error closing raw fd for socket {}: {}", strpath, e))?;
+        if path.exists() {
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("Error removing file {:?}: {}", path, e))?;
+        }
+
+        // TODO check if the FD is already closed or if it is still open
+        // If it is still open how can it be closed?
+        close_raw_fd(raw_fd);
         Ok(())
     }
 
@@ -225,8 +242,8 @@ impl TcpSocketConfig {
         Ok(Box::new(listener))
     }
     fn close(&self, rawfd: RawFd) -> Result<(), String> {
-        nix::unistd::close(rawfd)
-            .map_err(|e| format!("Error closing raw fd for socket {}: {}", self.addr, e))
+        close_raw_fd(rawfd);
+        Ok(())
     }
 }
 
@@ -244,8 +261,8 @@ impl UdpSocketConfig {
     }
 
     fn close(&self, rawfd: RawFd) -> Result<(), String> {
-        nix::unistd::close(rawfd)
-            .map_err(|e| format!("Error closing raw fd for socket {}: {}", self.addr, e))
+        close_raw_fd(rawfd);
+        Ok(())
     }
 }
 
