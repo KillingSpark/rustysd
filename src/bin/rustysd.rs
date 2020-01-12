@@ -15,8 +15,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 fn find_shell_path() -> Option<std::path::PathBuf> {
     let possible_paths = vec![
-        std::path::PathBuf::from("/sbin/sh"),
         std::path::PathBuf::from("/bin/sh"),
+        std::path::PathBuf::from("/sbin/sh"),
         std::path::PathBuf::from("/usr/bin/sh"),
     ];
 
@@ -108,7 +108,7 @@ fn pid1_specific_setup() {
 #[cfg(not(target_os = "linux"))]
 fn pid1_specific_setup() {}
 
-fn prepare_runtimeinfo(conf: &config::Config) -> Arc<units::RuntimeInfo> {
+fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> Arc<units::RuntimeInfo> {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let mut first_id = 0;
@@ -119,10 +119,7 @@ fn prepare_runtimeinfo(conf: &config::Config) -> Arc<units::RuntimeInfo> {
     trace!("Unit dependencies passed sanity checks");
     let unit_table = unit_table;
 
-    if std::env::args()
-        .collect::<Vec<_>>()
-        .contains(&"--dry-run".to_owned())
-    {
+    if dry_run {
         warn!("Exit after loading because --dry-run was passed");
         unrecoverable_error("Started as dry-run".into());
     }
@@ -185,10 +182,55 @@ fn start_signal_handler_thread(
     handle
 }
 
+#[derive(Default)]
+struct CliArgs {
+    conf_path: Option<std::path::PathBuf>,
+    dry_run: bool,
+}
+
+fn parse_args() -> CliArgs {
+    let args = std::env::args().collect::<Vec<_>>();
+    // ignore exec name
+    let args = &args[1..];
+
+    let mut cli_args = CliArgs::default();
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "-c" | "--config" => {
+                if args.len() < idx {
+                    unrecoverable_error(format!("config flag set but no path given"));
+                } else {
+                    let path_str = args[idx + 1].clone();
+                    let p = std::path::PathBuf::from(path_str);
+                    if !p.exists() {
+                        unrecoverable_error(format!("config path given that does not exist"));
+                    }
+                    if !p.is_dir() {
+                        unrecoverable_error(format!("config path given that is not a directory"));
+                    }
+                    cli_args.conf_path = Some(p);
+                    idx += 2;
+                }
+            }
+            "-d" | "--dry-run" => {
+                cli_args.dry_run = true;
+                idx += 1;
+            }
+            unknown => {
+                unrecoverable_error(format!("Unknown cli arg: {}", unknown));
+            }
+        }
+    }
+    cli_args
+}
+
 fn main() {
     pid1_specific_setup();
 
-    let (log_conf, conf) = config::load_config(None);
+    let cli_args = parse_args();
+
+    let (log_conf, conf) = config::load_config(&cli_args.conf_path);
 
     logging::setup_logging(&log_conf).unwrap();
     let conf = match conf {
@@ -228,7 +270,7 @@ fn main() {
         }
     };
 
-    let run_info = prepare_runtimeinfo(&conf);
+    let run_info = prepare_runtimeinfo(&conf, cli_args.dry_run);
 
     let notification_eventfd = platform::make_event_fd().unwrap();
     let stdout_eventfd = platform::make_event_fd().unwrap();

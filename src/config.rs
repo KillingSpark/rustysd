@@ -137,7 +137,7 @@ fn load_json(
     Ok(())
 }
 
-pub fn load_config(config_path: Option<&PathBuf>) -> (LoggingConfig, Result<Config, String>) {
+pub fn load_config(config_path: &Option<PathBuf>) -> (LoggingConfig, Result<Config, String>) {
     let mut settings: HashMap<String, SettingValue> = HashMap::new();
 
     let default_config_path_json = PathBuf::from("./config/rustysd_config.json");
