@@ -93,6 +93,8 @@ to write a compatibility shim if an equivalents exist on the target platform. It
 1. setting env variables (currently handled with libc because the rust std contains locks which currently break on forking)
 1. setting the current process as a subprocess reaper (might not be that important, other platforms might handle reparenting of orphaned processes differently than unix)
 1. changing the user id to drop privileges
+1. an implementation of getpwnam_r and getgrnam_r. These can be swapped for getpwnam/getgrnam if needed
+    * They can also be ignored, restricting the values of User, Group, and SupplementaryGroups to numerical values
 
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested. If you find anything does actually not work
