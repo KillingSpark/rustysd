@@ -156,15 +156,15 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#User=">User=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27User%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>The user id can be set for starting services. Currently only done for the main executable</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#Group=">Group=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27Group%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>The group id can be set for starting services. Currently only done for the main executable</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#DynamicUser=">DynamicUser=</a></td>
@@ -174,9 +174,9 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#SupplementaryGroups=">SupplementaryGroups=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27SupplementaryGroups%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>The supplementary group ids can be set for starting services. Currently only done for the main executable</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#PAMName=">PAMName=</a></td>
@@ -804,7 +804,7 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#$USER">$USER</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27USER%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -1048,7 +1048,7 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.path.html#Unit=">Unit=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27Unit%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
@@ -1968,7 +1968,7 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.timer.html#Unit=">Unit=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27Unit%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
   <td></td>
 </tr>
