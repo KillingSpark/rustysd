@@ -38,7 +38,7 @@ SUPPORTED_FEATURES = {
     "LISTEN_PID": {"icon": ICON_TICK, "text": "Provifing the listen_pid to the child is supported"},
     "After": {"icon": ICON_TICK, "text":  "Ordering of units according to before/after relation is supported fully"},
     "Before": {"icon": ICON_TICK, "text": "Ordering of units according to before/after relation is supported fully"},
-    "Type": {"icon": ICON_QMARK, "text": "Types are partly supported. Simple, dbus, notify are supported. Forking, oneshot, idle are not."},
+    "Type": {"icon": ICON_QMARK, "text": "Types are partly supported. Simple, dbus, notify, oneshot are supported. Forking, idle are not."},
     "Restart": {"icon": ICON_QMARK, "text": "Restart is partially supported. The settings 'always' and 'no' are supported"},
     "BusName": {"icon": ICON_TICK, "text": "Setting a bus name to wait for services of type dbus is supported."},
     "NotifyAccess": {"icon": ICON_QMARK, "text": "Not fully supported. All settings are accepted but are not being enforced right now. Acts as if 'all' was set."},

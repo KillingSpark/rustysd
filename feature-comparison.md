@@ -1366,7 +1366,7 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#Type=">Type=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27Type%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Types are partly supported. Simple, dbus, notify are supported. Forking, oneshot, idle are not.</td>
+  <td>Types are partly supported. Simple, dbus, notify, oneshot are supported. Forking, idle are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#RemainAfterExit=">RemainAfterExit=</a></td>
