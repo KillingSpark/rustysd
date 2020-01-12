@@ -64,7 +64,6 @@ SUPPORTED_FEATURES = {
     "TimeoutStopSec": {"icon": ICON_TICK, "text": "The time a services needs to stop can be limited"},
     "TimeoutSec": {"icon": ICON_TICK, "text": "The time a services needs to start/stop can be limited"},
     "User": {"icon": ICON_QMARK, "text": "The user id can be set for starting services. Currently only done for the main executable"},
-    "USER": {"icon": ICON_QMARK, "text": "The user id can be set for starting services. Currently only done for the main executable"},
     "Group": {"icon": ICON_QMARK, "text": "The group id can be set for starting services. Currently only done for the main executable"},
     "SupplementaryGroups": {"icon": ICON_QMARK, "text": "The supplementary group ids can be set for starting services. Currently only done for the main executable"},
 }
