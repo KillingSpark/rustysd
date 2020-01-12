@@ -50,7 +50,13 @@ pub fn getgrnam_r(groupname: &str) -> Result<GroupEntry, String> {
     let username_i8 = groupname.bytes().map(|x| x as i8).collect::<Vec<_>>();
     let pointer: *const i8 = username_i8.as_ptr();
     let mut buf_size = 32;
-    let mut group: libc::group = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+    let mut group: libc::group = libc::group {
+        gr_name: std::ptr::null_mut(),
+        gr_passwd: std::ptr::null_mut(),
+        gr_gid: 0,
+        gr_mem: std::ptr::null_mut(),
+    };
+
     let group_ptr = &mut group;
     let group_ptr_ptr = &mut (group_ptr as *mut libc::group);
     loop {

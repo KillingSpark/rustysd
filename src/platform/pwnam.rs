@@ -55,7 +55,15 @@ pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
     let username_i8 = username.bytes().map(|x| x as i8).collect::<Vec<_>>();
     let pointer: *const i8 = username_i8.as_ptr();
     let mut buf_size = 32;
-    let mut user: libc::passwd = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+    let mut user: libc::passwd = libc::passwd {
+        pw_name: std::ptr::null_mut(),
+        pw_passwd: std::ptr::null_mut(),
+        pw_uid: 0,
+        pw_gid: 0,
+        pw_gecos: std::ptr::null_mut(),
+        pw_dir: std::ptr::null_mut(),
+        pw_shell: std::ptr::null_mut(),
+    };
     let user_ptr = &mut user;
     let user_ptr_ptr = &mut (user_ptr as *mut libc::passwd);
     loop {
