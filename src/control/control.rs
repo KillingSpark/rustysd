@@ -148,9 +148,10 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
     Ok(command)
 }
 
-pub fn format_socket(socket_unit: &Unit) -> Value {
+pub fn format_socket(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
     map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+    map.insert("Status".into(), Value::String(format!("{:?}", status)));
 
     if let UnitSpecialized::Socket(sock) = &socket_unit.specialized {
         map.insert(
@@ -171,15 +172,17 @@ pub fn format_socket(socket_unit: &Unit) -> Value {
     Value::Object(map)
 }
 
-pub fn format_target(socket_unit: &Unit) -> Value {
+pub fn format_target(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
     map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+    map.insert("Status".into(), Value::String(format!("{:?}", status)));
     Value::Object(map)
 }
 
-pub fn format_service(srvc_unit: &Unit) -> Value {
+pub fn format_service(srvc_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
     map.insert("Name".into(), Value::String(srvc_unit.conf.name()));
+    map.insert("Status".into(), Value::String(format!("{:?}", status)));
     if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
         map.insert(
             "Sockets".into(),
@@ -285,21 +288,32 @@ pub fn execute_command(
                     let unit_table_locked = &*run_info.unit_table.read().unwrap();
                     let units = find_units_with_pattern(&name, unit_table_locked);
                     for unit in units {
+                        let unit_locked = unit.lock().unwrap();
+                        let status = {
+                            *run_info
+                                .status_table
+                                .read()
+                                .unwrap()
+                                .get(&unit_locked.id)
+                                .unwrap()
+                                .lock()
+                                .unwrap()
+                        };
                         if name.ends_with(".service") {
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
-                                .push(format_service(&unit.lock().unwrap()));
+                                .push(format_service(&unit_locked, status));
                         } else if name.ends_with(".socket") {
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
-                                .push(format_socket(&unit.lock().unwrap()));
+                                .push(format_socket(&unit_locked, status));
                         } else if name.ends_with(".target") {
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
-                                .push(format_target(&unit.lock().unwrap()));
+                                .push(format_target(&unit_locked, status));
                         } else {
                             return Err("Name suffix not recognized".into());
                         }
@@ -312,10 +326,20 @@ pub fn execute_command(
                         .iter()
                         .map(|(_id, unit)| {
                             let unit_locked = &unit.lock().unwrap();
+                            let status = {
+                                *run_info
+                                    .status_table
+                                    .read()
+                                    .unwrap()
+                                    .get(&unit_locked.id)
+                                    .unwrap()
+                                    .lock()
+                                    .unwrap()
+                            };
                             match unit_locked.specialized {
-                                UnitSpecialized::Socket(_) => format_socket(&unit_locked),
-                                UnitSpecialized::Service(_) => format_service(&unit_locked),
-                                UnitSpecialized::Target => format_target(&unit_locked),
+                                UnitSpecialized::Socket(_) => format_socket(&unit_locked, status),
+                                UnitSpecialized::Service(_) => format_service(&unit_locked, status),
+                                UnitSpecialized::Target => format_target(&unit_locked, status),
                             }
                         })
                         .collect();
