@@ -63,8 +63,8 @@ pub fn service_exit_handler(
                 }
             },
             None => {
-                warn!(
-                    "All spawned processes should have a pid entry. This did not: {}",
+                trace!(
+                    "All processes spawned by rustysd have a pid entry. This did not: {}. Probably a rerooted orphan that got killed.",
                     pid
                 );
                 return Ok(());
