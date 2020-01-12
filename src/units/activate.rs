@@ -274,5 +274,8 @@ pub fn activate_units(
     );
 
     tpool.join();
-    // TODO handle errors
+    // TODO can we handle errors in a more meaningful way?
+    for err in &*errors.lock().unwrap() {
+        error!("{}", err);
+    }
 }
