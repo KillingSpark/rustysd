@@ -5,7 +5,6 @@ pub struct PwEntry {
     pub gid: nix::unistd::Gid,
 }
 
-#[cfg(target_os = "linux")]
 fn make_user_from_libc(username: &str, user: &libc::passwd) -> Result<PwEntry, String> {
     let uid = nix::unistd::Uid::from_raw(user.pw_uid);
     let gid = nix::unistd::Gid::from_raw(user.pw_gid);
@@ -51,11 +50,8 @@ fn getpwnam(username: &str) -> Result<PwEntry, String> {
 }
 
 #[cfg(target_os = "linux")]
-pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
-    let username_i8 = username.bytes().map(|x| x as i8).collect::<Vec<_>>();
-    let pointer: *const i8 = username_i8.as_ptr();
-    let mut buf_size = 32;
-    let mut user: libc::passwd = libc::passwd {
+fn make_new_pw() -> libc::passwd {
+    libc::passwd {
         pw_name: std::ptr::null_mut(),
         pw_passwd: std::ptr::null_mut(),
         pw_uid: 0,
@@ -63,7 +59,32 @@ pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
         pw_gecos: std::ptr::null_mut(),
         pw_dir: std::ptr::null_mut(),
         pw_shell: std::ptr::null_mut(),
-    };
+    }
+}
+
+#[cfg(target_os = "freebsd")]
+fn make_new_pw() -> libc::passwd {
+    libc::passwd {
+        pw_name: std::ptr::null_mut(),
+        pw_passwd: std::ptr::null_mut(),
+        pw_uid: 0,
+        pw_gid: 0,
+        pw_change: 0,
+        pw_class: std::ptr::null_mut(),
+        pw_gecos: std::ptr::null_mut(),
+        pw_dir: std::ptr::null_mut(),
+        pw_shell: std::ptr::null_mut(),
+        pw_expire: 0,
+        pw_fields: 0,
+    }
+}
+
+#[cfg(any(target_os="freebsd", target_os="linux"))]
+pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
+    let username_i8 = username.bytes().map(|x| x as i8).collect::<Vec<_>>();
+    let pointer: *const i8 = username_i8.as_ptr();
+    let mut buf_size = 32;
+    let mut user = make_new_pw();
     let user_ptr = &mut user;
     let user_ptr_ptr = &mut (user_ptr as *mut libc::passwd);
     loop {
@@ -90,14 +111,10 @@ pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
                 return Err(format!("The **user ({:?}) should have pointed to the same location as the *user ({:?})", user_ptr_ptr, user_ptr));
             }
         }
-    }
+        }
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn getpwnam(username: &str) -> Result<PwEntry, String> {
+pub fn getpwnam(_username: &str) -> Result<PwEntry, String> {
     Err("getpwnam is not yet implemented for this platform".into())
-}
-#[cfg(not(target_os = "linux"))]
-pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
-    Err("getpwnam_r is not yet implemented for this platform".into())
 }
