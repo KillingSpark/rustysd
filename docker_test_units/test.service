@@ -1,0 +1,12 @@
+[Service]
+ExecStart= ./target/debug/testservice arg1 arg2
+Sockets= test_second.socket
+NotifyAccess= all
+Type= notify
+Restart= always
+
+[Unit]
+Before= test2.service
+
+[Install]
+WantedBy= default.target

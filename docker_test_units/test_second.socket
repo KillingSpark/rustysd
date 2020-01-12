@@ -1,0 +1,16 @@
+[Unit]
+Description=test Socket
+
+[Socket]
+FileDescriptorName= TestSockAlt
+
+ListenStream= ./sockets/servicelog_alt_stream
+# ListenStream= 127.0.0.1:8083
+# ListenDatagram= 127.0.0.1:8084
+ListenDatagram= ./sockets/servicelog_alt_datagram
+ListenSequentialPacket= ./sockets/servicelog_alt_sequential
+
+#Service= test.service
+
+[Install]
+WantedBy=sockets.target

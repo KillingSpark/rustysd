@@ -1,2 +1,2 @@
 #! /bin/sh
-docker run killingspark/rustysdtest -p 8080:8080
+docker run killingspark/rustysdtest

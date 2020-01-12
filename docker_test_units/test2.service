@@ -1,0 +1,12 @@
+[Service]
+ExecStart= ./target/debug/testserviceclient
+NotifyAccess= all
+Type= simple
+Restart= always
+
+[Unit]
+After= test.service
+Requires= test.service
+
+[Install]
+WantedBy= default.target
