@@ -94,11 +94,11 @@ pub fn getgrnam_r(groupname: &str) -> Result<GroupEntry, String> {
 
 #[cfg(not(any(target_os = "linux", target_os="freebsd")))]
 pub fn getgrnam_r(_groupname: &str) -> Result<GroupEntry, String> {
-    Err("getpwnam_r is not yet implemented for this platform".into())
+    compile_error!("getgrnam_r is not yet implemented for this platform".into());
 }
 
 #[cfg(not(target_os = "linux"))]
 #[allow(dead_code)]
 fn getgrnam(_groupname: &str) -> Result<GroupEntry, String> {
-    Err("getpwnam is not yet implemented for this platform".into())
+    compile_error!("getgrwnam is not yet implemented for this platform".into());
 }
