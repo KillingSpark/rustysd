@@ -118,3 +118,8 @@ pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
 pub fn getpwnam(_username: &str) -> Result<PwEntry, String> {
     Err("getpwnam is not yet implemented for this platform".into())
 }
+
+#[cfg(not(any(target_os = "linux", target_os="freebsd")))]
+pub fn getpwnam_r(_username: &str) -> Result<PwEntry, String> {
+    Err("getpwnam_r is not yet implemented for this platform".into())
+}
