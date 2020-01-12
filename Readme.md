@@ -129,9 +129,9 @@ There are some features behind flags because they are either platform dependent 
 * linux_eventfd: Use eventfds instead of pipes to interrupt select() calls (because they only exist on linux)
 
 ### Docker
-Running in a docker container as PID1 works. The image that is built by the scripts in the dockerfiles directory results in a 2MB image that contains
-* Rustysd (stripped binary built with musl to be completely static)
-* The testservice and testserviceclient (stripped binaries built with musl to be completely static)
+Running in a docker container as PID1 works. The image that is built by the scripts in the dockerfiles directory results in a ~2MB image that contains
+* Rustysd (stripped binary built with musl to be completely static) -> ~1.6Mb
+* The testservice and testserviceclient (stripped binaries built with musl to be completely static) -> ~300kb / ~280kb
 * The unit files in test_units
 
 
