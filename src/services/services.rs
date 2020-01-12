@@ -74,9 +74,13 @@ pub enum ServiceErrorReason {
     StartFailed(RunCmdError),
     PoststopFailed(RunCmdError),
     StopFailed(RunCmdError),
+
+    PrestartAndPoststopFailed(RunCmdError, RunCmdError),
+    PoststartAndPoststopFailed(RunCmdError, RunCmdError),
+    StartAndPoststopFailed(RunCmdError, RunCmdError),
+    StopAndPoststopFailed(RunCmdError, RunCmdError),
     PreparingFailed(String),
     Generic(String),
-
     AlreadyHasPID(nix::unistd::Pid),
     AlreadyHasPGID(nix::unistd::Pid),
 }
@@ -84,11 +88,28 @@ pub enum ServiceErrorReason {
 impl std::fmt::Display for ServiceErrorReason {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
+            // one failed
             ServiceErrorReason::PrestartFailed(e) => format!("Perstart failed: {}", e),
             ServiceErrorReason::PoststartFailed(e) => format!("Poststart failed: {}", e),
             ServiceErrorReason::StartFailed(e) => format!("Start failed: {}", e),
             ServiceErrorReason::StopFailed(e) => format!("Stop failed: {}", e),
             ServiceErrorReason::PoststopFailed(e) => format!("Poststop failed: {}", e),
+
+            // Both failed
+            ServiceErrorReason::PrestartAndPoststopFailed(e, e2) => {
+                format!("Perstart failed: {} and Poststop failed too: {}", e, e2)
+            }
+            ServiceErrorReason::PoststartAndPoststopFailed(e, e2) => {
+                format!("Poststart failed: {} and Poststop failed too: {}", e, e2)
+            }
+            ServiceErrorReason::StartAndPoststopFailed(e, e2) => {
+                format!("Start failed: {} and Poststop failed too: {}", e, e2)
+            }
+            ServiceErrorReason::StopAndPoststopFailed(e, e2) => {
+                format!("Stop failed: {} and Poststop failed too: {}", e, e2)
+            }
+
+            // other errors
             ServiceErrorReason::Generic(e) => format!("Service error: {}", e),
             ServiceErrorReason::AlreadyHasPID(e) => {
                 format!("Tried to start already running service (PID: {})", e)
@@ -126,9 +147,16 @@ impl Service {
 
             super::prepare_service::prepare_service(self, name, &notification_socket_path)
                 .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
-            // TODO run poststop if failed
             self.run_prestart(id, name, pid_table.clone())
-                .map_err(|e| ServiceErrorReason::PrestartFailed(e))?;
+                .map_err(
+                    |prestart_err| match self.run_poststop(id, name, pid_table.clone()) {
+                        Ok(_) => ServiceErrorReason::PrestartFailed(prestart_err),
+                        Err(poststop_err) => ServiceErrorReason::PrestartAndPoststopFailed(
+                            prestart_err,
+                            poststop_err,
+                        ),
+                    },
+                )?;
             {
                 let mut pid_table_locked = pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
@@ -152,11 +180,25 @@ impl Service {
                     &*sock.lock().unwrap(),
                     pid_table.clone(),
                 )
-                .map_err(|e| ServiceErrorReason::StartFailed(e))?;
+                .map_err(|start_err| {
+                    match self.run_poststop(id, name, pid_table.clone()) {
+                        Ok(_) => ServiceErrorReason::StartFailed(start_err),
+                        Err(poststop_err) => {
+                            ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
+                        }
+                    }
+                })?;
             }
-            // TODO run poststop if failed
             self.run_poststart(id, name, pid_table.clone())
-                .map_err(|e| ServiceErrorReason::PoststartFailed(e))?;
+                .map_err(
+                    |poststart_err| match self.run_poststop(id, name, pid_table.clone()) {
+                        Ok(_) => ServiceErrorReason::PrestartFailed(poststart_err),
+                        Err(poststop_err) => ServiceErrorReason::PoststartAndPoststopFailed(
+                            poststart_err,
+                            poststop_err,
+                        ),
+                    },
+                )?;
             Ok(StartResult::Started)
         } else {
             trace!(
@@ -194,10 +236,14 @@ impl Service {
         name: &str,
         pid_table: ArcMutPidTable,
     ) -> Result<(), ServiceErrorReason> {
-        self.stop(id, name, pid_table.clone())
-            .map_err(|e| ServiceErrorReason::StopFailed(e))?;
-        self.run_poststop(id, name, pid_table.clone())
-            .map_err(|e| ServiceErrorReason::PoststopFailed(e))
+        self.stop(id, name, pid_table.clone()).map_err(|stop_err| {
+            match self.run_poststop(id, name, pid_table.clone()) {
+                Ok(_) => ServiceErrorReason::PrestartFailed(stop_err),
+                Err(poststop_err) => {
+                    ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
+                }
+            }
+        })
     }
 
     pub fn get_start_timeout(&self) -> Option<std::time::Duration> {
