@@ -51,6 +51,63 @@ pub fn move_self_to_cgroup(cgroup_path: &std::path::PathBuf) -> Result<(), Cgrou
     move_pid_to_cgroup(cgroup_path, pid)
 }
 
+/// retrieve all controllers that are currently in this cgroup
+pub fn get_available_controllers(
+    cgroup_path: &std::path::PathBuf,
+) -> Result<Vec<String>, CgroupError> {
+    let cgroup_ctrls = cgroup_path.join("cgroup.controllers");
+    let mut f = fs::File::open(&cgroup_ctrls).map_err(|e| CgroupError::IOErr(e))?;
+    let mut buf = String::new();
+    f.read_to_string(&mut buf)
+        .map_err(|e| CgroupError::IOErr(e))?;
+
+    Ok(buf.split('\n').map(|s| s.to_string()).collect())
+}
+
+/// enable controllers for child-cgroups
+pub fn enable_controllers(
+    cgroup_path: &std::path::PathBuf,
+    controllers: &Vec<String>,
+) -> Result<(), CgroupError> {
+    let cgroup_subtreectl = cgroup_path.join("cgroup.subtree_control");
+    let mut f = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&cgroup_subtreectl)
+        .map_err(|e| CgroupError::IOErr(e))?;
+
+    let mut buf = String::new();
+    for ctl in controllers {
+        buf.push_str(" +");
+        buf.push_str(&ctl);
+    }
+    f.write_all(buf.as_bytes())
+        .map_err(|e| CgroupError::IOErr(e))?;
+    Ok(())
+}
+
+/// disable controllers for child-cgroups
+pub fn disable_controllers(
+    cgroup_path: &std::path::PathBuf,
+    controllers: &Vec<String>,
+) -> Result<(), CgroupError> {
+    let cgroup_subtreectl = cgroup_path.join("cgroup.subtree_control");
+    let mut f = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&cgroup_subtreectl)
+        .map_err(|e| CgroupError::IOErr(e))?;
+
+    let mut buf = String::new();
+    for ctl in controllers {
+        buf.push_str(" -");
+        buf.push_str(&ctl);
+    }
+    f.write_all(buf.as_bytes())
+        .map_err(|e| CgroupError::IOErr(e))?;
+    Ok(())
+}
+
 /// retrieve all pids that are currently in this cgroup
 pub fn get_all_procs(
     cgroup_path: &std::path::PathBuf,
