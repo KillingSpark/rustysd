@@ -79,7 +79,7 @@ fn make_new_pw() -> libc::passwd {
     }
 }
 
-#[cfg(any(target_os="freebsd", target_os="linux"))]
+#[cfg(any(target_os = "freebsd", target_os = "linux"))]
 pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
     let username_i8 = username.bytes().map(|x| x as i8).collect::<Vec<_>>();
     let pointer: *const i8 = username_i8.as_ptr();
@@ -111,15 +111,10 @@ pub fn getpwnam_r(username: &str) -> Result<PwEntry, String> {
                 return Err(format!("The **user ({:?}) should have pointed to the same location as the *user ({:?})", user_ptr_ptr, user_ptr));
             }
         }
-        }
+    }
 }
 
-#[cfg(not(target_os = "linux"))]
-pub fn getpwnam(_username: &str) -> Result<PwEntry, String> {
-    compile_error!("getpwwnam is not yet implemented for this platform".into());
-}
-
-#[cfg(not(any(target_os = "linux", target_os="freebsd")))]
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
 pub fn getpwnam_r(_username: &str) -> Result<PwEntry, String> {
-    compile_error!("getpwwnam_r is not yet implemented for this platform".into());
+    compile_error!("getpwnam_r is not yet implemented for this platform");
 }
