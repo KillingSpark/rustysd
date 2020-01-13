@@ -13,6 +13,16 @@ pub struct ServiceRuntimeInfo {
     pub up_since: Option<std::time::Instant>,
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct PlatformSpecificServiceFields {
+    pub cgroup_path: std::path::PathBuf,
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Debug)]
+pub struct PlatformSpecificServiceFields {}
+
 #[derive(Debug)]
 pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
@@ -38,6 +48,8 @@ pub struct Service {
     pub uid: nix::unistd::Uid,
     pub gid: nix::unistd::Gid,
     pub supp_gids: Vec<nix::unistd::Gid>,
+
+    pub platform_specific: PlatformSpecificServiceFields,
 }
 
 pub enum RunCmdError {
@@ -223,9 +235,14 @@ impl Service {
     ) -> Result<(), RunCmdError> {
         let stop_res = self.run_stop_cmd(id, name, pid_table.clone());
         if let Some(proc_group) = self.process_group {
+            // TODO handle these errors
             match nix::sys::signal::kill(proc_group, nix::sys::signal::Signal::SIGKILL) {
                 Ok(_) => trace!("Success killing process group for service {}", name,),
                 Err(e) => error!("Error killing process group for service {}: {}", name, e,),
+            }
+            match super::kill_os_specific::kill(self, nix::sys::signal::Signal::SIGKILL) {
+                Ok(_) => trace!("Success killing process os specificly for service {}", name,),
+                Err(e) => error!("Error killing process os specificly for service {}: {}", name, e,),
             }
         } else {
             trace!("Tried to kill service that didn't have a process-group. This might have resulted in orphan processes.");

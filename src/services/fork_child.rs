@@ -164,6 +164,11 @@ pub fn after_fork_child(
     new_stdout: RawFd,
     new_stderr: RawFd,
 ) {
+    if let Err(e) = super::fork_os_specific::post_fork_os_specific(srvc) {
+        eprintln!("[FORK_CHILD {}] postfork error: {}", name, e);
+        std::process::exit(1);
+    }
+
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
     move_into_new_process_group();

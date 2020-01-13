@@ -93,6 +93,15 @@ pub fn parse_service(
         supp_gids.push(gid);
     }
 
+    // TODO make the cgroup path dynamic so multiple rustysd instances can exist
+    let platform_specific = crate::services::PlatformSpecificServiceFields {
+        #[cfg(target_os = "linux")]
+        cgroup_path: std::path::PathBuf::from(format!(
+            "/sys/fs/cgroups/unified/rustysd/{}",
+            path.file_name().unwrap().to_str().unwrap()
+        )),
+    };
+
     Ok(Unit {
         id: chosen_id,
         conf: unit_config.unwrap_or(UnitConfig {
@@ -140,6 +149,8 @@ pub fn parse_service(
             notifications_buffer: String::new(),
             stdout_buffer: Vec::new(),
             stderr_buffer: Vec::new(),
+
+            platform_specific,
         }),
     })
 }

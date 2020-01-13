@@ -32,6 +32,9 @@ pub use subreaper::*;
 pub mod grnam;
 pub mod pwnam;
 
+#[cfg(feature = "cgroups")]
+pub mod cgroup2;
+
 #[cfg(any(
     target_os = "freebsd",
     target_os = "openbsd",

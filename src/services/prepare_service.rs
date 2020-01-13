@@ -38,8 +38,6 @@ pub fn prepare_service(
         srvc.notifications = Some(new_stream);
     }
 
-    super::pre_fork_os_specific::pre_fork_os_specific(srvc, name)?;
-
     if srvc.stdout_dup.is_none() {
         let (r, w) = nix::unistd::pipe().unwrap();
         srvc.stdout_dup = Some((r, w));

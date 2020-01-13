@@ -21,3 +21,4 @@ lumberjack-rs = { git = "https://github.com/KillingSpark/lumberjack-rs" }
 [features]
 dbus_support = ["dbus"]
 linux_eventfd = []
+cgroups = []
