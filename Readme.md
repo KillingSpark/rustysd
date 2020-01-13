@@ -158,12 +158,10 @@ Requiring bigger changes or seem complicated:
 * The rest of the sd_notify API (with storing filedescriptors and such)
 
 Requiring small changes / additions transparent to the other modules:
-* prune sockets that are only pulled in  because they are referenced by sockets.target 
 * Change user to drop privileges
 * Patching unit definitions with dropin files
 * Socket options like MaxConnections=/KeepAlive=
-* Killing services properly. SigTerm/Kill/Hup/ executing the stop commands ..... (currently there is just a sigkill sent to the whole processgroup)
-* Recursively deactivating units
+* Killing services with a configurable signal. Currently its always SIGKILL after the ExecStop commands have been run
 * More socket types 
     1. Netlink is missing for example
     1. Abstract namespace for unix sockets (but thats linux specific anyways and rust stdlib doesnt support it.....)
@@ -175,6 +173,7 @@ Requiring small changes / additions transparent to the other modules:
 * Support the different allowed prefixed for executables in execstart(-pre/post)
 
 Unclear how much work it is:
+* prune sockets that are only pulled in  because they are referenced by sockets.target 
 * Get all the meta-targets and default dependencies right
     * Individually these are probably small parts. But as a whole task it seems like much
 
