@@ -90,7 +90,7 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
             };
             Command::Stop(name)
         }
-        // TODO parse filters for the listing
+
         "list-units" => {
             let kind = match &call.params {
                 Some(params) => match params {
@@ -350,7 +350,6 @@ pub fn execute_command(
             }
         }
         Command::ListUnits(kind) => {
-            // TODO list units of kind or all
             let unit_table_locked = run_info.unit_table.read().unwrap();
             for (id, unit) in unit_table_locked.iter() {
                 let include = if let Some(kind) = kind {
