@@ -242,7 +242,10 @@ impl Service {
             }
             match super::kill_os_specific::kill(self, nix::sys::signal::Signal::SIGKILL) {
                 Ok(_) => trace!("Success killing process os specificly for service {}", name,),
-                Err(e) => error!("Error killing process os specificly for service {}: {}", name, e,),
+                Err(e) => error!(
+                    "Error killing process os specificly for service {}: {}",
+                    name, e,
+                ),
             }
         } else {
             trace!("Tried to kill service that didn't have a process-group. This might have resulted in orphan processes.");

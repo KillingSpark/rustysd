@@ -38,7 +38,7 @@ pub fn move_pid_to_cgroup(
         .write(true)
         .open(&cgroup_procs)
         .map_err(|e| CgroupError::IOErr(e))?;
-        
+
     let pid_str = pid.as_raw().to_string();
     f.write(pid_str.as_bytes())
         .map_err(|e| CgroupError::IOErr(e))?;

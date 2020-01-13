@@ -40,8 +40,7 @@ fn start_service_with_filedescriptors(
     // 1. in fork execve the cmd with the args
     // 1. in parent set pid and return. Waiting will be done afterwards if necessary
 
-    super::fork_os_specific::pre_fork_os_specific(srvc)
-        .map_err(|e| RunCmdError::Generic(e))?;
+    super::fork_os_specific::pre_fork_os_specific(srvc).map_err(|e| RunCmdError::Generic(e))?;
 
     // make sure we have the lock that the child will need
     match nix::unistd::fork() {
