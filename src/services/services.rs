@@ -16,7 +16,9 @@ pub struct ServiceRuntimeInfo {
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
 pub struct PlatformSpecificServiceFields {
-    pub cgroup_path: std::path::PathBuf,
+    pub cgroupv2_path: std::path::PathBuf,
+    pub cgroupv1_path: std::path::PathBuf,
+    pub relative_path: std::path::PathBuf,
 }
 
 #[cfg(not(target_os = "linux"))]

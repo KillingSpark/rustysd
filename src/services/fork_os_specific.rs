@@ -9,8 +9,9 @@ pub fn pre_fork_os_specific(srvc: &mut Service) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         if nix::unistd::getuid().is_root() {
-            cgroup2::make_new_cgroup_recursive(&srvc.platform_specific.cgroup_path)
-                .map_err(|e| format!("prefork os specific: {}", e))?;
+            let cgroupv2_path = srvc.platform_specific.cgroupv2_path.join(&srvc.platform_specific.relative_path);
+            cgroup2::make_new_cgroup_recursive(&cgroupv2_path)
+            .map_err(|e| format!("prefork os specific: {}", e))?;
         }
     }
     let _ = srvc;
@@ -21,7 +22,8 @@ pub fn post_fork_os_specific(srvc: &mut Service) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         if nix::unistd::getuid().is_root() {
-            cgroup2::move_self_to_cgroup(&srvc.platform_specific.cgroup_path)
+            let cgroupv2_path = srvc.platform_specific.cgroupv2_path.join(&srvc.platform_specific.relative_path);
+            cgroup2::move_self_to_cgroup(&cgroupv2_path)
                 .map_err(|e| format!("postfork os specific: {}", e))?;
         }
     }

@@ -142,3 +142,34 @@ pub fn kill_cgroup(
     }
     Ok(())
 }
+
+fn write_freeze_state(
+    cgroup_path: &std::path::PathBuf,
+    desired_state: &str,
+) -> Result<(), CgroupError> {
+    let cgroup_freeze = cgroup_path.join("cgroup.freeze");
+    if cgroup_freeze.exists() {
+        return Err(CgroupError::IOErr(std::io::Error::from(
+            std::io::ErrorKind::NotFound,
+        )));
+    }
+    let mut f = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&cgroup_freeze)
+        .map_err(|e| CgroupError::IOErr(e))?;
+
+    f.write_all(desired_state.as_bytes())
+        .map_err(|e| CgroupError::IOErr(e))?;
+    Ok(())
+}
+
+pub fn freeze(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
+    let desired_state = "1";
+    write_freeze_state(cgroup_path, desired_state)
+}
+
+pub fn thaw(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
+    let desired_state = "1";
+    write_freeze_state(cgroup_path, desired_state)
+}

@@ -7,7 +7,8 @@ pub fn kill(srvc: &mut Service, sig: nix::sys::signal::Signal) -> Result<(), Str
     #[cfg(feature = "cgroups")]
     {
         if nix::unistd::getuid().is_root() {
-            cgroup2::kill_cgroup(&srvc.platform_specific.cgroup_path, sig)
+            let cgroupv2_path = srvc.platform_specific.cgroupv2_path.join(&srvc.platform_specific.relative_path);
+            cgroup2::kill_cgroup(&cgroupv2_path, sig)
                 .map_err(|e| format!("{}", e))?;
         }
     }
