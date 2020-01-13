@@ -1,5 +1,5 @@
 # rustysd
-Rustysd is a service manager that tries to replicate systemd behaviour for a subset of the configuration possibilities. It focuses on the core functionality of a service manager.
+Rustysd is a service manager that tries to replicate systemd behaviour for a subset of the configuration possibilities. It focuses on the core functionality of a service manager, not requiring to be PID1 (aka init process).
 
 ## Will this replace systemd?
 TLDR: No, rustysd is no dedicated replacement. It is an opportunity for the niches where systemd could not get it's foot down to profit (more easily) from the 
@@ -21,8 +21,8 @@ freebsd.
 For now this project is just out of interest how far I could come with this 
 and what would be needed to get a somewhat working system. It is very much a proof of concept / work in progress. For the love of god do not use this
 in anything that is important.
-It does look somewhat promising, the core parts are "working" (not thoroughly tested) but there is a lot of cleanup to be done. There is a whole lot of unwrap() calling
-where error handling should be done properly. It would be a bit unhelpful if your service-manager starts panicing.
+
+It does look somewhat promising, most needed features are there. There are a lot of tests missing and more care needs to be taken so that rustysd itself never panics.
 
 ### Short intro to systemd / rustysd
 Systemd/rustysd operate on so called "units". These are smallish separate entities in the system like a single service. These units can be handled independently but 
@@ -40,7 +40,6 @@ What is explicitly in scope of this project
 1. Startup sorted by dependencies (parallel if possible for unrelated units)
 1. Startup synchronization via *.target units
 1. Socket activation of services
-1. Kill services that have dependencies on failed services
 
 What is explicitly out of scope (for now, this project is still very young):
 1. Timers (Cron should do fine for 99% of usecases)
@@ -53,9 +52,9 @@ What is explicitly out of scope (for now, this project is still very young):
 [![Gitter](https://badges.gitter.im/rustysd/community.svg)](https://gitter.im/rustysd/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 ### About slices
-I dont think it is viable for a cross-platform project to support slices. In general I think it would be more sensible to put that weight on other tools.
+I dont think it is viable for a cross-platform project to support slices. In general I think it would be more sensible to put that responsibility on other tools.
 
-I imagine something along the lines of dockers 'runc' but maybe not specialized to the container environment. Let's call the imaginary tool 'restrict', the usage I 
+I imagine something along the lines of dockers 'runc' but not specialized to the container environment. Let's call the imaginary tool 'restrict', the usage I 
 imagine would be along the lines of: 
 
 `restrict -cmd "/my/binary arg1 arg2 arg3" -mem_max=5G -io_max=10G/s`
@@ -94,7 +93,7 @@ to write a compatibility shim if an equivalents exist on the target platform. It
 1. setting the current process as a subprocess reaper (might not be that important, other platforms might handle reparenting of orphaned processes differently than unix)
 1. changing the user id to drop privileges
 1. an implementation of getpwnam_r and getgrnam_r. These can be swapped for getpwnam/getgrnam if needed
-    * They can also be ignored, restricting the values of User, Group, and SupplementaryGroups to numerical values
+    * They could also be ignored, restricting the values of User, Group, and SupplementaryGroups to numerical values
 
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested. If you find anything does actually not work
