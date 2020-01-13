@@ -41,7 +41,7 @@ pub fn deactivate_unit(
             }
             UnitStatus::NeverStarted
             | UnitStatus::Stopped
-            | UnitStatus::StoppedFinal
+            | UnitStatus::StoppedFinal(_)
             | UnitStatus::Stopping => {
                 return Ok(());
             }
@@ -53,7 +53,7 @@ pub fn deactivate_unit(
         let status = status_table_locked.get(&id_to_kill).unwrap();
         let mut status_locked = status.lock().unwrap();
         if killfinal {
-            *status_locked = UnitStatus::StoppedFinal;
+            *status_locked = UnitStatus::StoppedFinal("Deactivated cleanly".into());
         } else {
             *status_locked = UnitStatus::Stopped;
         }

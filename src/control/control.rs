@@ -290,7 +290,7 @@ pub fn execute_command(
                     for unit in units {
                         let unit_locked = unit.lock().unwrap();
                         let status = {
-                            *run_info
+                            run_info
                                 .status_table
                                 .read()
                                 .unwrap()
@@ -298,6 +298,7 @@ pub fn execute_command(
                                 .unwrap()
                                 .lock()
                                 .unwrap()
+                                .clone()
                         };
                         if name.ends_with(".service") {
                             result_vec
@@ -327,7 +328,7 @@ pub fn execute_command(
                         .map(|(_id, unit)| {
                             let unit_locked = &unit.lock().unwrap();
                             let status = {
-                                *run_info
+                                run_info
                                     .status_table
                                     .read()
                                     .unwrap()
@@ -335,6 +336,7 @@ pub fn execute_command(
                                     .unwrap()
                                     .lock()
                                     .unwrap()
+                                    .clone()
                             };
                             match unit_locked.specialized {
                                 UnitSpecialized::Socket(_) => format_socket(&unit_locked, status),

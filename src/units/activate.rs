@@ -113,8 +113,8 @@ fn activate_units_recursive(
                     tpool_copy.execute(next_services_job);
                 }
                 Ok(StartResult::WaitForDependencies) => {
-                    // Thats ok. The unit is waiting for more dependencies
-                    // TODO make this more explicit
+                    // Thats ok. The unit is waiting for more dependencies and will be
+                    // activated again when another dependency has finished starting
                 }
                 Err(e) => {
                     error!("Error while activating unit {}", e);
@@ -233,6 +233,13 @@ pub fn activate_unit(
             let mut status_locked = status.lock().unwrap();
             *status_locked = new_status;
             StartResult::Started(next_services_ids)
+        }).map_err(|e| {
+            // Update the status while we still lock the unit
+            let status_table_locked = run_info.status_table.read().unwrap();
+            let status = status_table_locked.get(&unit_locked.id).unwrap();
+            let mut status_locked = status.lock().unwrap();
+            *status_locked = UnitStatus::StoppedFinal(format!("{}", e));
+            e
         })
     // drop all the locks "at once". Ordering of dropping should be irrelevant?
 }

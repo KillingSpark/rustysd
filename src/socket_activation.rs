@@ -50,7 +50,7 @@ pub fn start_socketactivation_thread(
                             {
                                 let srvc_status = {
                                     let status_locked = status.lock().unwrap();
-                                    *status_locked
+                                    status_locked.clone()
                                 };
 
                                 if srvc_status != crate::units::UnitStatus::StartedWaitingForSocket {

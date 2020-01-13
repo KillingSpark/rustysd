@@ -91,7 +91,7 @@ pub enum PidEntry {
     HelperExited(crate::signal_handler::ChildTermination),
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UnitStatus {
     NeverStarted,
     Starting,
@@ -99,7 +99,7 @@ pub enum UnitStatus {
     StartedWaitingForSocket,
     Stopping,
     Stopped,
-    StoppedFinal,
+    StoppedFinal(String),
 }
 
 #[derive(Debug)]
