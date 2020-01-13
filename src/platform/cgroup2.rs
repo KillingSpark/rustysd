@@ -19,7 +19,11 @@ impl std::fmt::Display for CgroupError {
 
 /// creates the needed cgroup directories
 pub fn make_new_cgroup_recursive(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
-    fs::create_dir_all(cgroup_path).map_err(|e| CgroupError::IOErr(e))
+    if !cgroup_path.exists() {
+        fs::create_dir_all(cgroup_path).map_err(|e| CgroupError::IOErr(e))
+    } else {
+        Ok(())
+    }
 }
 
 /// move a process into the cgroup. In rustysd the child process will call move_self for convenience
@@ -28,9 +32,15 @@ pub fn move_pid_to_cgroup(
     pid: nix::unistd::Pid,
 ) -> Result<(), CgroupError> {
     let cgroup_procs = cgroup_path.join("cgroup.procs");
-    let mut f = fs::File::open(&cgroup_procs).map_err(|e| CgroupError::IOErr(e))?;
+
+    let mut f = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&cgroup_procs)
+        .map_err(|e| CgroupError::IOErr(e))?;
+        
     let pid_str = pid.as_raw().to_string();
-    f.write_all(pid_str.as_bytes())
+    f.write(pid_str.as_bytes())
         .map_err(|e| CgroupError::IOErr(e))?;
     Ok(())
 }

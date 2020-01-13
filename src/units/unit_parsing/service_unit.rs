@@ -97,7 +97,7 @@ pub fn parse_service(
     let platform_specific = crate::services::PlatformSpecificServiceFields {
         #[cfg(target_os = "linux")]
         cgroup_path: std::path::PathBuf::from(format!(
-            "/sys/fs/cgroups/unified/rustysd/{}",
+            "/sys/fs/cgroup/unified/rustysd/{}",
             path.file_name().unwrap().to_str().unwrap()
         )),
     };
