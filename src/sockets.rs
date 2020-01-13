@@ -143,7 +143,7 @@ impl UnixSocketConfig {
             std::fs::remove_file(&path)
                 .map_err(|e| format!("Error removing file {:?}: {}", path, e))?;
         }
-        
+
         close_raw_fd(rawfd);
         Ok(())
     }

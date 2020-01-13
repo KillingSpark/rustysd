@@ -8,7 +8,6 @@ pub enum LoadingError {
     Dependency(DependencyError),
 }
 
-
 #[derive(Debug)]
 pub struct DependencyError {
     msg: String,

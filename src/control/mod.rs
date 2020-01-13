@@ -8,7 +8,7 @@
 //! ### status Option<name>
 //! * If the param is a string show status of the unit with that name (might get the same filtering as list-units in the future).
 //! * If no param is given, show status of all units
-//! 
+//!
 //! ### restart name
 //! Restart unit with that name. If it was running first kill it. If it is already stopped start it.
 
@@ -17,7 +17,7 @@
 
 //! ### enable name
 //! Load new file with that name. Useful if you moved/copied a file in the unit-dirs and want to start it without restarting rustysd as a whole
-//! 
+//!
 //! ### shutdown
 //! Shutdown rustysd by killing all services, closing all sockets and exiting
 //!

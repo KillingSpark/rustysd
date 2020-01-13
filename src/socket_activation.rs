@@ -42,18 +42,16 @@ pub fn start_socketactivation_thread(
                         }
 
                         if let Some(srvc_unit_id) = srvc_unit_id {
-                            if let Some(status) = run_info
-                                .status_table
-                                .read()
-                                .unwrap()
-                                .get(&srvc_unit_id)
+                            if let Some(status) =
+                                run_info.status_table.read().unwrap().get(&srvc_unit_id)
                             {
                                 let srvc_status = {
                                     let status_locked = status.lock().unwrap();
                                     status_locked.clone()
                                 };
 
-                                if srvc_status != crate::units::UnitStatus::StartedWaitingForSocket {
+                                if srvc_status != crate::units::UnitStatus::StartedWaitingForSocket
+                                {
                                     trace!(
                                         "Ignore socket activation. Service has status: {:?}",
                                         srvc_status

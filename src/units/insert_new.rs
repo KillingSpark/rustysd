@@ -36,7 +36,10 @@ pub fn load_new_unit(
         let content = fs::read_to_string(&unit_path).map_err(|e| {
             format!(
                 "{}",
-                units::ParsingError::new(units::ParsingErrorReason::from(Box::new(e)), unit_path.clone())
+                units::ParsingError::new(
+                    units::ParsingErrorReason::from(Box::new(e)),
+                    unit_path.clone()
+                )
             )
         })?;
         let parsed = units::parse_file(&content)

@@ -70,11 +70,7 @@ impl std::fmt::Display for ParsingError {
                 )?;
             }
             ParsingErrorReason::UnknownSection(name) => {
-                write!(
-                    f,
-                    "In file {:?}: Section {} is unknown",
-                    self.path, name
-                )?;
+                write!(f, "In file {:?}: Section {} is unknown", self.path, name)?;
             }
             ParsingErrorReason::SectionTooOften(name) => {
                 write!(

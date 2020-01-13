@@ -143,7 +143,9 @@ impl Service {
             return Err(ServiceErrorReason::AlreadyHasPID(pgid));
         }
         if self.service_config.accept {
-            return Err(ServiceErrorReason::Generic("Inetd style activation is not supported".into()));
+            return Err(ServiceErrorReason::Generic(
+                "Inetd style activation is not supported".into(),
+            ));
         }
         if !allow_ignore || self.socket_names.is_empty() {
             trace!("Start service {}", name);

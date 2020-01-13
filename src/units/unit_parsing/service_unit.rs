@@ -37,8 +37,8 @@ pub fn parse_service(
         if let Ok(uid) = user.parse::<u32>() {
             Some(nix::unistd::Uid::from_raw(uid))
         } else {
-            if let Ok(pwentry) =
-                crate::platform::pwnam::getpwnam_r(&user).map_err(|e| ParsingErrorReason::Generic(e))
+            if let Ok(pwentry) = crate::platform::pwnam::getpwnam_r(&user)
+                .map_err(|e| ParsingErrorReason::Generic(e))
             {
                 Some(pwentry.uid)
             } else {
@@ -58,8 +58,8 @@ pub fn parse_service(
         if let Ok(gid) = group.parse::<u32>() {
             Some(nix::unistd::Gid::from_raw(gid))
         } else {
-            if let Ok(groupentry) =
-                crate::platform::grnam::getgrnam_r(&group).map_err(|e| ParsingErrorReason::Generic(e))
+            if let Ok(groupentry) = crate::platform::grnam::getgrnam_r(&group)
+                .map_err(|e| ParsingErrorReason::Generic(e))
             {
                 Some(groupentry.gid)
             } else {
@@ -79,8 +79,8 @@ pub fn parse_service(
         let gid = if let Ok(gid) = group.parse::<u32>() {
             nix::unistd::Gid::from_raw(gid)
         } else {
-            if let Ok(groupentry) =
-                crate::platform::grnam::getgrnam_r(&group).map_err(|e| ParsingErrorReason::Generic(e))
+            if let Ok(groupentry) = crate::platform::grnam::getgrnam_r(&group)
+                .map_err(|e| ParsingErrorReason::Generic(e))
             {
                 groupentry.gid
             } else {

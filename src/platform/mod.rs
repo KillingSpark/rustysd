@@ -21,16 +21,16 @@
 //! We'd also need to make some more functionality optional like subprocess reaping (which only matters if we are not PID1)
 //!
 
+mod drop_privileges;
 mod eventfd;
 mod subreaper;
 mod unix_common;
-mod drop_privileges;
 
+pub use drop_privileges::*;
 pub use eventfd::*;
 pub use subreaper::*;
-pub use drop_privileges::*;
-pub mod pwnam;
 pub mod grnam;
+pub mod pwnam;
 
 #[cfg(any(
     target_os = "freebsd",

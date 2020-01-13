@@ -4,7 +4,7 @@ pub struct GroupEntry {
     pub gid: nix::unistd::Gid,
 }
 
-#[cfg(any(target_os = "linux", target_os="freebsd"))]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn make_group_from_libc(groupname: &str, group: &libc::group) -> Result<GroupEntry, String> {
     let gid = nix::unistd::Gid::from_raw(group.gr_gid);
     let pw = if !group.gr_passwd.is_null() {
@@ -45,7 +45,7 @@ fn getgrnam(groupname: &str) -> Result<GroupEntry, String> {
     make_group_from_libc(groupname, &res)
 }
 
-#[cfg(any(target_os = "linux", target_os="freebsd"))]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn getgrnam_r(groupname: &str) -> Result<GroupEntry, String> {
     let username_i8 = groupname.bytes().map(|x| x as i8).collect::<Vec<_>>();
     let pointer: *const i8 = username_i8.as_ptr();
@@ -92,7 +92,7 @@ pub fn getgrnam_r(groupname: &str) -> Result<GroupEntry, String> {
     }
 }
 
-#[cfg(not(any(target_os = "linux", target_os="freebsd")))]
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
 pub fn getgrnam_r(_groupname: &str) -> Result<GroupEntry, String> {
     compile_error!("getgrnam_r is not yet implemented for this platform");
 }

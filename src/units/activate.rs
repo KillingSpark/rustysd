@@ -2,9 +2,9 @@
 
 use super::units::*;
 use crate::platform::EventFd;
+use crate::services::ServiceErrorReason;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
-use crate::services::ServiceErrorReason;
 
 pub struct UnitOperationError {
     pub reason: UnitOperationErrorReason,
@@ -233,7 +233,8 @@ pub fn activate_unit(
             let mut status_locked = status.lock().unwrap();
             *status_locked = new_status;
             StartResult::Started(next_services_ids)
-        }).map_err(|e| {
+        })
+        .map_err(|e| {
             // Update the status while we still lock the unit
             let status_table_locked = run_info.status_table.read().unwrap();
             let status = status_table_locked.get(&unit_locked.id).unwrap();
