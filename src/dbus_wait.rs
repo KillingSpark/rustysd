@@ -21,7 +21,7 @@ mod no_dbus_support {
 
     pub fn wait_for_name_system_bus(
         _name: &str,
-        _timeout: std::time::Duration,
+        _timeout: Option<std::time::Duration>,
     ) -> Result<WaitResult, Box<dyn Error>> {
         Err("Dbus is not supported in this build")?;
 
@@ -35,7 +35,7 @@ mod no_dbus_support {
     #[allow(dead_code)]
     pub fn wait_for_name_session_bus(
         _name: &str,
-        _timeout: std::time::Duration,
+        _timeout: Option<std::time::Duration>,
     ) -> Result<WaitResult, Box<dyn Error>> {
         Err("Dbus is not supported in this build")?;
         unreachable!();
@@ -83,7 +83,7 @@ mod dbus_support {
 
     pub fn wait_for_name_system_bus(
         name: &str,
-        timeout: std::time::Duration,
+        timeout: Option<std::time::Duration>,
     ) -> Result<WaitResult, Box<dyn std::error::Error>> {
         let conn = Connection::new_system()?;
         wait_for_name(name, conn, timeout)
@@ -93,7 +93,7 @@ mod dbus_support {
     #[allow(dead_code)]
     pub fn wait_for_name_session_bus(
         name: &str,
-        timeout: std::time::Duration,
+        timeout: Option<std::time::Duration>,
     ) -> Result<WaitResult, Box<dyn std::error::Error>> {
         let conn = Connection::new_session()?;
         wait_for_name(name, conn, timeout)
@@ -102,7 +102,7 @@ mod dbus_support {
     fn wait_for_name(
         name: &str,
         mut conn: Connection,
-        timeout: std::time::Duration,
+        timeout: Option<std::time::Duration>,
     ) -> Result<WaitResult, Box<dyn std::error::Error>> {
         let obj = conn.with_proxy(
             "org.freedesktop.DBus",
@@ -127,12 +127,26 @@ mod dbus_support {
         });
 
         let start = std::time::Instant::now();
-        while !(*stoparc.lock().unwrap()) && start.elapsed() < timeout {
-            let max_wait = timeout - start.elapsed();
+        loop {
+            if let Some(timeout) = timeout {
+                if *stoparc.lock().unwrap() || start.elapsed() >= timeout {
+                    break;
+                }
+            }
+            let max_wait = if let Some(timeout) = timeout {
+                timeout - start.elapsed()
+            } else {
+                std::time::Duration::from_millis(500)
+            };
+            // TODO PR to dbus-rs so it takes an Option<Duration>
             conn.process(max_wait)?;
         }
-        if start.elapsed() >= timeout {
-            Ok(WaitResult::Timedout)
+        if let Some(timeout) = timeout {
+            if start.elapsed() >= timeout {
+                Ok(WaitResult::Timedout)
+            } else {
+                Ok(WaitResult::Ok)
+            }
         } else {
             Ok(WaitResult::Ok)
         }
