@@ -142,6 +142,9 @@ impl Service {
         if let Some(pgid) = self.process_group {
             return Err(ServiceErrorReason::AlreadyHasPID(pgid));
         }
+        if self.service_config.accept {
+            return Err(ServiceErrorReason::Generic("Inetd style activation is not supported".into()));
+        }
         if !allow_ignore || self.socket_names.is_empty() {
             trace!("Start service {}", name);
 

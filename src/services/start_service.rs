@@ -87,7 +87,6 @@ pub fn start_service(
     name: &str,
     fd_store: &FDStore,
 ) -> Result<(), super::RunCmdError> {
-    // TODO check for inetd style activation
     start_service_with_filedescriptors(srvc, name, fd_store)?;
     srvc.runtime_info.up_since = Some(std::time::Instant::now());
     Ok(())
