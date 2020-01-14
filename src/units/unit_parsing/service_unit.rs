@@ -97,7 +97,9 @@ pub fn parse_service(
     let platform_specific = crate::services::PlatformSpecificServiceFields {
         #[cfg(target_os = "linux")]
         cgroupv2_unified_path: std::path::PathBuf::from(format!("/sys/fs/cgroup/unified/",)),
+        #[cfg(target_os = "linux")]
         cgroupv1_freezer_path: std::path::PathBuf::from(format!("/sys/fs/cgroup/freezer/")),
+        #[cfg(target_os = "linux")]
         relative_path: std::path::PathBuf::from(format!(
             "rustysd{}/{}",
             nix::unistd::getpid(),
