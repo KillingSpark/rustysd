@@ -1,6 +1,9 @@
 use std::fs;
 use std::io::Read;
 
+mod cgroup1;
+mod cgroup2;
+
 pub enum CgroupError {
     IOErr(std::io::Error, String),
     NixErr(nix::Error),
@@ -23,7 +26,7 @@ fn use_v2(unified_path: &std::path::PathBuf) -> bool {
     if let Err(e) = fs::create_dir(&rustysd_cgroup) {
         if e.kind() == std::io::ErrorKind::AlreadyExists {
             //Thats ok
-        }else{
+        } else {
             trace!("creating {:?} failed: {}", rustysd_cgroup, e);
             return false;
         }
@@ -41,9 +44,9 @@ pub fn get_or_make_freezer(
     cgroup_path: &std::path::PathBuf,
 ) -> Result<std::path::PathBuf, CgroupError> {
     if use_v2(unified_path) {
-        super::cgroup2::get_or_make_cgroup(unified_path, cgroup_path)
+        cgroup2::get_or_make_cgroup(unified_path, cgroup_path)
     } else {
-        super::cgroup1::get_or_make_freezer(freezer_path, cgroup_path)
+        cgroup1::get_or_make_freezer(freezer_path, cgroup_path)
     }
 }
 
@@ -53,18 +56,18 @@ pub fn move_pid_to_cgroup(
     pid: nix::unistd::Pid,
 ) -> Result<(), CgroupError> {
     if use_v2(cgroup_path) {
-        super::cgroup2::move_pid_to_cgroup(cgroup_path, pid)
+        cgroup2::move_pid_to_cgroup(cgroup_path, pid)
     } else {
-        super::cgroup1::move_pid_to_cgroup(cgroup_path, pid)
+        cgroup1::move_pid_to_cgroup(cgroup_path, pid)
     }
 }
 
 /// move this process into the cgroup. Used by rustysd after forking
 pub fn move_self_to_cgroup(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
     if use_v2(cgroup_path) {
-        super::cgroup2::move_self_to_cgroup(cgroup_path)
+        cgroup2::move_self_to_cgroup(cgroup_path)
     } else {
-        super::cgroup1::move_self_to_cgroup(cgroup_path)
+        cgroup1::move_self_to_cgroup(cgroup_path)
     }
 }
 
@@ -103,20 +106,25 @@ pub fn freeze_kill_thaw_cgroup(
     let use_v2 = use_v2(cgroup_path);
     trace!("Freeze cgroup: {:?}", cgroup_path);
     if use_v2 {
-        super::cgroup2::freeze(cgroup_path)?;
-        super::cgroup2::wait_frozen(cgroup_path)?;
+        cgroup2::freeze(cgroup_path)?;
+        cgroup2::wait_frozen(cgroup_path)?;
     } else {
-        super::cgroup1::freeze(cgroup_path)?;
-        super::cgroup1::wait_frozen(cgroup_path)?;
+        cgroup1::freeze(cgroup_path)?;
+        cgroup1::wait_frozen(cgroup_path)?;
     }
     trace!("Kill cgroup: {:?}", cgroup_path);
     kill_cgroup(cgroup_path, sig)?;
     trace!("Thaw cgroup: {:?}", cgroup_path);
     if use_v2 {
-        super::cgroup2::thaw(cgroup_path)
+        cgroup2::thaw(cgroup_path)
     } else {
-        super::cgroup1::thaw(cgroup_path)
+        cgroup1::thaw(cgroup_path)
     }
+}
+
+pub fn remove_cgroup(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
+    fs::remove_dir(&cgroup_path)
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_path)))
 }
 
 /// kill all processes that are currently in this cgroup.
@@ -136,24 +144,24 @@ pub fn kill_cgroup(
 
 pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
     if use_v2(cgroup_path) {
-        super::cgroup2::wait_frozen(cgroup_path)
+        cgroup2::wait_frozen(cgroup_path)
     } else {
-        super::cgroup1::wait_frozen(cgroup_path)
+        cgroup1::wait_frozen(cgroup_path)
     }
 }
 
 pub fn freeze(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
     if use_v2(cgroup_path) {
-        super::cgroup2::freeze(cgroup_path)
+        cgroup2::freeze(cgroup_path)
     } else {
-        super::cgroup1::freeze(cgroup_path)
+        cgroup1::freeze(cgroup_path)
     }
 }
 
 pub fn thaw(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
     if use_v2(cgroup_path) {
-        super::cgroup2::thaw(cgroup_path)
+        cgroup2::thaw(cgroup_path)
     } else {
-        super::cgroup1::thaw(cgroup_path)
+        cgroup1::thaw(cgroup_path)
     }
 }

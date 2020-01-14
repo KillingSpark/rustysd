@@ -1,4 +1,4 @@
-use super::cgroups::CgroupError;
+use super::CgroupError;
 use std::fs;
 use std::io::Read;
 use std::io::Write;
