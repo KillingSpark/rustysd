@@ -19,7 +19,19 @@ impl std::fmt::Display for CgroupError {
 }
 
 fn use_v2(unified_path: &std::path::PathBuf) -> bool {
-    unified_path.join("cgroup.freeze").exists()
+    let rustysd_cgroup = unified_path.join(format!("rustysd{}", nix::unistd::getpid()));
+    if let Err(e) = fs::create_dir(&rustysd_cgroup) {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            //Thats ok
+        }else{
+            trace!("creating {:?} failed: {}", rustysd_cgroup, e);
+            return false;
+        }
+    }
+    let freeze_file = rustysd_cgroup.join("cgroup.freeze");
+    let exists = freeze_file.exists();
+    trace!("{:?} exists: {}", freeze_file, exists);
+    exists
 }
 
 /// creates the needed cgroup directories

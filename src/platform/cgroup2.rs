@@ -51,7 +51,8 @@ pub fn get_available_controllers(
     cgroup_path: &std::path::PathBuf,
 ) -> Result<Vec<String>, CgroupError> {
     let cgroup_ctrls = cgroup_path.join("cgroup.controllers");
-    let mut f = fs::File::open(&cgroup_ctrls).map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
+    let mut f = fs::File::open(&cgroup_ctrls)
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
     let mut buf = String::new();
     f.read_to_string(&mut buf)
         .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
@@ -133,13 +134,12 @@ pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> 
         .write(false)
         .open(&cgroup_freeze)
         .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
-    let mut buf = String::new();
     loop {
         freeze(cgroup_path)?;
-        buf.clear();
-        f.read_to_string(&mut buf)
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf)
             .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
-        if buf == "1" {
+        if buf[0] == b'1' {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
