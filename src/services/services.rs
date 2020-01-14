@@ -229,6 +229,25 @@ impl Service {
         }
     }
 
+    pub fn kill_all_remaining_processes(&mut self, name: &str) {
+        if let Some(proc_group) = self.process_group {
+            // TODO handle these errors
+            match nix::sys::signal::kill(proc_group, nix::sys::signal::Signal::SIGKILL) {
+                Ok(_) => trace!("Success killing process group for service {}", name,),
+                Err(e) => error!("Error killing process group for service {}: {}", name, e,),
+            }
+        } else {
+            trace!("Tried to kill service that didn't have a process-group. This might have resulted in orphan processes.");
+        }
+        match super::kill_os_specific::kill(self, nix::sys::signal::Signal::SIGKILL) {
+            Ok(_) => trace!("Success killing process os specificly for service {}", name,),
+            Err(e) => error!(
+                "Error killing process os specificly for service {}: {}",
+                name, e,
+            ),
+        }
+    }
+
     fn stop(
         &mut self,
         id: UnitId,
@@ -236,22 +255,12 @@ impl Service {
         pid_table: ArcMutPidTable,
     ) -> Result<(), RunCmdError> {
         let stop_res = self.run_stop_cmd(id, name, pid_table.clone());
-        if let Some(proc_group) = self.process_group {
-            // TODO handle these errors
-            match nix::sys::signal::kill(proc_group, nix::sys::signal::Signal::SIGKILL) {
-                Ok(_) => trace!("Success killing process group for service {}", name,),
-                Err(e) => error!("Error killing process group for service {}: {}", name, e,),
-            }
-            match super::kill_os_specific::kill(self, nix::sys::signal::Signal::SIGKILL) {
-                Ok(_) => trace!("Success killing process os specificly for service {}", name,),
-                Err(e) => error!(
-                    "Error killing process os specificly for service {}: {}",
-                    name, e,
-                ),
-            }
-        } else {
-            trace!("Tried to kill service that didn't have a process-group. This might have resulted in orphan processes.");
+
+        if self.service_config.srcv_type != ServiceType::OneShot {
+            // already happened when the oneshot process exited in the exit handler
+            self.kill_all_remaining_processes(name);
         }
+        
         self.pid = None;
         self.process_group = None;
         stop_res

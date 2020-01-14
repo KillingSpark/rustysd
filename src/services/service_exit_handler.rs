@@ -34,12 +34,8 @@ pub fn service_exit_handler(
         let entry = pid_table_locked.get(&pid);
         match entry {
             Some(entry) => match entry {
-                PidEntry::Service(_id, srvctype) => {
-                    if *srvctype == ServiceType::OneShot {
-                        trace!("Save oneshot service as exited. PID: {}", pid);
-                        pid_table_locked.insert(pid, PidEntry::OneshotExited(code));
-                        return Ok(());
-                    }
+                PidEntry::Service(_id, _srvctype) => {
+                    // ignore at this point, will be handled below
                 }
                 PidEntry::Helper(_id, srvc_name) => {
                     trace!(
@@ -77,7 +73,13 @@ pub fn service_exit_handler(
         let entry = pid_table_locked.remove(&pid);
         match entry {
             Some(entry) => match entry {
-                PidEntry::Service(id, _) => id,
+                PidEntry::Service(id, srvctype) => {
+                    if srvctype == ServiceType::OneShot {
+                        trace!("Save oneshot service as exited. PID: {}", pid);
+                        pid_table_locked.insert(pid, PidEntry::OneshotExited(code));
+                    }
+                    id
+                }
                 PidEntry::Helper(_id, _srvc_name) => {
                     unreachable!();
                 }
@@ -103,6 +105,17 @@ pub fn service_exit_handler(
             }
         }
     };
+
+    // kill oneshot service processes
+    {
+        let unit_locked = &mut *unit.lock().unwrap();
+        if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
+            if srvc.service_config.srcv_type == ServiceType::OneShot {
+                srvc.kill_all_remaining_processes(&unit_locked.conf.name());
+                return Ok(());
+            }
+        }
+    }
 
     trace!("Check if we want to restart the unit");
     let (name, sockets, restart_unit) = {

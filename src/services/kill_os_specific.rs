@@ -14,7 +14,7 @@ pub fn kill(srvc: &mut Service, sig: nix::sys::signal::Signal) -> Result<(), Str
             )
             .map_err(|e| format!("{}", e))?;
 
-            cgroups::kill_cgroup(&p, sig).map_err(|e| format!("{}", e))?;
+            cgroups::freeze_kill_thaw_cgroup(&p, sig).map_err(|e| format!("{}", e))?;
         }
     }
     let _ = srvc;

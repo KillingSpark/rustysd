@@ -79,7 +79,32 @@ pub fn get_all_procs(
 }
 
 /// kill all processes that are currently in this cgroup.
-/// You should use wait_frozen before or make in another way sure 
+/// This makes sure that the cgroup is first completely frozen
+/// so all processes will be killed and there is no chance of any
+/// remaining
+pub fn freeze_kill_thaw_cgroup(
+    cgroup_path: &std::path::PathBuf,
+    sig: nix::sys::signal::Signal,
+) -> Result<(), CgroupError> {
+    // TODO figure out how to freeze a cgroup so no new processes can be spawned while killing
+    let use_v2 = use_v2(cgroup_path);
+    if use_v2 {
+        super::cgroup2::freeze(cgroup_path)
+        super::cgroup2::wait_frozen(cgroup_path)
+    } else {
+        super::cgroup1::freeze(cgroup_path)
+        super::cgroup1::wait_frozen(cgroup_path)
+    }?;
+    kill_cgroup(cgroup_path, sig)?;
+    if use_v2 {
+        super::cgroup2::thaw(cgroup_path)
+    } else {
+        super::cgroup1::thaw(cgroup_path)
+    }
+}
+
+/// kill all processes that are currently in this cgroup.
+/// You should use wait_frozen before or make in another way sure
 /// there are no more processes spawned while killing
 pub fn kill_cgroup(
     cgroup_path: &std::path::PathBuf,
