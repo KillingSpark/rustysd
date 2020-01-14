@@ -13,7 +13,8 @@ pub fn get_or_make_cgroup(
     }
     let full_path = cgroup_unified_path.join(cgroup_path);
     if !full_path.exists() {
-        fs::create_dir_all(&full_path).map_err(|e| CgroupError::IOErr(e))?;
+        fs::create_dir_all(&full_path)
+            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", full_path)))?;
         Ok(full_path)
     } else {
         Ok(full_path)
@@ -31,11 +32,11 @@ pub fn move_pid_to_cgroup(
         .read(true)
         .write(true)
         .open(&cgroup_procs)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_procs)))?;
 
     let pid_str = pid.as_raw().to_string();
     f.write(pid_str.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_procs)))?;
     Ok(())
 }
 
@@ -50,10 +51,10 @@ pub fn get_available_controllers(
     cgroup_path: &std::path::PathBuf,
 ) -> Result<Vec<String>, CgroupError> {
     let cgroup_ctrls = cgroup_path.join("cgroup.controllers");
-    let mut f = fs::File::open(&cgroup_ctrls).map_err(|e| CgroupError::IOErr(e))?;
+    let mut f = fs::File::open(&cgroup_ctrls).map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
     let mut buf = String::new();
     f.read_to_string(&mut buf)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
 
     Ok(buf.split('\n').map(|s| s.to_string()).collect())
 }
@@ -68,7 +69,7 @@ pub fn enable_controllers(
         .read(true)
         .write(true)
         .open(&cgroup_subtreectl)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
 
     let mut buf = String::new();
     for ctl in controllers {
@@ -76,7 +77,7 @@ pub fn enable_controllers(
         buf.push_str(&ctl);
     }
     f.write_all(buf.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
     Ok(())
 }
 
@@ -90,7 +91,7 @@ pub fn disable_controllers(
         .read(true)
         .write(true)
         .open(&cgroup_subtreectl)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
 
     let mut buf = String::new();
     for ctl in controllers {
@@ -98,7 +99,7 @@ pub fn disable_controllers(
         buf.push_str(&ctl);
     }
     f.write_all(buf.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
     Ok(())
 }
 
@@ -107,19 +108,21 @@ fn write_freeze_state(
     desired_state: &str,
 ) -> Result<(), CgroupError> {
     let cgroup_freeze = cgroup_path.join("cgroup.freeze");
-    if cgroup_freeze.exists() {
-        return Err(CgroupError::IOErr(std::io::Error::from(
-            std::io::ErrorKind::NotFound,
-        )));
+    if !cgroup_freeze.exists() {
+        return Err(CgroupError::IOErr(
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+            format!("{:?}", cgroup_freeze),
+        ));
     }
+
     let mut f = fs::OpenOptions::new()
-        .read(true)
+        .read(false)
         .write(true)
         .open(&cgroup_freeze)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
 
     f.write_all(desired_state.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
     Ok(())
 }
 
@@ -129,13 +132,13 @@ pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> 
         .read(true)
         .write(false)
         .open(&cgroup_freeze)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
     let mut buf = String::new();
     loop {
         freeze(cgroup_path)?;
         buf.clear();
         f.read_to_string(&mut buf)
-            .map_err(|e| CgroupError::IOErr(e))?;
+            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
         if buf == "1" {
             break;
         }

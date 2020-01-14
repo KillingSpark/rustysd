@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Read;
 
 pub enum CgroupError {
-    IOErr(std::io::Error),
+    IOErr(std::io::Error, String),
     NixErr(nix::Error),
     NotMounted,
 }
@@ -10,7 +10,7 @@ pub enum CgroupError {
 impl std::fmt::Display for CgroupError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
-            CgroupError::IOErr(e) => format!("io error: {}", e),
+            CgroupError::IOErr(e, f) => format!("io error: {}, file: {}", e, f),
             CgroupError::NixErr(e) => format!("nix error: {}", e),
             CgroupError::NotMounted => "The freezer cgroup was not mounted".into(),
         };
@@ -62,10 +62,11 @@ pub fn get_all_procs(
 ) -> Result<Vec<nix::unistd::Pid>, CgroupError> {
     let mut pids = Vec::new();
     let cgroup_procs = cgroup_path.join("cgroup.procs");
-    let mut f = fs::File::open(&cgroup_procs).map_err(|e| CgroupError::IOErr(e))?;
+    let mut f = fs::File::open(&cgroup_procs)
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_procs)))?;
     let mut buf = String::new();
     f.read_to_string(&mut buf)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_procs)))?;
 
     for pid_str in buf.split('\n') {
         if pid_str.len() == 0 {
@@ -88,14 +89,17 @@ pub fn freeze_kill_thaw_cgroup(
 ) -> Result<(), CgroupError> {
     // TODO figure out how to freeze a cgroup so no new processes can be spawned while killing
     let use_v2 = use_v2(cgroup_path);
+    trace!("Freeze cgroup: {:?}", cgroup_path);
     if use_v2 {
-        super::cgroup2::freeze(cgroup_path)
-        super::cgroup2::wait_frozen(cgroup_path)
+        super::cgroup2::freeze(cgroup_path)?;
+        super::cgroup2::wait_frozen(cgroup_path)?;
     } else {
-        super::cgroup1::freeze(cgroup_path)
-        super::cgroup1::wait_frozen(cgroup_path)
-    }?;
+        super::cgroup1::freeze(cgroup_path)?;
+        super::cgroup1::wait_frozen(cgroup_path)?;
+    }
+    trace!("Kill cgroup: {:?}", cgroup_path);
     kill_cgroup(cgroup_path, sig)?;
+    trace!("Thaw cgroup: {:?}", cgroup_path);
     if use_v2 {
         super::cgroup2::thaw(cgroup_path)
     } else {

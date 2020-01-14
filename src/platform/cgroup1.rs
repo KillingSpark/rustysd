@@ -13,7 +13,8 @@ pub fn get_or_make_freezer(
     }
     let cgroup_path_in_freezer = freezer_path.join(cgroup_path);
     if !cgroup_path_in_freezer.exists() {
-        fs::create_dir_all(&cgroup_path_in_freezer).map_err(|e| CgroupError::IOErr(e))?;
+        fs::create_dir_all(&cgroup_path_in_freezer)
+            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_path_in_freezer)))?;
         Ok(cgroup_path_in_freezer)
     } else {
         Ok(cgroup_path_in_freezer)
@@ -31,11 +32,11 @@ pub fn move_pid_to_cgroup(
         .read(true)
         .write(true)
         .open(&cgroup_procs)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_procs)))?;
 
     let pid_str = pid.as_raw().to_string();
     f.write(pid_str.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_procs)))?;
     Ok(())
 }
 
@@ -50,19 +51,22 @@ fn write_freeze_state(
     desired_state: &str,
 ) -> Result<(), CgroupError> {
     let cgroup_freeze = cgroup_path.join("freezer.state");
-    if cgroup_freeze.exists() {
-        return Err(CgroupError::IOErr(std::io::Error::from(
-            std::io::ErrorKind::NotFound,
-        )));
+    if !cgroup_freeze.exists() {
+        return Err(CgroupError::IOErr(
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+            format!("{:?}", cgroup_freeze),
+        ));
     }
+
+    trace!("Write {} to {:?}", desired_state, cgroup_freeze);
     let mut f = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .open(&cgroup_freeze)
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
 
     f.write_all(desired_state.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
     Ok(())
 }
 
@@ -72,15 +76,21 @@ pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> 
         .read(true)
         .write(false)
         .open(&cgroup_freeze)
-        .map_err(|e| CgroupError::IOErr(e))?;
-    let mut buf = String::new();
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
     loop {
         freeze(cgroup_path)?;
-        buf.clear();
-        f.read_to_string(&mut buf)
-            .map_err(|e| CgroupError::IOErr(e))?;
-        if buf == "FROZEN" {
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf)
+            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
+
+        if 
+        if buf[0..6] == *"FROZEN".as_bytes() {
             break;
+        } else {
+            trace!(
+                "Wait for frozen state. Read (): {}",
+                String::from_utf8(buf.clone()).unwrap()
+            );
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
