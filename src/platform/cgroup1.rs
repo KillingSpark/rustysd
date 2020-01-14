@@ -83,14 +83,15 @@ pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> 
         f.read_to_end(&mut buf)
             .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_freeze)))?;
 
-        if 
-        if buf[0..6] == *"FROZEN".as_bytes() {
-            break;
-        } else {
-            trace!(
-                "Wait for frozen state. Read (): {}",
-                String::from_utf8(buf.clone()).unwrap()
-            );
+        if buf.len() >= 6 {
+            if buf[0..6] == *"FROZEN".as_bytes() {
+                break;
+            } else {
+                trace!(
+                    "Wait for frozen state. Read (): {}",
+                    String::from_utf8(buf.clone()).unwrap()
+                );
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
