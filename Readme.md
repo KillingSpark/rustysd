@@ -95,6 +95,21 @@ to write a compatibility shim if an equivalents exist on the target platform. It
 1. an implementation of getpwnam_r and getgrnam_r. These can be swapped for getpwnam/getgrnam if needed
     * They could also be ignored, restricting the values of User, Group, and SupplementaryGroups to numerical values
 
+### About platform dependent stuff
+There are some parts that are platform dependent. Those are all optional and behind feature flags.
+
+#### Cgroups
+Rustysd can employ cgroups for better control over which processes belong to which service. Resource-limiting is still out of scope for rustysd. Cgroups
+are only used to make the features rustysd provides anyways more reliable.
+
+On other systems there might arise issues if a service forks of processes which move into another process-group. If these are not cleanly killed by the 
+stop/posstop commands they will be orphaned and survive. This is (if I understand correctly) the way other service manager handle this too. 
+
+#### Why no jails
+One possibility would be to use BSD jails but that seems somewhat hacky since rustysd would have to chain-load the actual service command with a jail command.
+Rustysd could check if a service is started in a jail anyways and then kill that jail. But that could lead to other problems if the jail is meant to be long lived.
+In short I see no clean way to employ jails for process-management
+
 ## What works
 This section should be somewhat up to date with what parts are (partly?) implemented and (partly?) tested. If you find anything does actually not work
 please file me an issue! 
