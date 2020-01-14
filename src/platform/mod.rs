@@ -33,7 +33,11 @@ pub mod grnam;
 pub mod pwnam;
 
 #[cfg(feature = "cgroups")]
+pub mod cgroup1;
+#[cfg(feature = "cgroups")]
 pub mod cgroup2;
+#[cfg(feature = "cgroups")]
+pub mod cgroups;
 
 #[cfg(any(
     target_os = "freebsd",

@@ -4,19 +4,19 @@ use std::io::Read;
 use std::io::Write;
 
 /// creates the needed cgroup directories
-pub fn get_or_make_cgroup(
-    cgroup_unified_path: &std::path::PathBuf,
+pub fn get_or_make_freezer(
+    freezer_path: &std::path::PathBuf,
     cgroup_path: &std::path::PathBuf,
 ) -> Result<std::path::PathBuf, CgroupError> {
-    if !cgroup_unified_path.exists() {
+    if !freezer_path.exists() {
         return Err(CgroupError::NotMounted);
     }
-    let full_path = cgroup_unified_path.join(cgroup_path);
-    if !full_path.exists() {
-        fs::create_dir_all(&full_path).map_err(|e| CgroupError::IOErr(e))?;
-        Ok(full_path)
+    let cgroup_path_in_freezer = freezer_path.join(cgroup_path);
+    if !cgroup_path_in_freezer.exists() {
+        fs::create_dir_all(&cgroup_path_in_freezer).map_err(|e| CgroupError::IOErr(e))?;
+        Ok(cgroup_path_in_freezer)
     } else {
-        Ok(full_path)
+        Ok(cgroup_path_in_freezer)
     }
 }
 
@@ -45,68 +45,11 @@ pub fn move_self_to_cgroup(cgroup_path: &std::path::PathBuf) -> Result<(), Cgrou
     move_pid_to_cgroup(cgroup_path, pid)
 }
 
-/// retrieve all controllers that are currently in this cgroup
-pub fn get_available_controllers(
-    cgroup_path: &std::path::PathBuf,
-) -> Result<Vec<String>, CgroupError> {
-    let cgroup_ctrls = cgroup_path.join("cgroup.controllers");
-    let mut f = fs::File::open(&cgroup_ctrls).map_err(|e| CgroupError::IOErr(e))?;
-    let mut buf = String::new();
-    f.read_to_string(&mut buf)
-        .map_err(|e| CgroupError::IOErr(e))?;
-
-    Ok(buf.split('\n').map(|s| s.to_string()).collect())
-}
-
-/// enable controllers for child-cgroups
-pub fn enable_controllers(
-    cgroup_path: &std::path::PathBuf,
-    controllers: &Vec<String>,
-) -> Result<(), CgroupError> {
-    let cgroup_subtreectl = cgroup_path.join("cgroup.subtree_control");
-    let mut f = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&cgroup_subtreectl)
-        .map_err(|e| CgroupError::IOErr(e))?;
-
-    let mut buf = String::new();
-    for ctl in controllers {
-        buf.push_str(" +");
-        buf.push_str(&ctl);
-    }
-    f.write_all(buf.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
-    Ok(())
-}
-
-/// disable controllers for child-cgroups
-pub fn disable_controllers(
-    cgroup_path: &std::path::PathBuf,
-    controllers: &Vec<String>,
-) -> Result<(), CgroupError> {
-    let cgroup_subtreectl = cgroup_path.join("cgroup.subtree_control");
-    let mut f = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&cgroup_subtreectl)
-        .map_err(|e| CgroupError::IOErr(e))?;
-
-    let mut buf = String::new();
-    for ctl in controllers {
-        buf.push_str(" -");
-        buf.push_str(&ctl);
-    }
-    f.write_all(buf.as_bytes())
-        .map_err(|e| CgroupError::IOErr(e))?;
-    Ok(())
-}
-
 fn write_freeze_state(
     cgroup_path: &std::path::PathBuf,
     desired_state: &str,
 ) -> Result<(), CgroupError> {
-    let cgroup_freeze = cgroup_path.join("cgroup.freeze");
+    let cgroup_freeze = cgroup_path.join("freezer.state");
     if cgroup_freeze.exists() {
         return Err(CgroupError::IOErr(std::io::Error::from(
             std::io::ErrorKind::NotFound,
@@ -124,7 +67,7 @@ fn write_freeze_state(
 }
 
 pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
-    let cgroup_freeze = cgroup_path.join("cgroup.freeze");
+    let cgroup_freeze = cgroup_path.join("freezer.state");
     let mut f = fs::OpenOptions::new()
         .read(true)
         .write(false)
@@ -136,7 +79,7 @@ pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> 
         buf.clear();
         f.read_to_string(&mut buf)
             .map_err(|e| CgroupError::IOErr(e))?;
-        if buf == "1" {
+        if buf == "FROZEN" {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
@@ -145,11 +88,11 @@ pub fn wait_frozen(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> 
 }
 
 pub fn freeze(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
-    let desired_state = "1";
+    let desired_state = "FROZEN";
     write_freeze_state(cgroup_path, desired_state)
 }
 
 pub fn thaw(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
-    let desired_state = "1";
+    let desired_state = "THAWED";
     write_freeze_state(cgroup_path, desired_state)
 }
