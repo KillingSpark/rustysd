@@ -37,7 +37,6 @@ pub mod units;
 #[macro_use]
 extern crate log;
 extern crate fern;
-extern crate lumberjack_rs;
 extern crate serde_json;
 extern crate threadpool;
 extern crate toml;

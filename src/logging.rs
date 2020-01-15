@@ -1,5 +1,3 @@
-use std::io::Write;
-
 pub fn setup_logging(conf: &crate::config::LoggingConfig) -> Result<(), String> {
     let mut logger = fern::Dispatch::new()
         .format(|out, message, record| {
@@ -18,28 +16,7 @@ pub fn setup_logging(conf: &crate::config::LoggingConfig) -> Result<(), String> 
     }
 
     if conf.log_to_disk {
-        if !conf.log_dir.exists() {
-            std::fs::create_dir_all(&conf.log_dir)
-                .map_err(|e| format!("Error creating logdir: {}", e))?;
-        }
-        let lmbrjck_conf = lumberjack_rs::Conf {
-            max_age: None,
-            max_files: Some(10),
-            max_size: 10 * 1024 * 1024,
-            log_dir: conf.log_dir.clone(),
-            name_template: "rustysdlog.log".to_owned(),
-        };
-
-        let rotating = std::sync::Mutex::new(lumberjack_rs::new(lmbrjck_conf).unwrap());
-
-        logger = logger.chain(fern::Output::call(move |record| {
-            let msg = format!("{}\n", record.args());
-            let rotating = rotating.lock();
-            let mut rotating = rotating.unwrap();
-            let result = rotating.write_all(msg.as_str().as_bytes());
-            //TODO do something with the result
-            let _ = result;
-        }));
+        unimplemented!("Logging to disk is currently not supported. Pipe the stdout logs to your preferred logging solution");
     }
 
     logger
