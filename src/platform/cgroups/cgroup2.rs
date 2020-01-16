@@ -3,24 +3,6 @@ use std::fs;
 use std::io::Read;
 use std::io::Write;
 
-/// creates the needed cgroup directories
-pub fn get_or_make_cgroup(
-    cgroup_unified_path: &std::path::PathBuf,
-    cgroup_path: &std::path::PathBuf,
-) -> Result<std::path::PathBuf, CgroupError> {
-    if !cgroup_unified_path.exists() {
-        return Err(CgroupError::NotMounted);
-    }
-    let full_path = cgroup_unified_path.join(cgroup_path);
-    if !full_path.exists() {
-        fs::create_dir_all(&full_path)
-            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", full_path)))?;
-        Ok(full_path)
-    } else {
-        Ok(full_path)
-    }
-}
-
 /// move a process into the cgroup. In rustysd the child process will call move_self for convenience
 pub fn move_pid_to_cgroup(
     cgroup_path: &std::path::PathBuf,
@@ -53,11 +35,11 @@ pub fn get_available_controllers(
 ) -> Result<Vec<String>, CgroupError> {
     let cgroup_ctrls = cgroup_path.join("cgroup.controllers");
     let mut f = fs::File::open(&cgroup_ctrls)
-    .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
     let mut buf = String::new();
     f.read_to_string(&mut buf)
-    .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
-    
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_ctrls)))?;
+
     Ok(buf.split('\n').map(|s| s.to_string()).collect())
 }
 
@@ -69,18 +51,18 @@ pub fn enable_controllers(
 ) -> Result<(), CgroupError> {
     let cgroup_subtreectl = cgroup_path.join("cgroup.subtree_control");
     let mut f = fs::OpenOptions::new()
-    .read(true)
-    .write(true)
-    .open(&cgroup_subtreectl)
-    .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
-    
+        .read(true)
+        .write(true)
+        .open(&cgroup_subtreectl)
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
+
     let mut buf = String::new();
     for ctl in controllers {
         buf.push_str(" +");
         buf.push_str(&ctl);
     }
     f.write_all(buf.as_bytes())
-    .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_subtreectl)))?;
     Ok(())
 }
 

@@ -2,25 +2,6 @@ use super::CgroupError;
 use std::fs;
 use std::io::Read;
 use std::io::Write;
-
-/// creates the needed cgroup directories
-pub fn get_or_make_freezer(
-    freezer_path: &std::path::PathBuf,
-    cgroup_path: &std::path::PathBuf,
-) -> Result<std::path::PathBuf, CgroupError> {
-    if !freezer_path.exists() {
-        return Err(CgroupError::NotMounted);
-    }
-    let cgroup_path_in_freezer = freezer_path.join(cgroup_path);
-    if !cgroup_path_in_freezer.exists() {
-        fs::create_dir_all(&cgroup_path_in_freezer)
-            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_path_in_freezer)))?;
-        Ok(cgroup_path_in_freezer)
-    } else {
-        Ok(cgroup_path_in_freezer)
-    }
-}
-
 /// move a process into the cgroup. In rustysd the child process will call move_self for convenience
 pub fn move_pid_to_cgroup(
     cgroup_path: &std::path::PathBuf,

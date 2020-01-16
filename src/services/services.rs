@@ -16,9 +16,7 @@ pub struct ServiceRuntimeInfo {
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
 pub struct PlatformSpecificServiceFields {
-    pub cgroupv2_unified_path: std::path::PathBuf,
-    pub cgroupv1_freezer_path: std::path::PathBuf,
-    pub relative_path: std::path::PathBuf,
+    pub cgroup_path: std::path::PathBuf,
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -260,7 +258,7 @@ impl Service {
             // already happened when the oneshot process exited in the exit handler
             self.kill_all_remaining_processes(name);
         }
-        
+
         self.pid = None;
         self.process_group = None;
         stop_res

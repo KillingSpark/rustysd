@@ -2,6 +2,22 @@ use crate::services::{Service, ServiceRuntimeInfo};
 use crate::units::*;
 use std::path::PathBuf;
 
+#[cfg(feature = "cgroups")]
+fn make_cgroup_path(srvc_name: &str) -> Result<PathBuf, ParsingErrorReason> {
+    let rustysd_cgroup =
+        crate::platform::cgroups::get_own_freezer(&PathBuf::from("/sys/fs/cgroup"))
+            .map_err(|e| ParsingErrorReason::Generic(format!("Couldnt get own cgroup: {}", e)))?;
+    let service_cgroup = rustysd_cgroup.join(srvc_name);
+    trace!("{:?}", service_cgroup);
+    Ok(service_cgroup)
+}
+
+#[cfg(not(feature = "cgroups"))]
+fn make_cgroup_path(_srvc_name: &str) -> Result<PathBuf, ParsingErrorReason> {
+    // doesnt matter, wont be used anyways
+    Ok(PathBuf::from("/ree"))
+}
+
 pub fn parse_service(
     parsed_file: ParsedFile,
     path: &PathBuf,
@@ -96,15 +112,7 @@ pub fn parse_service(
     // TODO make the cgroup path dynamic so multiple rustysd instances can exist
     let platform_specific = crate::services::PlatformSpecificServiceFields {
         #[cfg(target_os = "linux")]
-        cgroupv2_unified_path: std::path::PathBuf::from(format!("/sys/fs/cgroup/unified/",)),
-        #[cfg(target_os = "linux")]
-        cgroupv1_freezer_path: std::path::PathBuf::from(format!("/sys/fs/cgroup/freezer/")),
-        #[cfg(target_os = "linux")]
-        relative_path: std::path::PathBuf::from(format!(
-            "rustysd{}/{}",
-            nix::unistd::getpid(),
-            path.file_name().unwrap().to_str().unwrap()
-        )),
+        cgroup_path: make_cgroup_path(&path.file_name().unwrap().to_str().unwrap())?,
     };
 
     Ok(Unit {

@@ -32,7 +32,7 @@ pub use subreaper::*;
 pub mod grnam;
 pub mod pwnam;
 
-#[cfg(feature = "cgroups")]
+//#[cfg(feature = "cgroups")]
 pub mod cgroups;
 
 #[cfg(any(

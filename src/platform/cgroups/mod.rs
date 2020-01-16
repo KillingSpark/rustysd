@@ -21,32 +21,105 @@ impl std::fmt::Display for CgroupError {
     }
 }
 
-fn use_v2(unified_path: &std::path::PathBuf) -> bool {
-    let rustysd_cgroup = unified_path.join(format!("rustysd{}", nix::unistd::getpid()));
-    if let Err(e) = fs::create_dir(&rustysd_cgroup) {
-        if e.kind() == std::io::ErrorKind::AlreadyExists {
-            //Thats ok
-        } else {
-            trace!("creating {:?} failed: {}", rustysd_cgroup, e);
-            return false;
-        }
-    }
-    let freeze_file = rustysd_cgroup.join("cgroup.freeze");
+fn use_v2(cgroup_path: &std::path::PathBuf) -> bool {
+    let freeze_file = cgroup_path.join("cgroup.freeze");
     let exists = freeze_file.exists();
     trace!("{:?} exists: {}", freeze_file, exists);
     exists
 }
 
-/// creates the needed cgroup directories
-pub fn get_or_make_freezer(
-    freezer_path: &std::path::PathBuf,
-    unified_path: &std::path::PathBuf,
-    cgroup_path: &std::path::PathBuf,
-) -> Result<std::path::PathBuf, CgroupError> {
-    if use_v2(unified_path) {
-        cgroup2::get_or_make_cgroup(unified_path, cgroup_path)
+/// base_path should normally be /sys/fs/cgroup
+///
+/// Tries to get the most sensible path to create our own cgroup under.
+/// Depending on whether cgroupv2 freezing is available It's either a path in
+/// 1. /sys/fs/cgroup/freezer
+/// 1. /sys/fs/cgroup/unified
+///
+/// The concrete path will be some sub-directory depending on the cgroup rustysd has been started in
+pub fn get_own_freezer(base_path: &std::path::PathBuf) -> Result<std::path::PathBuf, CgroupError> {
+    let proc_content = std::fs::read_to_string("/proc/self/cgroup").unwrap();
+    let proc_content_lines = proc_content.split('\n').collect::<Vec<_>>();
+
+    let v1path = get_own_cgroup_v1(&proc_content_lines);
+    let v1_full_path = base_path.join("freezer").join(v1path);
+    trace!("v1 cgroup: {:?}", v1_full_path);
+
+    let v2path = get_own_cgroup_v2(&proc_content_lines);
+
+    // prefer v2 path but fall back to v1 freezer
+    let cgroup_path = if let Some(v2path) = v2path {
+        let v2_full_path = base_path.join("unified").join(v2path);
+        trace!("v2 cgroup: {:?}", v2_full_path);
+
+        // If v2 group exists but we cant freeze it we still need to use the v1 controller
+        if v2_full_path.join("cgroup.freeze").exists() {
+            v2_full_path
+        } else {
+            v1_full_path
+        }
     } else {
-        cgroup1::get_or_make_freezer(freezer_path, cgroup_path)
+        v1_full_path
+    };
+
+    trace!("Own cgroup: {:?}", cgroup_path);
+
+    // in any case make a new subdir named rustysd_<currentpid> so different rustysd instances do not interfere
+    // since we are in a subgroup, the multiple rustysd_1 should not interfere with each other
+    let cgroup_path = cgroup_path.join(format!("rustysd_{}", nix::unistd::getpid()));
+
+    fs::create_dir_all(&cgroup_path)
+        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_path)))?;
+
+    Ok(cgroup_path)
+}
+
+/// cgroup v2 appears in /proc/self/cgroup as 0::/path/to/cgroup
+/// but the path is relative to the mount point of cgroups (/sys/fs/cgroup/unified).
+fn get_own_cgroup_v2(proc_cgroup_content: &[&str]) -> Option<std::path::PathBuf> {
+    for line in proc_cgroup_content {
+        if line.starts_with("0::") {
+            let path = &line[3..];
+            // ignore leading "/"
+            let path = std::path::PathBuf::from(&path[1..]);
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Try to find the cgroup path for the freezer controller
+/// If we are in / for freezer find the longest path used in any other cgroup and use that.
+///
+/// cgroups v1 by convention use the same (or a subset) directory trees under each controller so using the
+/// longest path gives us the most specialized categorization and is probably what others would expect rustysd to do?
+fn get_own_cgroup_v1(proc_cgroup_content: &[&str]) -> std::path::PathBuf {
+    let mut freezer_path = None;
+    let mut longest_path = "/".to_owned();
+
+    for line in proc_cgroup_content {
+        let triple = line.split(':').collect::<Vec<_>>();
+        if triple.len() == 3 {
+            let _id = triple[0];
+            let controller = triple[1];
+            let path = triple[2];
+
+            if controller.eq("freezer") {
+                // ignore leading "/"
+                let path = &path[1..];
+                freezer_path = Some(std::path::PathBuf::from(path));
+            }
+
+            if path.len() > longest_path.len() {
+                longest_path = path.to_owned();
+            }
+        }
+    }
+
+    if let Some(p) = freezer_path {
+        p
+    } else {
+        // ignore leading "/"
+        std::path::PathBuf::from(&longest_path[1..])
     }
 }
 
@@ -123,8 +196,7 @@ pub fn freeze_kill_thaw_cgroup(
 }
 
 pub fn remove_cgroup(cgroup_path: &std::path::PathBuf) -> Result<(), CgroupError> {
-    fs::remove_dir(&cgroup_path)
-        .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_path)))
+    fs::remove_dir(&cgroup_path).map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_path)))
 }
 
 /// kill all processes that are currently in this cgroup.

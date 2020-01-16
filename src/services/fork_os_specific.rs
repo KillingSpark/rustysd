@@ -9,12 +9,12 @@ pub fn pre_fork_os_specific(srvc: &mut Service) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         if nix::unistd::getuid().is_root() {
-            cgroups::get_or_make_freezer(
-                &srvc.platform_specific.cgroupv1_freezer_path,
-                &srvc.platform_specific.cgroupv2_unified_path,
-                &srvc.platform_specific.relative_path,
-            )
-            .map_err(|e| format!("{}", e))?;
+            std::fs::create_dir_all(&srvc.platform_specific.cgroup_path).map_err(|e| {
+                format!(
+                    "Couldnt create service cgroup ({:?}): {}",
+                    srvc.platform_specific.cgroup_path, e
+                )
+            })?;
         }
     }
     let _ = srvc;
@@ -25,13 +25,8 @@ pub fn post_fork_os_specific(srvc: &mut Service) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         if nix::unistd::getuid().is_root() {
-            let p = cgroups::get_or_make_freezer(
-                &srvc.platform_specific.cgroupv1_freezer_path,
-                &srvc.platform_specific.cgroupv2_unified_path,
-                &srvc.platform_specific.relative_path,
-            )
-            .map_err(|e| format!("{}", e))?;
-            cgroups::move_self_to_cgroup(&p).map_err(|e| format!("postfork os specific: {}", e))?;
+            cgroups::move_self_to_cgroup(&srvc.platform_specific.cgroup_path)
+                .map_err(|e| format!("postfork os specific: {}", e))?;
         }
     }
     let _ = srvc;
