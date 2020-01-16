@@ -1,3 +1,9 @@
+//! This module provides methods to manage processes with cgroups. Not resource management but reliable tracking of services.
+//! It dynamically decides wether cgroups v1 or v2 should be used.
+//!
+//! The cgroup paths created by get_own_freezer return a path that is inside the cgroup that contains rustysd itself. With the naming scheme of the freezer
+//! cgroups we should mostly comply to the guidelines here https://www.freedesktop.org/wiki/Software/systemd/PaxControlGroups/
+
 use std::fs;
 use std::io::Read;
 
