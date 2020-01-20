@@ -423,7 +423,9 @@ fn test_circle() {
     .unwrap();
 
     let mut unit_table = std::collections::HashMap::new();
-    
+    let target1_id = target1_unit.id;
+    let target2_id = target2_unit.id;
+    let target3_id = target3_unit.id;
     unit_table.insert(target1_unit.id, target1_unit);
     unit_table.insert(target2_unit.id, target2_unit);
     unit_table.insert(target3_unit.id, target3_unit);
@@ -433,7 +435,18 @@ fn test_circle() {
     unit_table
         .values_mut()
         .for_each(|unit| unit.dedup_dependencies());
-    assert!(crate::units::sanity_check_dependencies(&unit_table).is_err());
 
-
+    if let Err(crate::units::SanityCheckError::CirclesFound(circles)) = crate::units::sanity_check_dependencies(&unit_table) {
+        if circles.len() == 1 {
+            let circle = &circles[0];
+            assert_eq!(circle.len(), 3);
+            assert!(circle.contains(&target1_id));
+            assert!(circle.contains(&target2_id));
+            assert!(circle.contains(&target3_id));
+        }else{
+            panic!("more than one circle found but there is only one");
+        }
+    }else{
+        panic!("No circle found but there is one");
+    }
 }
