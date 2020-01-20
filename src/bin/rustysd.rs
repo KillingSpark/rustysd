@@ -275,20 +275,6 @@ fn main() {
 
     rustysd::platform::become_subreaper(true);
 
-    let signals = match Signals::new(&[
-        signal_hook::SIGCHLD,
-        signal_hook::SIGTERM,
-        signal_hook::SIGINT,
-        signal_hook::SIGQUIT,
-    ]) {
-        Ok(signals) => signals,
-        Err(e) => {
-            unrecoverable_error(format!("Couldnt setup listening to the signals: {}", e));
-            // unrecoverable_error always shutsdown rustysd
-            unreachable!("");
-        }
-    };
-
     let run_info = prepare_runtimeinfo(&conf, cli_args.dry_run);
 
     let notification_eventfd = platform::make_event_fd().unwrap();
@@ -302,6 +288,19 @@ fn main() {
         sock_act_eventfd,
     ];
 
+    let signals = match Signals::new(&[
+        signal_hook::SIGCHLD,
+        signal_hook::SIGTERM,
+        signal_hook::SIGINT,
+        signal_hook::SIGQUIT,
+    ]) {
+        Ok(signals) => signals,
+        Err(e) => {
+            unrecoverable_error(format!("Couldnt setup listening to the signals: {}", e));
+            // unrecoverable_error always shutsdown rustysd
+            unreachable!("");
+        }
+    };
     // listen to signals
     let handle = start_signal_handler_thread(signals, run_info.clone(), &conf, eventfds.clone());
 
