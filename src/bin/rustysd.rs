@@ -113,9 +113,28 @@ fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> Arc<units::Runti
     // also opening all fildescriptors in the socket files
     let mut first_id = 0;
     let mut unit_table = units::load_all_units(&conf.unit_dirs, &mut first_id).unwrap();
+    trace!("Finished loading units");
     first_id = first_id + 1;
     units::prune_units(&conf.target_unit, &mut unit_table).unwrap();
-    units::sanity_check_dependencies(&unit_table).unwrap();
+    trace!("Finished pruning units");
+    if let Err(e) = units::sanity_check_dependencies(&unit_table) {
+        match e {
+            units::SanityCheckError::CirclesFound(circles) => {
+                error!("Found {} cycle(s) in the dependencies", circles.len());
+                for circle in &circles {
+                    error!("-- Next circle --");
+                    for id in circle {
+                        error!("{}", id);
+                    }
+                    error!("-- End circle --");
+                }
+            }
+            units::SanityCheckError::Generic(msg) => {
+                error!("Unit dependencies did not pass sanity checks: {}", msg);
+            }
+        }
+        unrecoverable_error("Unit dependencies did not pass sanity check".into());
+    }
     trace!("Unit dependencies passed sanity checks");
     let unit_table = unit_table;
 

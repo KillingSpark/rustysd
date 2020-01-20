@@ -29,19 +29,19 @@ pub fn sanity_check_dependencies(
         } else {
             // find new node that has no incoming edges anymore
             let root_id = not_finished_ids
-                .keys()
-                .filter(|id| {
-                    let unit = unit_table.get(id).unwrap();
-                    let in_degree = unit.install.after.iter().fold(0, |acc, id| {
-                        if finished_ids.contains_key(id) {
-                            acc
-                        } else {
-                            acc + 1
-                        }
-                    });
-                    in_degree == 0
-                })
-                .nth(0);
+            .keys()
+            .filter(|id| {
+                let unit = unit_table.get(id).unwrap();
+                let in_degree = unit.install.after.iter().fold(0, |acc, id| {
+                    if finished_ids.contains_key(id) {
+                        acc
+                    } else {
+                        acc + 1
+                    }
+                });
+                in_degree == 0
+            })
+            .nth(0);
             if let Some(id) = root_id {
                 *id
             } else {
@@ -50,6 +50,7 @@ pub fn sanity_check_dependencies(
                 break;
             }
         };
+        
         // stores the current DFS path to detect cycles in the directed graph (only using "before" edges)
         let mut visited_ids = Vec::new();
         if let Err(SanityCheckError::CirclesFound(new_circles)) = search_backedge(
@@ -91,6 +92,7 @@ fn search_backedge(
         let circle_ids = visited_ids[circle_start_idx..].to_vec();
         for circleid in &circle_ids {
             finished_ids.insert(*circleid, ());
+            not_finished_ids.remove(circleid);
         }
 
         return Err(SanityCheckError::CirclesFound(vec![circle_ids]));
