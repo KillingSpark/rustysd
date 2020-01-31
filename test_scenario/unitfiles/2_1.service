@@ -3,6 +3,7 @@ After=1-2.target
 
 [Service]
 ExecStart= /usr/bin/echo "2_1"
+Type=oneshot
 
 [Install]
-WantedBy=default.target
+WantedBy=2-3.target

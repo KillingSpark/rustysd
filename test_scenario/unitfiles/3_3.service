@@ -1,9 +1,9 @@
 [Unit]
-After=1-2.target
+After=2-3.target
 
 [Service]
 ExecStart= /bin/sleep 1
 Type=oneshot
 
 [Install]
-WantedBy=2-3.target
+WantedBy=default.target

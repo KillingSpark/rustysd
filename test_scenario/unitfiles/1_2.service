@@ -2,7 +2,7 @@
 Before=1-2.target
 
 [Service]
-ExecStart= /usr/bin/echo "1_1"
+ExecStart= /bin/sleep 1
 Type=oneshot
 
 [Install]
