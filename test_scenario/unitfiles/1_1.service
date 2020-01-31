@@ -1,0 +1,5 @@
+[Service]
+ExecStart= /usr/bin/echo "1_1"
+
+[Install]
+WantedBy=1-2.target
