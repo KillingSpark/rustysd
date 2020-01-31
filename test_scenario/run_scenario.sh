@@ -1,1 +1,1 @@
-../target/debug/rustysd
+../target/debug/rustysd 2> /dev/null | grep ".service]"
