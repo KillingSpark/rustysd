@@ -226,7 +226,8 @@ pub fn after_fork_child(
     }
 
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
-    match nix::unistd::execv(&cmd, &args) {
+    let cstr_args = args.iter().map(|cstring| cstring.as_c_str()).collect::<Vec<_>>();
+    match nix::unistd::execv(&cmd, &cstr_args) {
         Ok(_) => {
             eprintln!(
                 "[FORK_CHILD {}] execv returned Ok()... This should never happen",
