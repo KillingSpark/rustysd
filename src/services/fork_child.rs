@@ -140,7 +140,6 @@ fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CStrin
     let exec_name: Vec<u8> = exec_name.to_str().unwrap().bytes().collect();
     let exec_name = std::ffi::CString::new(exec_name).unwrap();
 
-
     let mut args = Vec::new();
     args.push(exec_name);
 
@@ -226,7 +225,10 @@ pub fn after_fork_child(
     }
 
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
-    let cstr_args = args.iter().map(|cstring| cstring.as_c_str()).collect::<Vec<_>>();
+    let cstr_args = args
+        .iter()
+        .map(|cstring| cstring.as_c_str())
+        .collect::<Vec<_>>();
     match nix::unistd::execv(&cmd, &cstr_args) {
         Ok(_) => {
             eprintln!(

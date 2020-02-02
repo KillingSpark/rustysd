@@ -436,17 +436,19 @@ fn test_circle() {
         .values_mut()
         .for_each(|unit| unit.dedup_dependencies());
 
-    if let Err(crate::units::SanityCheckError::CirclesFound(circles)) = crate::units::sanity_check_dependencies(&unit_table) {
+    if let Err(crate::units::SanityCheckError::CirclesFound(circles)) =
+        crate::units::sanity_check_dependencies(&unit_table)
+    {
         if circles.len() == 1 {
             let circle = &circles[0];
             assert_eq!(circle.len(), 3);
             assert!(circle.contains(&target1_id));
             assert!(circle.contains(&target2_id));
             assert!(circle.contains(&target3_id));
-        }else{
+        } else {
             panic!("more than one circle found but there is only one");
         }
-    }else{
+    } else {
         panic!("No circle found but there is one");
     }
 }
