@@ -53,6 +53,7 @@ pub struct Service {
 }
 
 pub enum RunCmdError {
+    BadQuoting(String),
     Timeout(String, String),
     SpawnError(String, String),
     WaitError(String, String),
@@ -63,6 +64,7 @@ pub enum RunCmdError {
 impl std::fmt::Display for RunCmdError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
+            RunCmdError::BadQuoting(cmd) => format!("{} does have invalid quotes", cmd),
             RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
             RunCmdError::SpawnError(cmd, err) => format!("{} failed to spawn with: {:?}", cmd, err),
             RunCmdError::WaitError(cmd, err) => {
@@ -326,8 +328,9 @@ impl Service {
         timeout: Option<std::time::Duration>,
         pid_table: ArcMutPidTable,
     ) -> Result<(), RunCmdError> {
-        let split = cmd_str.split(' ').collect::<Vec<_>>();
-        let mut cmd = Command::new(split[0]);
+        let split =
+            shellwords::split(cmd_str).map_err(|_| RunCmdError::BadQuoting(cmd_str.to_owned()))?;
+        let mut cmd = Command::new(&split[0]);
         for part in &split[1..] {
             cmd.arg(part);
         }
