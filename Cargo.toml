@@ -15,6 +15,7 @@ threadpool = "1.7.1"
 serde_json = "1.0.42"
 toml = "0.5.5"
 dbus = {version = "*", optional = true}
+shellwords = "1.0.0"
 
 [features]
 dbus_support = ["dbus"]

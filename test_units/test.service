@@ -1,5 +1,5 @@
 [Service]
-ExecStart= ./target/debug/testservice arg1 arg2
+ExecStart= ./target/debug/testservice arg1 arg2 "this is a multi word argument"
 Sockets= test_second.socket
 NotifyAccess= all
 Type= notify
