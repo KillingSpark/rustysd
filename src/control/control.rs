@@ -15,12 +15,12 @@ pub fn open_all_sockets(run_info: ArcRuntimeInfo, conf: &crate::config::Config) 
         conf.notification_sockets_dir.clone(),
         unixsock,
     );
-    //let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
-    //accept_control_connections_tcp(
-    //    run_info.clone(),
-    //    conf.notification_sockets_dir.clone(),
-    //    tcpsock,
-    //);
+    let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
+    accept_control_connections_tcp(
+        run_info.clone(),
+        conf.notification_sockets_dir.clone(),
+        tcpsock,
+    );
 }
 
 #[derive(Debug)]
@@ -29,6 +29,7 @@ pub enum Command {
     Status(Option<String>),
     Restart(String),
     LoadNew(String),
+    LoadAllNew,
     Stop(String),
     Shutdown,
 }
@@ -119,6 +120,7 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
             Command::ListUnits(kind)
         }
         "shutdown" => Command::Shutdown,
+        "reload" => Command::LoadAllNew,
         "enable" => {
             let name = match &call.params {
                 Some(params) => match params {
@@ -375,7 +377,51 @@ pub fn execute_command(
                 *last_id
             };
             let unit = load_new_unit(&run_info.config.unit_dirs, &name, this_id)?;
-            insert_new_unit(unit, run_info)?;
+            let mut map = std::collections::HashMap::new();
+            map.insert(unit.id, unit);
+            insert_new_units(map, run_info)?;
+        }
+        Command::LoadAllNew => {
+            let mut this_id = {
+                let last_id = &mut *run_info.last_id.lock().unwrap();
+                *last_id = *last_id + 1;
+                *last_id
+            };
+            // get all units there are
+            let units = load_all_units(&run_info.config.unit_dirs, &mut this_id)
+                .map_err(|e| format!("Error while loading unit definitons: {:?}", e))?;
+
+            // collect all names
+            // TODO there should probably be a global id -> name mapping so we dont always need to lock a unit just to get the name
+            let existing_names = {
+                let unit_table_locked = &*run_info.unit_table.read().unwrap();
+                unit_table_locked
+                    .values()
+                    .map(|unit| unit.lock().unwrap().conf.name())
+                    .collect::<Vec<_>>()
+            };
+
+            // filter out existing units
+            let mut ignored_units_names = Vec::new();
+            let mut new_units_names = Vec::new();
+            let mut new_units = std::collections::HashMap::new();
+            for (id, unit) in units {
+                if existing_names.contains(&unit.conf.name()) {
+                    ignored_units_names.push(Value::String(unit.conf.name()));
+                } else {
+                    new_units_names.push(Value::String(unit.conf.name()));
+                    new_units.insert(id, unit);
+                }
+            }
+
+            let mut response_object = serde_json::Map::new();
+            insert_new_units(new_units, run_info)?;
+            response_object.insert("Added".into(), serde_json::Value::Array(new_units_names));
+            response_object.insert(
+                "Ignored".into(),
+                serde_json::Value::Array(ignored_units_names),
+            );
+            result_vec.as_array_mut().unwrap().push(Value::Object(response_object));
         }
     }
 

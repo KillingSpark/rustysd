@@ -2,6 +2,7 @@ use crate::units;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
 fn find_new_unit_path(unit_dirs: &[PathBuf], find_name: &str) -> Result<Option<PathBuf>, String> {
     for dir in unit_dirs {
@@ -78,100 +79,124 @@ pub fn load_new_unit(
     }
 }
 
+pub fn collect_names_needed(new_unit: &units::Unit, names_needed: &mut Vec<String>) {
+    names_needed.extend(new_unit.conf.after.iter().cloned());
+    names_needed.extend(new_unit.conf.before.iter().cloned());
+
+    if let Some(conf) = &new_unit.install.install_config {
+        names_needed.extend(conf.required_by.iter().cloned());
+        names_needed.extend(conf.wanted_by.iter().cloned());
+    }
+    if let units::UnitSpecialized::Socket(sock) = &new_unit.specialized {
+        names_needed.extend(sock.services.iter().cloned());
+    }
+    if let units::UnitSpecialized::Service(srvc) = &new_unit.specialized {
+        names_needed.extend(srvc.service_config.sockets.iter().cloned());
+    }
+}
+
+// check that all names referenced in the new units exist either in the old units 
+// or in the new units 
+fn check_all_names_exist(
+    new_units: &HashMap<units::UnitId, units::Unit>,
+    unit_table_locked: &units::UnitTable,
+) -> Result<(), String> {
+    let mut names_needed = Vec::new();
+    for new_unit in new_units.values() {
+        collect_names_needed(new_unit, &mut names_needed);
+    }
+    let mut names_needed: std::collections::HashMap<_, _> =
+        names_needed.iter().map(|name| (name, ())).collect();
+
+    for unit in unit_table_locked.values() {
+        let unit_locked = unit.lock().unwrap();
+        for new_unit in new_units.values() {
+            if unit_locked.id == new_unit.id {
+                return Err(format!("Id {} exists already", new_unit.id));
+            }
+            if unit_locked.conf.name() == new_unit.conf.name() {
+                return Err(format!("Name {} exists already", new_unit.conf.name()));
+            }
+        }
+        if names_needed.contains_key(&unit_locked.conf.name()) {
+            names_needed.remove(&unit_locked.conf.name()).unwrap();
+        }
+    }
+    for unit in new_units.values() {
+        if names_needed.contains_key(&unit.conf.name()) {
+            names_needed.remove(&unit.conf.name()).unwrap();
+        }
+    }
+    if names_needed.len() > 0 {
+        return Err(format!(
+            "Names referenced by unit but not found in the known set of units: {:?}",
+            names_needed.keys().collect::<Vec<_>>()
+        ));
+    }
+    Ok(())
+}
+
 /// Activates a new unit by
 /// 1. (not yet but will be) checking the units referenced by this new unit
 /// 1. inserting it into the unit_table of run_info
 /// 1. activate the unit
 /// 1. removing the unit again if the activation fails
-pub fn insert_new_unit(
-    mut new_unit: units::Unit,
+pub fn insert_new_units(
+    new_units: HashMap<units::UnitId, units::Unit>,
     run_info: units::ArcRuntimeInfo,
 ) -> Result<(), String> {
-    let new_id = new_unit.id;
     // TODO check if new unit only refs existing units
     // TODO check if all ref'd units are not failed
     {
-        let mut names_needed = Vec::new();
-        names_needed.extend(new_unit.conf.after.iter().cloned());
-        names_needed.extend(new_unit.conf.before.iter().cloned());
-
-        if let Some(conf) = &new_unit.install.install_config {
-            names_needed.extend(conf.required_by.iter().cloned());
-            names_needed.extend(conf.wanted_by.iter().cloned());
-        }
-        if let units::UnitSpecialized::Socket(sock) = &new_unit.specialized {
-            names_needed.extend(sock.services.iter().cloned());
-        }
-        if let units::UnitSpecialized::Service(srvc) = &new_unit.specialized {
-            names_needed.extend(srvc.service_config.sockets.iter().cloned());
-        }
-        let mut names_needed: std::collections::HashMap<_, _> =
-            names_needed.iter().map(|name| (name, ())).collect();
-
-        let unit_table_locked = &*run_info.unit_table.read().unwrap();
-        for unit in unit_table_locked.values() {
-            let unit_locked = unit.lock().unwrap();
-            if unit_locked.id == new_id {
-                return Err(format!("Id {} exists already", new_id));
-            }
-            if unit_locked.conf.name() == new_unit.conf.name() {
-                return Err(format!("Name {} exists already", new_unit.conf.name()));
-            }
-            if names_needed.contains_key(&unit_locked.conf.name()) {
-                names_needed.remove(&unit_locked.conf.name()).unwrap();
-            }
-        }
-        if names_needed.len() > 0 {
-            return Err(format!(
-                "Names referenced by unit but not found in the known set of units: {:?}",
-                names_needed.keys().collect::<Vec<_>>()
-            ));
-        }
-
-        // Setup relations of before <-> after / requires <-> requiredby
-        for unit in unit_table_locked.values() {
-            let mut unit_locked = unit.lock().unwrap();
-            let name = unit_locked.conf.name();
-            let id = unit_locked.id;
-            if new_unit.conf.after.contains(&name) {
-                new_unit.install.after.push(id);
-                unit_locked.install.before.push(new_id);
-            }
-            if new_unit.conf.before.contains(&name) {
-                new_unit.install.before.push(id);
-                unit_locked.install.after.push(new_id);
-            }
-            if new_unit.conf.requires.contains(&name) {
-                new_unit.install.requires.push(id);
-                unit_locked.install.required_by.push(new_id);
-            }
-            if new_unit.conf.wants.contains(&name) {
-                new_unit.install.wants.push(id);
-                unit_locked.install.wanted_by.push(new_id);
-            }
-
-            if let Some(conf) = &new_unit.install.install_config {
-                if conf.required_by.contains(&name) {
-                    new_unit.install.required_by.push(id);
-                    unit_locked.install.requires.push(new_id);
-                }
-                if conf.wanted_by.contains(&name) {
-                    new_unit.install.wanted_by.push(id);
-                    unit_locked.install.wants.push(new_id);
-                }
-            }
-        }
-    }
-    {
         let unit_table_locked = &mut *run_info.unit_table.write().unwrap();
-        unit_table_locked.insert(new_id, Arc::new(Mutex::new(new_unit)));
-    }
-    {
-        let status_table_locked = &mut *run_info.status_table.write().unwrap();
-        status_table_locked.insert(
-            new_id,
-            Arc::new(Mutex::new(units::UnitStatus::NeverStarted)),
-        );
+        trace!("Check all names exist");
+        check_all_names_exist(&new_units, &unit_table_locked)?;
+        
+        for (new_id, mut new_unit) in new_units.into_iter() {
+            trace!("Add new unit: {}", new_unit.conf.name());
+            // Setup relations of before <-> after / requires <-> requiredby
+            for unit in unit_table_locked.values() {
+                let mut unit_locked = unit.lock().unwrap();
+                let name = unit_locked.conf.name();
+                let id = unit_locked.id;
+                if new_unit.conf.after.contains(&name) {
+                    new_unit.install.after.push(id);
+                    unit_locked.install.before.push(new_id);
+                }
+                if new_unit.conf.before.contains(&name) {
+                    new_unit.install.before.push(id);
+                    unit_locked.install.after.push(new_id);
+                }
+                if new_unit.conf.requires.contains(&name) {
+                    new_unit.install.requires.push(id);
+                    unit_locked.install.required_by.push(new_id);
+                }
+                if new_unit.conf.wants.contains(&name) {
+                    new_unit.install.wants.push(id);
+                    unit_locked.install.wanted_by.push(new_id);
+                }
+                if let Some(conf) = &new_unit.install.install_config {
+                    if conf.required_by.contains(&name) {
+                        new_unit.install.required_by.push(id);
+                        unit_locked.install.requires.push(new_id);
+                    }
+                    if conf.wanted_by.contains(&name) {
+                        new_unit.install.wanted_by.push(id);
+                        unit_locked.install.wants.push(new_id);
+                    }
+                }
+            }
+            {
+                unit_table_locked.insert(new_id, Arc::new(Mutex::new(new_unit)));
+            }
+            {
+                let status_table_locked = &mut *run_info.status_table.write().unwrap();
+                status_table_locked.insert(
+                    new_id,
+                    Arc::new(Mutex::new(units::UnitStatus::NeverStarted)),
+                );
+            }
+        }
     }
     Ok(())
 }
