@@ -28,7 +28,7 @@ pub enum Command {
     ListUnits(Option<UnitIdKind>),
     Status(Option<String>),
     Restart(String),
-    LoadNew(String),
+    LoadNew(Vec<String>),
     LoadAllNew,
     Stop(String),
     Shutdown,
@@ -122,22 +122,35 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
         "shutdown" => Command::Shutdown,
         "reload" => Command::LoadAllNew,
         "enable" => {
-            let name = match &call.params {
+            let names = match &call.params {
                 Some(params) => match params {
-                    Value::String(s) => s.clone(),
+                    Value::String(s) => vec![s.clone()],
+                    Value::Array(names) => {
+                        let mut str_names = Vec::new();
+                        for name in names {
+                            if let Value::String(name) = name {
+                                str_names.push(name.clone());
+                            } else {
+                                return Err(ParseError::ParamsInvalid(format!(
+                                    "Params must be at least one string"
+                                )));
+                            }
+                        }
+                        str_names
+                    }
                     _ => {
                         return Err(ParseError::ParamsInvalid(format!(
-                            "Params must be a single string"
+                            "Params must be at least one string"
                         )))
                     }
                 },
                 None => {
                     return Err(ParseError::ParamsInvalid(format!(
-                        "Params must be a single string"
+                        "Params must be at least one string"
                     )))
                 }
             };
-            Command::LoadNew(name)
+            Command::LoadNew(names)
         }
         _ => {
             return Err(ParseError::MethodNotFound(format!(
@@ -370,15 +383,17 @@ pub fn execute_command(
                 }
             }
         }
-        Command::LoadNew(name) => {
-            let this_id = {
-                let last_id = &mut *run_info.last_id.lock().unwrap();
-                *last_id = *last_id + 1;
-                *last_id
-            };
-            let unit = load_new_unit(&run_info.config.unit_dirs, &name, this_id)?;
+        Command::LoadNew(names) => {
             let mut map = std::collections::HashMap::new();
-            map.insert(unit.id, unit);
+            for name in &names {
+                let this_id = {
+                    let last_id = &mut *run_info.last_id.lock().unwrap();
+                    *last_id = *last_id + 1;
+                    *last_id
+                };
+                let unit = load_new_unit(&run_info.config.unit_dirs, &name, this_id)?;
+                map.insert(unit.id, unit);
+            }
             insert_new_units(map, run_info)?;
         }
         Command::LoadAllNew => {
@@ -421,7 +436,10 @@ pub fn execute_command(
                 "Ignored".into(),
                 serde_json::Value::Array(ignored_units_names),
             );
-            result_vec.as_array_mut().unwrap().push(Value::Object(response_object));
+            result_vec
+                .as_array_mut()
+                .unwrap()
+                .push(Value::Object(response_object));
         }
     }
 
