@@ -534,9 +534,9 @@ pub fn accept_control_connections_unix_socket(
     notification_socket_path: std::path::PathBuf,
     source: std::os::unix::net::UnixListener,
 ) {
-    std::thread::spawn(move || {
+    std::thread::spawn(move || loop {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(stream, run_info, notification_socket_path.clone())
+        listen_on_commands(stream, run_info.clone(), notification_socket_path.clone())
     });
 }
 
