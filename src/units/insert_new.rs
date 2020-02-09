@@ -1,8 +1,8 @@
 use crate::units;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
 
 fn find_new_unit_path(unit_dirs: &[PathBuf], find_name: &str) -> Result<Option<PathBuf>, String> {
     for dir in unit_dirs {
@@ -95,8 +95,8 @@ pub fn collect_names_needed(new_unit: &units::Unit, names_needed: &mut Vec<Strin
     }
 }
 
-// check that all names referenced in the new units exist either in the old units 
-// or in the new units 
+// check that all names referenced in the new units exist either in the old units
+// or in the new units
 fn check_all_names_exist(
     new_units: &HashMap<units::UnitId, units::Unit>,
     unit_table_locked: &units::UnitTable,
@@ -151,7 +151,7 @@ pub fn insert_new_units(
         let unit_table_locked = &mut *run_info.unit_table.write().unwrap();
         trace!("Check all names exist");
         check_all_names_exist(&new_units, &unit_table_locked)?;
-        
+
         for (new_id, mut new_unit) in new_units.into_iter() {
             trace!("Add new unit: {}", new_unit.conf.name());
             // Setup relations of before <-> after / requires <-> requiredby
