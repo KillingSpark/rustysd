@@ -366,10 +366,11 @@ impl Service {
                             ));
                         }
                         WaitResult::InTime(Ok(exitstatus)) => {
-                            trace!("success running {} for service: {}", cmd_str, name);
                             if exitstatus.success() {
+                                trace!("success running {} for service: {}", cmd_str, name);
                                 Ok(())
                             } else {
+                                trace!("error exit code: {:?} while running {} for service: {}", exitstatus, cmd_str, name);
                                 Err(RunCmdError::BadExitCode(cmd_str.to_owned(), exitstatus))
                             }
                         }
