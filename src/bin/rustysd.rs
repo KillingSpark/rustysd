@@ -179,12 +179,12 @@ fn start_notification_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: p
 }
 fn start_stdout_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_out(eventfd, run_info.unit_table.clone());
+        notification_handler::handle_all_std_out(eventfd, run_info.clone());
     });
 }
 fn start_stderr_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_err(eventfd, run_info.unit_table.clone());
+        notification_handler::handle_all_std_err(eventfd, run_info.clone());
     });
 }
 fn start_signal_handler_thread(

@@ -106,10 +106,10 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
     }
 }
 
-pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
+pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id = collect_from_srvc(unit_table.clone(), |map, srvc, id| {
+        let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
             if let Some(fd) = &srvc.stdout_dup {
                 map.insert(fd.0, id);
             }
@@ -130,18 +130,25 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
-                let unit_table_locked = &*unit_table.read().unwrap();
+                let unit_table_locked = &*run_info.unit_table.read().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table_locked.get(id) {
                             let mut srvc_unit_locked = srvc_unit.lock().unwrap();
                             let name = srvc_unit_locked.conf.name();
+                            let status_table_locked = run_info.status_table.read().unwrap();
+                            let status = status_table_locked
+                                .get(&srvc_unit_locked.id)
+                                .unwrap()
+                                .lock()
+                                .unwrap();
 
                             // build the service-unique prefix
                             let mut prefix = String::new();
                             prefix.push('[');
                             prefix.push_str(&name);
                             prefix.push(']');
+                            prefix.push_str(&format!("[{:?}]", *status));
                             prefix.push(' ');
                             buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
 
@@ -201,10 +208,10 @@ pub fn handle_all_std_out(eventfd: EventFd, unit_table: ArcMutUnitTable) {
     }
 }
 
-pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
+pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id = collect_from_srvc(unit_table.clone(), |map, srvc, id| {
+        let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
             if let Some(fd) = &srvc.stderr_dup {
                 map.insert(fd.0, id);
             }
@@ -225,18 +232,25 @@ pub fn handle_all_std_err(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
-                let unit_table_locked = &*unit_table.read().unwrap();
+                let unit_table_locked = &*run_info.unit_table.read().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table_locked.get(id) {
                             let mut srvc_unit_locked = srvc_unit.lock().unwrap();
                             let name = srvc_unit_locked.conf.name();
+                            let status_table_locked = run_info.status_table.read().unwrap();
+                            let status = status_table_locked
+                                .get(&srvc_unit_locked.id)
+                                .unwrap()
+                                .lock()
+                                .unwrap();
 
                             // build the service-unique prefix
                             let mut prefix = String::new();
                             prefix.push('[');
                             prefix.push_str(&name);
                             prefix.push(']');
+                            prefix.push_str(&format!("[{:?}]", *status));
                             prefix.push_str("[STDERR]");
                             prefix.push(' ');
                             buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
