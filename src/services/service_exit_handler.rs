@@ -68,6 +68,7 @@ pub fn service_exit_handler(
         }
     }
 
+    // find out which service exited and if it was a oneshot service save an entry in the pid table that marks the service as exited
     let srvc_id = {
         let pid_table_locked = &mut *run_info.pid_table.lock().unwrap();
         let entry = pid_table_locked.remove(&pid);
@@ -106,7 +107,7 @@ pub fn service_exit_handler(
         }
     };
 
-    // kill oneshot service processes
+    // kill oneshot service processes. There should be none but just in case...
     {
         let unit_locked = &mut *unit.lock().unwrap();
         if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
@@ -141,14 +142,15 @@ pub fn service_exit_handler(
         }
     };
 
-    let restart_unit = if restart_unit {
+    // check that the status is "Started". If thats not the case this service got killed by something else (control interface for example) so dont interfere
+    {
         let status_table_locked = run_info.status_table.read().unwrap();
         let status_locked = &*status_table_locked.get(&srvc_id).unwrap().lock().unwrap();
-        // if thats not the case this service got killed by something else so dont interfere
-        *status_locked == UnitStatus::Started
-    } else {
-        false
-    };
+        if *status_locked != UnitStatus::Started {
+            trace!("Exit handler ignores exit of service {}. Its status is not 'Started', it is: {:?}", name, *status_locked);
+            return Ok(());
+        }
+    }
 
     if restart_unit {
         {
