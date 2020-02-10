@@ -132,7 +132,7 @@ fn dup_fds(name: &str, sockets: Vec<RawFd>) -> Result<(), String> {
 }
 
 fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CString>) {
-    let words = shellwords::split(&srvc.service_config.exec).unwrap();
+    let words = shlex::split(&srvc.service_config.exec).unwrap();
     let cmd = std::ffi::CString::new(words[0].as_str()).unwrap();
 
     let exec_name = std::path::PathBuf::from(&words[0]);

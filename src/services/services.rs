@@ -339,7 +339,7 @@ impl Service {
         pid_table: ArcMutPidTable,
     ) -> Result<(), RunCmdError> {
         let split =
-            shellwords::split(cmd_str).map_err(|_| RunCmdError::BadQuoting(cmd_str.to_owned()))?;
+            shlex::split(cmd_str).ok_or_else(|| RunCmdError::BadQuoting(cmd_str.to_owned()))?;
         let mut cmd = Command::new(&split[0]);
         for part in &split[1..] {
             cmd.arg(part);
