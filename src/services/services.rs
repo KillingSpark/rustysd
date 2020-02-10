@@ -272,14 +272,19 @@ impl Service {
         name: &str,
         pid_table: ArcMutPidTable,
     ) -> Result<(), ServiceErrorReason> {
-        self.stop(id, name, pid_table.clone()).map_err(|stop_err| {
-            match self.run_poststop(id, name, pid_table.clone()) {
-                Ok(_) => ServiceErrorReason::PrestartFailed(stop_err),
-                Err(poststop_err) => {
-                    ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
-                }
-            }
-        })
+        self.stop(id, name, pid_table.clone())
+            .map_err(
+                |stop_err| match self.run_poststop(id, name, pid_table.clone()) {
+                    Ok(_) => ServiceErrorReason::StopFailed(stop_err),
+                    Err(poststop_err) => {
+                        ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
+                    }
+                },
+            )
+            .and_then(|_| {
+                self.run_poststop(id, name, pid_table.clone())
+                    .map_err(|e| ServiceErrorReason::PoststopFailed(e))
+            })
     }
 
     pub fn get_start_timeout(&self) -> Option<std::time::Duration> {
