@@ -274,19 +274,24 @@ impl Service {
         pid_table: ArcMutPidTable,
     ) -> Result<(), ServiceErrorReason> {
         self.stop(id, name, pid_table.clone())
-            .map_err(
-                |stop_err| {
-                    trace!("Stop process failed with: {:?} for service: {}. Running poststop commands", stop_err, name);
-                    match self.run_poststop(id, name, pid_table.clone()) {
-                        Ok(_) => ServiceErrorReason::StopFailed(stop_err),
-                        Err(poststop_err) => {
-                            ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
-                        }
+            .map_err(|stop_err| {
+                trace!(
+                    "Stop process failed with: {:?} for service: {}. Running poststop commands",
+                    stop_err,
+                    name
+                );
+                match self.run_poststop(id, name, pid_table.clone()) {
+                    Ok(_) => ServiceErrorReason::StopFailed(stop_err),
+                    Err(poststop_err) => {
+                        ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
                     }
-                },
-            )
+                }
+            })
             .and_then(|_| {
-                trace!("Stop processes for service: {} ran succesfully. Running poststop commands", name);
+                trace!(
+                    "Stop processes for service: {} ran succesfully. Running poststop commands",
+                    name
+                );
                 self.run_poststop(id, name, pid_table.clone())
                     .map_err(|e| ServiceErrorReason::PoststopFailed(e))
             })
@@ -375,7 +380,12 @@ impl Service {
                                 trace!("success running {} for service: {}", cmd_str, name);
                                 Ok(())
                             } else {
-                                trace!("error exit code: {:?} while running {} for service: {}", exitstatus, cmd_str, name);
+                                trace!(
+                                    "error exit code: {:?} while running {} for service: {}",
+                                    exitstatus,
+                                    cmd_str,
+                                    name
+                                );
                                 Err(RunCmdError::BadExitCode(cmd_str.to_owned(), exitstatus))
                             }
                         }

@@ -146,7 +146,7 @@ pub fn service_exit_handler(
     {
         let status_table_locked = run_info.status_table.read().unwrap();
         let status_locked = &*status_table_locked.get(&srvc_id).unwrap().lock().unwrap();
-        if *status_locked != UnitStatus::Started && *status_locked != UnitStatus::Starting  {
+        if *status_locked != UnitStatus::Started && *status_locked != UnitStatus::Starting {
             trace!("Exit handler ignores exit of service {}. Its status is not 'Started/Starting', it is: {:?}", name, *status_locked);
             return Ok(());
         }
