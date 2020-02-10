@@ -52,6 +52,7 @@ pub struct Service {
     pub platform_specific: PlatformSpecificServiceFields,
 }
 
+#[derive(Debug)]
 pub enum RunCmdError {
     BadQuoting(String),
     Timeout(String, String),
@@ -274,14 +275,18 @@ impl Service {
     ) -> Result<(), ServiceErrorReason> {
         self.stop(id, name, pid_table.clone())
             .map_err(
-                |stop_err| match self.run_poststop(id, name, pid_table.clone()) {
-                    Ok(_) => ServiceErrorReason::StopFailed(stop_err),
-                    Err(poststop_err) => {
-                        ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
+                |stop_err| {
+                    trace!("Stop process failed with: {:?} for service: {}. Running poststop commands", stop_err, name);
+                    match self.run_poststop(id, name, pid_table.clone()) {
+                        Ok(_) => ServiceErrorReason::StopFailed(stop_err),
+                        Err(poststop_err) => {
+                            ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
+                        }
                     }
                 },
             )
             .and_then(|_| {
+                trace!("Stop processes for service: {} ran succesfully. Running poststop commands", name);
                 self.run_poststop(id, name, pid_table.clone())
                     .map_err(|e| ServiceErrorReason::PoststopFailed(e))
             })
