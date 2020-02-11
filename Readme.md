@@ -134,15 +134,17 @@ Of rustysd itself
 * Socket activation (the non-inetd style). So your startup will be very fast and services only spin up if the socket is actually activated
 * Pruning the set of loaded units to only the needed ones to reach the target unit
 
-With the control interface (see rsdctl, and the mod.rs doc int the control module for a description of the jsonrpc API) 
+With the control interface (doc/ControlInterface.md for a detailed list of commands) 
 * Adding new units while running
 * Restarting units
 * Stopping units
+* Shutdown rustysd
 
 ### Optional build features
 There are some features behind flags because they are either platform dependent or not necessarily needed for most of the use-cases
 * dbus_support: Activate support for services of type dbus (not needed for many services and probably a dumb idea in a container anyways)
 * linux_eventfd: Use eventfds instead of pipes to interrupt select() calls (because they only exist on linux)
+* cgroups: Optional support to use cgroups to more reliably kill processes of services on linux
 
 ### Docker
 Running in a docker container as PID1 works. The image that is built by the scripts in the dockerfiles directory results in a ~2MB image that contains
