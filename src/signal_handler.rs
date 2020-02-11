@@ -84,11 +84,8 @@ pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                         *status_locked = UnitStatus::Stopping;
                     }
                     {
-                        let kill_res = srvc.kill(
-                            unit_locked.id,
-                            &unit_locked.conf.name(),
-                            run_info.clone(),
-                        );
+                        let kill_res =
+                            srvc.kill(unit_locked.id, &unit_locked.conf.name(), run_info.clone());
                         match kill_res {
                             Ok(()) => {
                                 trace!("Killed service unit: {}", unit_locked.conf.name());

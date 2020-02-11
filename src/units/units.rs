@@ -184,12 +184,16 @@ impl Unit {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
-                sock.open_all(self.conf.name(), self.id, &mut *run_info.fd_store.write().unwrap())
-                    .map_err(|e| UnitOperationError {
-                        unit_name: self.conf.name(),
-                        unit_id: self.id,
-                        reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
-                    })?;
+                sock.open_all(
+                    self.conf.name(),
+                    self.id,
+                    &mut *run_info.fd_store.write().unwrap(),
+                )
+                .map_err(|e| UnitOperationError {
+                    unit_name: self.conf.name(),
+                    unit_id: self.id,
+                    reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
+                })?;
             }
             UnitSpecialized::Service(srvc) => {
                 match srvc
@@ -215,10 +219,7 @@ impl Unit {
         }
         Ok(UnitStatus::Started)
     }
-    pub fn deactivate(
-        &mut self,
-        run_info: ArcRuntimeInfo,
-    ) -> Result<(), UnitOperationError> {
+    pub fn deactivate(&mut self, run_info: ArcRuntimeInfo) -> Result<(), UnitOperationError> {
         trace!("Deactivate unit: {}", self.conf.name());
         match &mut self.specialized {
             UnitSpecialized::Target => { /* nothing to do */ }

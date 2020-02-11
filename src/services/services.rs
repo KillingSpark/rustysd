@@ -400,11 +400,7 @@ impl Service {
                     };
                 {
                     let status_table_locked = run_info.status_table.read().unwrap();
-                    let status = status_table_locked
-                        .get(&id)
-                        .unwrap()
-                        .lock()
-                        .unwrap();
+                    let status = status_table_locked.get(&id).unwrap().lock().unwrap();
                     use std::io::Read;
                     if let Some(stream) = &mut child.stderr {
                         let mut buf = Vec::new();
