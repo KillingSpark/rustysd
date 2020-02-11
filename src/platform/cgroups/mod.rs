@@ -10,6 +10,7 @@ use std::io::Read;
 mod cgroup1;
 mod cgroup2;
 
+#[derive(Debug)]
 pub enum CgroupError {
     IOErr(std::io::Error, String),
     NixErr(nix::Error),
@@ -32,6 +33,54 @@ fn use_v2(cgroup_path: &std::path::PathBuf) -> bool {
     let exists = freeze_file.exists();
     trace!("{:?} exists: {}", freeze_file, exists);
     exists
+}
+
+const OWN_CGROUP_NAME: &str = "rustysd_self";
+
+/// moves rustysd into own cgroup if v2 is used
+///
+/// This is necessary because cgroupv2 discourages processes in cgroups that are not leafes
+pub fn move_to_own_cgroup(base_path: &std::path::PathBuf) -> Result<(), CgroupError> {
+    trace!("Move rustysd to own manager cgroup");
+    let proc_content = std::fs::read_to_string("/proc/self/cgroup").unwrap();
+    let proc_content_lines = proc_content.split('\n').collect::<Vec<_>>();
+    let v2path = get_own_cgroup_v2(&proc_content_lines);
+    trace!("V2 path: {:?}", v2path);
+    if let Some(v2path) = v2path {
+        let base_path = base_path.join("unified");
+        let absolute_v2path = base_path.join(v2path);
+        let rustysd_subgroup = absolute_v2path.join(format!("rustysd_{}", nix::unistd::getpid()));
+        let manager_cgroup = rustysd_subgroup.join(OWN_CGROUP_NAME);
+        trace!("Manager path: {:?}", manager_cgroup);
+        if !manager_cgroup.exists() {
+            std::fs::create_dir_all(&manager_cgroup)
+                .map_err(|e| CgroupError::IOErr(e, format!("{:?}", manager_cgroup)))?;
+        }
+        move_self_to_cgroup(&manager_cgroup)?;
+    }
+    Ok(())
+}
+
+pub fn move_out_of_own_cgroup(base_path: &std::path::PathBuf) -> Result<(), CgroupError> {
+    let proc_content = std::fs::read_to_string("/proc/self/cgroup").unwrap();
+    let proc_content_lines = proc_content.split('\n').collect::<Vec<_>>();
+    if let Some(v2path) = crate::platform::cgroups::get_own_cgroup_v2(&proc_content_lines) {
+        let absolute_v2path = base_path.join(v2path);
+        let mut parent_group = absolute_v2path.clone();
+        parent_group.pop();
+        trace!("Move rustysd to parent cgroup: {:?}", parent_group);
+        crate::platform::cgroups::move_self_to_cgroup(&parent_group)?;
+
+        let self_cgroup = absolute_v2path.join("rustysd_self");
+        trace!("Remove manager cgroup: {:?}", self_cgroup);
+        std::fs::remove_dir(&self_cgroup)
+            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", self_cgroup)))?;
+
+        trace!("Remove rustysd managed cgroup: {:?}", absolute_v2path);
+        std::fs::remove_dir(&absolute_v2path)
+            .map_err(|e| CgroupError::IOErr(e, format!("{:?}", absolute_v2path)))?;
+    }
+    Ok(())
 }
 
 /// base_path should normally be /sys/fs/cgroup
@@ -69,10 +118,6 @@ pub fn get_own_freezer(base_path: &std::path::PathBuf) -> Result<std::path::Path
 
     trace!("Own cgroup: {:?}", cgroup_path);
 
-    // in any case make a new subdir named rustysd_<currentpid> so different rustysd instances do not interfere
-    // since we are in a subgroup, the multiple rustysd_1 should not interfere with each other
-    let cgroup_path = cgroup_path.join(format!("rustysd_{}", nix::unistd::getpid()));
-
     fs::create_dir_all(&cgroup_path)
         .map_err(|e| CgroupError::IOErr(e, format!("{:?}", cgroup_path)))?;
 
@@ -81,10 +126,12 @@ pub fn get_own_freezer(base_path: &std::path::PathBuf) -> Result<std::path::Path
 
 /// cgroup v2 appears in /proc/self/cgroup as 0::/path/to/cgroup
 /// but the path is relative to the mount point of cgroups (/sys/fs/cgroup/unified).
-fn get_own_cgroup_v2(proc_cgroup_content: &[&str]) -> Option<std::path::PathBuf> {
+pub fn get_own_cgroup_v2(proc_cgroup_content: &[&str]) -> Option<std::path::PathBuf> {
     for line in proc_cgroup_content {
         if line.starts_with("0::") {
             let path = &line[3..];
+            // if we are already in the manager cgroup ignore that one. Return the managed cgroup
+            let path = path.trim_end_matches(OWN_CGROUP_NAME);
             // ignore leading "/"
             let path = std::path::PathBuf::from(&path[1..]);
             return Some(path);

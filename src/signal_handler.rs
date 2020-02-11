@@ -213,6 +213,15 @@ pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                 Err(e) => error!("Error removing control socket: {}", e),
             }
         }
+
+        #[cfg(feature = "cgroups")]
+        {
+            let _ = crate::platform::cgroups::move_out_of_own_cgroup(&std::path::PathBuf::from(
+                "/sys/fs/cgroup/unified",
+            ))
+            .map_err(|e| error!("Error while cleaning up cgroups: {}", e));
+        }
+
         println!("Shutdown finished");
         std::process::exit(0);
     });

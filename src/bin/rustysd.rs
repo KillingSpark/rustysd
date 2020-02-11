@@ -265,6 +265,11 @@ fn main() {
         }
     };
 
+    #[cfg(feature = "cgroups")]
+    {
+        platform::cgroups::move_to_own_cgroup(&std::path::PathBuf::from("/sys/fs/cgroup")).unwrap();
+    }
+
     // TODO make configurable
     let should_go_to_new_session = false;
     if should_go_to_new_session {

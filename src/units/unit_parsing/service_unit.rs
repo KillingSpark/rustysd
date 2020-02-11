@@ -8,7 +8,7 @@ fn make_cgroup_path(srvc_name: &str) -> Result<PathBuf, ParsingErrorReason> {
         crate::platform::cgroups::get_own_freezer(&PathBuf::from("/sys/fs/cgroup"))
             .map_err(|e| ParsingErrorReason::Generic(format!("Couldnt get own cgroup: {}", e)))?;
     let service_cgroup = rustysd_cgroup.join(srvc_name);
-    trace!("{:?}", service_cgroup);
+    trace!("Service {} will be moved into cgroup: {:?}", srvc_name, service_cgroup);
     Ok(service_cgroup)
 }
 
