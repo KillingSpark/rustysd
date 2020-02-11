@@ -1,6 +1,7 @@
 use super::start_service::*;
 use crate::platform::EventFd;
 use crate::units::*;
+use std::io::Write;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
@@ -145,8 +146,7 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        fd_store: ArcMutFDStore,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
@@ -167,9 +167,9 @@ impl Service {
 
             super::prepare_service::prepare_service(self, name, &notification_socket_path)
                 .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
-            self.run_prestart(id, name, pid_table.clone())
+            self.run_prestart(id, name, run_info.clone())
                 .map_err(
-                    |prestart_err| match self.run_poststop(id, name, pid_table.clone()) {
+                    |prestart_err| match self.run_poststop(id, name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(prestart_err),
                         Err(poststop_err) => ServiceErrorReason::PrestartAndPoststopFailed(
                             prestart_err,
@@ -178,11 +178,11 @@ impl Service {
                     },
                 )?;
             {
-                let mut pid_table_locked = pid_table.lock().unwrap();
+                let mut pid_table_locked = run_info.pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
                 // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
-                start_service(self, name.clone(), &*fd_store.read().unwrap())
+                start_service(self, name.clone(), &*run_info.fd_store.read().unwrap())
                     .map_err(|e| ServiceErrorReason::StartFailed(e))?;
                 if let Some(new_pid) = self.pid {
                     pid_table_locked.insert(
@@ -198,10 +198,10 @@ impl Service {
                     self,
                     name,
                     &*sock.lock().unwrap(),
-                    pid_table.clone(),
+                    run_info.pid_table.clone(),
                 )
                 .map_err(|start_err| {
-                    match self.run_poststop(id, name, pid_table.clone()) {
+                    match self.run_poststop(id, name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::StartFailed(start_err),
                         Err(poststop_err) => {
                             ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
@@ -209,9 +209,9 @@ impl Service {
                     }
                 })?;
             }
-            self.run_poststart(id, name, pid_table.clone())
+            self.run_poststart(id, name, run_info.clone())
                 .map_err(
-                    |poststart_err| match self.run_poststop(id, name, pid_table.clone()) {
+                    |poststart_err| match self.run_poststop(id, name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(poststart_err),
                         Err(poststop_err) => ServiceErrorReason::PoststartAndPoststopFailed(
                             poststart_err,
@@ -253,9 +253,9 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        let stop_res = self.run_stop_cmd(id, name, pid_table.clone());
+        let stop_res = self.run_stop_cmd(id, name, run_info.clone());
 
         if self.service_config.srcv_type != ServiceType::OneShot {
             // already happened when the oneshot process exited in the exit handler
@@ -271,16 +271,16 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), ServiceErrorReason> {
-        self.stop(id, name, pid_table.clone())
+        self.stop(id, name, run_info.clone())
             .map_err(|stop_err| {
                 trace!(
                     "Stop process failed with: {:?} for service: {}. Running poststop commands",
                     stop_err,
                     name
                 );
-                match self.run_poststop(id, name, pid_table.clone()) {
+                match self.run_poststop(id, name, run_info.clone()) {
                     Ok(_) => ServiceErrorReason::StopFailed(stop_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
@@ -292,7 +292,7 @@ impl Service {
                     "Stop processes for service: {} ran succesfully. Running poststop commands",
                     name
                 );
-                self.run_poststop(id, name, pid_table.clone())
+                self.run_poststop(id, name, run_info.clone())
                     .map_err(|e| ServiceErrorReason::PoststopFailed(e))
             })
     }
@@ -341,7 +341,7 @@ impl Service {
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
         let split =
             shlex::split(cmd_str).ok_or_else(|| RunCmdError::BadQuoting(cmd_str.to_owned()))?;
@@ -354,7 +354,7 @@ impl Service {
         cmd.stdin(Stdio::null());
         trace!("Run {} for service: {}", cmd_str, name);
         let spawn_result = {
-            let mut pid_table_locked = pid_table.lock().unwrap();
+            let mut pid_table_locked = run_info.pid_table.lock().unwrap();
             let res = cmd.spawn();
             if let Ok(child) = &res {
                 pid_table_locked.insert(
@@ -368,7 +368,7 @@ impl Service {
             Ok(mut child) => {
                 trace!("Wait for {} for service: {}", cmd_str, name);
                 let wait_result: Result<(), RunCmdError> =
-                    match wait_for_helper_child(&mut child, pid_table.clone(), timeout) {
+                    match wait_for_helper_child(&mut child, run_info.pid_table.clone(), timeout) {
                         WaitResult::InTime(Err(e)) => {
                             return Err(RunCmdError::WaitError(
                                 cmd_str.to_owned(),
@@ -399,20 +399,29 @@ impl Service {
                         }
                     };
                 {
+                    let status_table_locked = run_info.status_table.read().unwrap();
+                    let status = status_table_locked
+                        .get(&id)
+                        .unwrap()
+                        .lock()
+                        .unwrap();
                     use std::io::Read;
                     if let Some(stream) = &mut child.stderr {
                         let mut buf = Vec::new();
                         let _bytes = stream.read_to_end(&mut buf).unwrap();
                         self.stderr_buffer.extend(buf);
+                        self.log_stderr_lines(name, &status).unwrap();
                     }
                     if let Some(stream) = &mut child.stdout {
                         let mut buf = Vec::new();
                         let _bytes = stream.read_to_end(&mut buf).unwrap();
                         self.stdout_buffer.extend(buf);
+                        self.log_stdout_lines(name, &status).unwrap();
                     }
                 }
 
-                pid_table
+                run_info
+                    .pid_table
                     .lock()
                     .unwrap()
                     .remove(&nix::unistd::Pid::from_raw(child.id() as i32));
@@ -431,10 +440,10 @@ impl Service {
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
         for cmd in cmds {
-            self.run_cmd(cmd, id, name, timeout, pid_table.clone())?;
+            self.run_cmd(cmd, id, name, timeout, run_info.clone())?;
         }
         Ok(())
     }
@@ -443,54 +452,109 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.stop.is_empty() {
             return Ok(());
         }
         let timeout = self.get_stop_timeout();
         let cmds = self.service_config.stop.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
     fn run_prestart(
         &mut self,
         id: UnitId,
         name: &str,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.startpre.is_empty() {
             return Ok(());
         }
         let timeout = self.get_start_timeout();
         let cmds = self.service_config.startpre.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
     fn run_poststart(
         &mut self,
         id: UnitId,
         name: &str,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.startpost.is_empty() {
             return Ok(());
         }
         let timeout = self.get_start_timeout();
         let cmds = self.service_config.startpost.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
 
     fn run_poststop(
         &mut self,
         id: UnitId,
         name: &str,
-        pid_table: ArcMutPidTable,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.startpost.is_empty() {
             return Ok(());
         }
         let timeout = self.get_start_timeout();
         let cmds = self.service_config.stoppost.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, pid_table.clone())
+        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
+    }
+
+    pub fn log_stdout_lines(&mut self, name: &str, status: &UnitStatus) -> std::io::Result<()> {
+        let mut prefix = String::new();
+        prefix.push('[');
+        prefix.push_str(name);
+        prefix.push(']');
+        prefix.push_str(&format!("[{:?}]", *status));
+        prefix.push(' ');
+        let mut outbuf: Vec<u8> = Vec::new();
+        while self.stdout_buffer.contains(&b'\n') {
+            let split_pos = self.stdout_buffer.iter().position(|r| *r == b'\n').unwrap();
+            let (line, lines) = self.stdout_buffer.split_at(split_pos + 1);
+
+            // drop \n at the end of the line
+            let line = &line[0..line.len() - 1].to_vec();
+            self.stdout_buffer = lines.to_vec();
+            if line.is_empty() {
+                continue;
+            }
+            outbuf.clear();
+            outbuf.extend(prefix.as_bytes());
+            outbuf.extend(line);
+            outbuf.push(b'\n');
+            std::io::stdout().write_all(&outbuf)?;
+        }
+        Ok(())
+    }
+    pub fn log_stderr_lines(&mut self, name: &str, status: &UnitStatus) -> std::io::Result<()> {
+        let mut prefix = String::new();
+        prefix.push('[');
+        prefix.push_str(&name);
+        prefix.push(']');
+        prefix.push_str(&format!("[{:?}]", *status));
+        prefix.push_str("[STDERR]");
+        prefix.push(' ');
+
+        let mut outbuf: Vec<u8> = Vec::new();
+        while self.stderr_buffer.contains(&b'\n') {
+            let split_pos = self.stderr_buffer.iter().position(|r| *r == b'\n').unwrap();
+            let (line, lines) = self.stderr_buffer.split_at(split_pos + 1);
+
+            // drop \n at the end of the line
+            let line = &line[0..line.len() - 1].to_vec();
+            self.stderr_buffer = lines.to_vec();
+            if line.is_empty() {
+                continue;
+            }
+            outbuf.clear();
+            outbuf.extend(prefix.as_bytes());
+            outbuf.extend(line);
+            outbuf.push(b'\n');
+            std::io::stderr().write_all(&outbuf).unwrap();
+        }
+        Ok(())
     }
 }
 

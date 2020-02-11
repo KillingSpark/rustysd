@@ -6,7 +6,7 @@ use crate::platform::reset_event_fd;
 use crate::platform::EventFd;
 use crate::services::Service;
 use crate::units::*;
-use std::{collections::HashMap, io::Write, os::unix::io::AsRawFd};
+use std::{collections::HashMap, os::unix::io::AsRawFd};
 
 fn collect_from_srvc<F>(unit_table: ArcMutUnitTable, f: F) -> HashMap<i32, UnitId>
 where
@@ -143,15 +143,6 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                                 .lock()
                                 .unwrap();
 
-                            // build the service-unique prefix
-                            let mut prefix = String::new();
-                            prefix.push('[');
-                            prefix.push_str(&name);
-                            prefix.push(']');
-                            prefix.push_str(&format!("[{:?}]", *status));
-                            prefix.push(' ');
-                            buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
-
                             let old_flags =
                                 nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
                             let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
@@ -175,27 +166,7 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                                 &mut srvc_unit_locked.specialized
                             {
                                 srvc.stdout_buffer.extend(&buf[..bytes]);
-                                let mut outbuf: Vec<u8> = Vec::new();
-                                while srvc.stdout_buffer.contains(&b'\n') {
-                                    let split_pos = srvc
-                                        .stdout_buffer
-                                        .iter()
-                                        .position(|r| *r == b'\n')
-                                        .unwrap();
-                                    let (line, lines) = srvc.stdout_buffer.split_at(split_pos + 1);
-
-                                    // drop \n at the end of the line
-                                    let line = &line[0..line.len() - 1].to_vec();
-                                    srvc.stdout_buffer = lines.to_vec();
-                                    if line.is_empty() {
-                                        continue;
-                                    }
-                                    outbuf.clear();
-                                    outbuf.extend(prefix.as_bytes());
-                                    outbuf.extend(line);
-                                    outbuf.push(b'\n');
-                                    std::io::stdout().write_all(&outbuf).unwrap();
-                                }
+                                srvc.log_stdout_lines(&name, &status).unwrap();
                             }
                         }
                     }
@@ -245,16 +216,6 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                                 .lock()
                                 .unwrap();
 
-                            // build the service-unique prefix
-                            let mut prefix = String::new();
-                            prefix.push('[');
-                            prefix.push_str(&name);
-                            prefix.push(']');
-                            prefix.push_str(&format!("[{:?}]", *status));
-                            prefix.push_str("[STDERR]");
-                            prefix.push(' ');
-                            buf[..prefix.len()].copy_from_slice(&prefix.as_bytes());
-
                             let old_flags =
                                 nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
                             let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
@@ -277,27 +238,7 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                                 &mut srvc_unit_locked.specialized
                             {
                                 srvc.stderr_buffer.extend(&buf[..bytes]);
-                                let mut outbuf: Vec<u8> = Vec::new();
-                                while srvc.stderr_buffer.contains(&b'\n') {
-                                    let split_pos = srvc
-                                        .stderr_buffer
-                                        .iter()
-                                        .position(|r| *r == b'\n')
-                                        .unwrap();
-                                    let (line, lines) = srvc.stderr_buffer.split_at(split_pos + 1);
-
-                                    // drop \n at the end of the line
-                                    let line = &line[0..line.len() - 1].to_vec();
-                                    srvc.stderr_buffer = lines.to_vec();
-                                    if line.is_empty() {
-                                        continue;
-                                    }
-                                    outbuf.clear();
-                                    outbuf.extend(prefix.as_bytes());
-                                    outbuf.extend(line);
-                                    outbuf.push(b'\n');
-                                    std::io::stderr().write_all(&outbuf).unwrap();
-                                }
+                                srvc.log_stderr_lines(&name, &status).unwrap();
                             }
                         }
                     }

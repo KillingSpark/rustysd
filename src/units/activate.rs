@@ -220,8 +220,7 @@ pub fn activate_unit(
 
     unit_locked
         .activate(
-            run_info.pid_table.clone(),
-            run_info.fd_store.clone(),
+            run_info.clone(),
             notification_socket_path.clone(),
             &eventfds,
             allow_ignore,

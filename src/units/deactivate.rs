@@ -47,7 +47,7 @@ pub fn deactivate_unit(
             }
         }
     }
-    unit_locked.deactivate(run_info.pid_table.clone(), run_info.fd_store.clone())?;
+    unit_locked.deactivate(run_info.clone())?;
     {
         let status_table_locked = run_info.status_table.read().unwrap();
         let status = status_table_locked.get(&id_to_kill).unwrap();

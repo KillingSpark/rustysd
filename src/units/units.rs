@@ -176,8 +176,7 @@ impl Unit {
 
     pub fn activate(
         &mut self,
-        pid_table: ArcMutPidTable,
-        fd_store: ArcMutFDStore,
+        run_info: ArcRuntimeInfo,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
@@ -185,7 +184,7 @@ impl Unit {
         match &mut self.specialized {
             UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
             UnitSpecialized::Socket(sock) => {
-                sock.open_all(self.conf.name(), self.id, &mut *fd_store.write().unwrap())
+                sock.open_all(self.conf.name(), self.id, &mut *run_info.fd_store.write().unwrap())
                     .map_err(|e| UnitOperationError {
                         unit_name: self.conf.name(),
                         unit_id: self.id,
@@ -197,8 +196,7 @@ impl Unit {
                     .start(
                         self.id,
                         &self.conf.name(),
-                        fd_store,
-                        pid_table,
+                        run_info,
                         notification_socket_path,
                         eventfds,
                         allow_ignore,
@@ -219,14 +217,13 @@ impl Unit {
     }
     pub fn deactivate(
         &mut self,
-        pid_table: ArcMutPidTable,
-        fd_store: ArcMutFDStore,
+        run_info: ArcRuntimeInfo,
     ) -> Result<(), UnitOperationError> {
         trace!("Deactivate unit: {}", self.conf.name());
         match &mut self.specialized {
             UnitSpecialized::Target => { /* nothing to do */ }
             UnitSpecialized::Socket(sock) => {
-                sock.close_all(self.conf.name(), &mut *fd_store.write().unwrap())
+                sock.close_all(self.conf.name(), &mut *run_info.fd_store.write().unwrap())
                     .map_err(|e| UnitOperationError {
                         unit_name: self.conf.name(),
                         unit_id: self.id,
@@ -234,7 +231,7 @@ impl Unit {
                     })?;
             }
             UnitSpecialized::Service(srvc) => {
-                srvc.kill(self.id, &self.conf.name(), pid_table)
+                srvc.kill(self.id, &self.conf.name(), run_info)
                     .map_err(|e| UnitOperationError {
                         unit_name: self.conf.name(),
                         unit_id: self.id,

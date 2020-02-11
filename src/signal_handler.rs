@@ -87,7 +87,7 @@ pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                         let kill_res = srvc.kill(
                             unit_locked.id,
                             &unit_locked.conf.name(),
-                            run_info.pid_table.clone(),
+                            run_info.clone(),
                         );
                         match kill_res {
                             Ok(()) => {
