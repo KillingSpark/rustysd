@@ -92,6 +92,40 @@ pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                             }
                             Err(e) => error!("{}", e),
                         }
+                        if let Some(datagram) = &srvc.notifications {
+                            let dg = &*datagram.lock().unwrap();
+                            match dg.shutdown(std::net::Shutdown::Both) {
+                                Ok(()) => {
+                                    trace!(
+                                        "Closed notification socket for service unit: {}",
+                                        unit_locked.conf.name()
+                                    );
+                                }
+                                Err(e) => error!(
+                                    "Error closing notification socket for service unit {}: {}",
+                                    unit_locked.conf.name(),
+                                    e
+                                ),
+                            }
+                        }
+                        srvc.notifications = None;
+                        if let Some(note_sock_path) = &srvc.notifications_path {
+                            if note_sock_path.exists() {
+                                match std::fs::remove_file(note_sock_path) {
+                                    Ok(()) => {
+                                        trace!(
+                                            "Removed notification socket for service unit: {}",
+                                            unit_locked.conf.name()
+                                        );
+                                    }
+                                    Err(e) => error!(
+                                        "Error removing notification socket for service unit {}: {}",
+                                        unit_locked.conf.name(),
+                                        e
+                                    ),
+                                }
+                            }
+                        }
                     }
                     {
                         trace!("Get status lock");
@@ -102,7 +136,7 @@ pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                         trace!("Set service status: {}", unit_locked.conf.name());
                         let status = status_table_locked.get(&unit_locked.id).unwrap();
                         let mut status_locked = status.lock().unwrap();
-                        *status_locked = UnitStatus::Stopping;
+                        *status_locked = UnitStatus::StoppedFinal("Rustysd shutdown".into());
                     }
                 }
                 UnitSpecialized::Socket(_) => {
@@ -160,12 +194,24 @@ pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                         trace!("Set service status: {}", unit_locked.conf.name());
                         let status = status_table_locked.get(&unit_locked.id).unwrap();
                         let mut status_locked = status.lock().unwrap();
-                        *status_locked = UnitStatus::Stopping;
+                        *status_locked = UnitStatus::StoppedFinal("Rustysd shutdown".into());
                     }
                 }
                 UnitSpecialized::Target => {
                     // Nothing to do
                 }
+            }
+        }
+        let control_socket = run_info
+            .config
+            .notification_sockets_dir
+            .join("control.socket");
+        if control_socket.exists() {
+            match std::fs::remove_file(control_socket) {
+                Ok(()) => {
+                    trace!("Removed control socket");
+                }
+                Err(e) => error!("Error removing control socket: {}", e),
             }
         }
         println!("Shutdown finished");
