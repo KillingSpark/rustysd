@@ -1,7 +1,6 @@
 use crate::services::Service;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixDatagram;
-use std::sync::{Arc, Mutex};
 
 pub fn prepare_service(
     srvc: &mut Service,
@@ -34,8 +33,8 @@ pub fn prepare_service(
             nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
         )
         .unwrap();
-        let new_stream = Arc::new(Mutex::new(stream));
-        srvc.notifications = Some(new_stream);
+
+        srvc.notifications = Some(stream);
     }
 
     if srvc.stdout_dup.is_none() {

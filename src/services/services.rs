@@ -5,8 +5,6 @@ use std::io::Write;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
-use std::sync::Mutex;
 
 #[derive(Debug)]
 pub struct ServiceRuntimeInfo {
@@ -38,7 +36,7 @@ pub struct Service {
     pub runtime_info: ServiceRuntimeInfo,
     pub signaled_ready: bool,
 
-    pub notifications: Option<Arc<Mutex<UnixDatagram>>>,
+    pub notifications: Option<UnixDatagram>,
     pub notifications_path: Option<std::path::PathBuf>,
 
     pub stdout_dup: Option<(RawFd, RawFd)>,
@@ -192,23 +190,15 @@ impl Service {
                     crate::platform::notify_event_fds(&eventfds);
                 }
             }
-            if let Some(sock) = &self.notifications {
-                let sock = sock.clone();
-                super::fork_parent::wait_for_service(
-                    self,
-                    name,
-                    &*sock.lock().unwrap(),
-                    run_info.pid_table.clone(),
-                )
-                .map_err(|start_err| {
-                    match self.run_poststop(id, name, run_info.clone()) {
-                        Ok(_) => ServiceErrorReason::StartFailed(start_err),
-                        Err(poststop_err) => {
-                            ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
-                        }
+
+            super::fork_parent::wait_for_service(self, name, run_info.pid_table.clone()).map_err(
+                |start_err| match self.run_poststop(id, name, run_info.clone()) {
+                    Ok(_) => ServiceErrorReason::StartFailed(start_err),
+                    Err(poststop_err) => {
+                        ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
                     }
-                })?;
-            }
+                },
+            )?;
             self.run_poststart(id, name, run_info.clone())
                 .map_err(
                     |poststart_err| match self.run_poststop(id, name, run_info.clone()) {

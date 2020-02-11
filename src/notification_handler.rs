@@ -30,7 +30,7 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(unit_table.clone(), |map, srvc, id| {
             if let Some(socket) = &srvc.notifications {
-                map.insert(socket.lock().unwrap().as_raw_fd(), id);
+                map.insert(socket.as_raw_fd(), id);
             }
         });
 
@@ -72,8 +72,7 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                     )
                                     .unwrap();
                                     let bytes = {
-                                        let socket_locked = socket.lock().unwrap();
-                                        match socket_locked.recv(&mut buf[..]) {
+                                        match socket.recv(&mut buf[..]) {
                                             Ok(b) => b,
                                             Err(e) => match e.kind() {
                                                 std::io::ErrorKind::WouldBlock => 0,

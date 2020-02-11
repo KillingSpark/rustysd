@@ -93,8 +93,7 @@ pub fn shutdown_sequence(run_info: ArcRuntimeInfo) {
                             Err(e) => error!("{}", e),
                         }
                         if let Some(datagram) = &srvc.notifications {
-                            let dg = &*datagram.lock().unwrap();
-                            match dg.shutdown(std::net::Shutdown::Both) {
+                            match datagram.shutdown(std::net::Shutdown::Both) {
                                 Ok(()) => {
                                     trace!(
                                         "Closed notification socket for service unit: {}",

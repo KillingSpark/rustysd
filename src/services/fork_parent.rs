@@ -1,12 +1,10 @@
 use crate::services::RunCmdError;
 use crate::services::Service;
 use crate::units::*;
-use std::os::unix::net::UnixDatagram;
 
 pub fn wait_for_service(
     srvc: &mut Service,
     name: &str,
-    stream: &UnixDatagram,
     pid_table: ArcMutPidTable,
 ) -> Result<(), RunCmdError> {
     trace!(
@@ -27,6 +25,14 @@ pub fn wait_for_service(
             //let duration_timeout = Some(std::time::Duration::from_nanos(1_000_000_000_000));
             let mut buf = [0u8; 512];
             loop {
+                let stream = if let Some(stream) = &srvc.notifications {
+                    stream
+                } else {
+                    return Err(RunCmdError::Generic(
+                        "No notification socket but is required".into(),
+                    ));
+                };
+
                 if let Some(duration_timeout) = duration_timeout {
                     let duration_elapsed = start_time.elapsed();
                     if duration_elapsed > duration_timeout {
@@ -60,7 +66,9 @@ pub fn wait_for_service(
                     trace!("[FORK_PARENT] Service {} still not ready", name);
                 }
             }
-            stream.set_read_timeout(None).unwrap();
+            if let Some(stream) = &srvc.notifications {
+                stream.set_read_timeout(None).unwrap();
+            }
         }
         ServiceType::Simple => {
             trace!("[FORK_PARENT] service {} doesnt notify", name);
