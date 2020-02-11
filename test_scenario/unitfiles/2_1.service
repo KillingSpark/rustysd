@@ -1,5 +1,6 @@
 [Unit]
 After=1-2.target
+Before=3_2.service
 
 [Service]
 ExecStartPre= /usr/bin/echo "2_1 PreStart"
