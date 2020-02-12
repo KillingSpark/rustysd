@@ -265,7 +265,7 @@ pub fn execute_command(
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
         Command::Shutdown => {
-            crate::signal_handler::shutdown_sequence(run_info);
+            crate::shutdown::shutdown_sequence(run_info);
         }
         Command::Restart(unit_name) => {
             let id = if let Some(unit) =
