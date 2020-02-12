@@ -174,10 +174,17 @@ pub fn activate_unit(
         .after
         .iter()
         .fold(Vec::new(), |mut acc, elem| {
+            let required = unit_locked.install.requires.contains(elem);
+
             let status = status_table_locked.get(elem).unwrap();
             let status_locked = status.lock().unwrap();
-            let ready = *status_locked == UnitStatus::Started
-                || *status_locked == UnitStatus::StartedWaitingForSocket;
+            let ready = if required {
+                *status_locked == UnitStatus::Started
+                    || *status_locked == UnitStatus::StartedWaitingForSocket
+            } else {
+                *status_locked != UnitStatus::NeverStarted
+            };
+
             if !ready {
                 acc.push(elem);
             }
