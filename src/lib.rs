@@ -29,11 +29,11 @@ pub mod logging;
 pub mod notification_handler;
 pub mod platform;
 pub mod services;
+pub mod shutdown;
 pub mod signal_handler;
 pub mod socket_activation;
 pub mod sockets;
 pub mod units;
-pub mod shutdown;
 
 #[macro_use]
 extern crate log;
