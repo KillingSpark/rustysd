@@ -100,7 +100,15 @@ pub fn wait_for_service(
                                 }
                                 PidEntry::OneshotExited(_) => {
                                     trace!("End wait for {}", name);
-                                    let _entry_owned = pid_table_locked.remove(&pid).unwrap();
+                                    let entry_owned = pid_table_locked.remove(&pid).unwrap();
+                                    if let PidEntry::OneshotExited(code) = entry_owned {
+                                        if !code.success() {
+                                            return Err(RunCmdError::BadExitCode(
+                                                srvc.service_config.exec.clone(),
+                                                code,
+                                            ));
+                                        }
+                                    }
                                     break;
                                 }
                                 PidEntry::Helper(_, _) => {
