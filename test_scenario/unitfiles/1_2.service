@@ -3,6 +3,10 @@ Before=1-2.target
 
 [Service]
 ExecStart= /bin/sleep 1
+ExecStartPre= /usr/bin/echo "1_2 PreStart"
+ExecStartPost= /usr/bin/echo "1_2 PostStart"
+ExecStop= /usr/bin/echo "1_2 Stop"
+ExecStopPost= /usr/bin/echo "1_2 PostStop"
 Type=oneshot
 
 [Install]

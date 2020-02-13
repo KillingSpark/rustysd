@@ -3,6 +3,9 @@ After=2-3.target
 
 [Service]
 ExecStart= /bin/sleep 1
+ExecStartPost= /usr/bin/echo    "3_3 PostStart"
+ExecStop= /usr/bin/echo         "3_3 Stop"
+ExecStopPost= /usr/bin/echo     "3_3 PostStop"
 Type=oneshot
 
 [Install]
