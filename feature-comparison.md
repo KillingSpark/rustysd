@@ -1396,19 +1396,19 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStart=">ExecStart=</a></td>
   <td>✔️</td>
   <td><a href="https://github.com/search?q=%27ExecStart%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Exec'ing the command given is supported. The return value is checked for oneshot services. Ignoring the return value is not yet supported.</td>
+  <td>Exec'ing the command given is supported. The return value is checked for oneshot services. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStartPre=">ExecStartPre=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPre%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value is not yet supported.</td>
+  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStartPost=">ExecStartPost=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPost%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value is not yet supported.</td>
+  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecCondition=">ExecCondition=</a></td>
@@ -1426,13 +1426,13 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStop=">ExecStop=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStop%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value is not yet supported.</td>
+  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecStopPost=">ExecStopPost=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStopPost%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value is not yet supported.</td>
+  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.service.html#RestartSec=">RestartSec=</a></td>
@@ -1833,13 +1833,13 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#ExecStartPre=">ExecStartPre=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPre%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value is not yet supported.</td>
+  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#ExecStartPost=">ExecStartPost=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStartPost%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value is not yet supported.</td>
+  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#ExecStopPre=">ExecStopPre=</a></td>
@@ -1851,7 +1851,7 @@ This document is meant as a simple way of checking whether all features you need
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#ExecStopPost=">ExecStopPost=</a></td>
   <td>❓</td>
   <td><a href="https://github.com/search?q=%27ExecStopPost%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value is not yet supported.</td>
+  <td>Allowing commands to be run is supported. The return value is checked. Ignoring the return value with the '-' prefix is supported, other prefixes are not.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.socket.html#TimeoutSec=">TimeoutSec=</a></td>
