@@ -10,7 +10,7 @@ fn test_service_parsing() {
     let install_wanted_by = "install_wanted_by";
 
     let service_execstart = "/path/to/startbin arg1 arg2 arg3";
-    let service_execpre = "-+@/path/to/startprebin arg1 arg2 arg3";
+    let service_execpre = "--/path/to/startprebin arg1 arg2 arg3";
     let service_execpost = "/path/to/startpostbin arg1 arg2 arg3";
     let service_stop = "/path/to/stopbin arg1 arg2 arg3";
     let service_sockets = "socket_name1,socket_name2";
@@ -96,8 +96,7 @@ fn test_service_parsing() {
                 args: vec!["arg1".into(), "arg2".into(), "arg3".into()],
                 prefixes: vec![
                     crate::units::CommandlinePrefix::Minus,
-                    crate::units::CommandlinePrefix::Plus,
-                    crate::units::CommandlinePrefix::AtSign
+                    crate::units::CommandlinePrefix::Minus,
                 ],
             }]
         );
