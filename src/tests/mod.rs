@@ -10,7 +10,7 @@ fn test_service_parsing() {
     let install_wanted_by = "install_wanted_by";
 
     let service_execstart = "/path/to/startbin arg1 arg2 arg3";
-    let service_execpre = "/path/to/startprebin arg1 arg2 arg3";
+    let service_execpre = "-+@/path/to/startprebin arg1 arg2 arg3";
     let service_execpost = "/path/to/startpostbin arg1 arg2 arg3";
     let service_stop = "/path/to/stopbin arg1 arg2 arg3";
     let service_sockets = "socket_name1,socket_name2";
@@ -81,10 +81,42 @@ fn test_service_parsing() {
         panic!("No install config found, but there should be one");
     }
     if let crate::units::UnitSpecialized::Service(srvc) = service.specialized {
-        assert_eq!(srvc.service_config.exec, service_execstart);
-        assert_eq!(srvc.service_config.startpre, vec![service_execpre]);
-        assert_eq!(srvc.service_config.startpost, vec![service_execpost]);
-        assert_eq!(srvc.service_config.stop, vec![service_stop]);
+        assert_eq!(
+            srvc.service_config.exec,
+            crate::units::Commandline {
+                cmd: "/path/to/startbin".into(),
+                args: vec!["arg1".into(), "arg2".into(), "arg3".into()],
+                prefixes: vec![],
+            }
+        );
+        assert_eq!(
+            srvc.service_config.startpre,
+            vec![crate::units::Commandline {
+                cmd: "/path/to/startprebin".into(),
+                args: vec!["arg1".into(), "arg2".into(), "arg3".into()],
+                prefixes: vec![
+                    crate::units::CommandlinePrefix::Minus,
+                    crate::units::CommandlinePrefix::Plus,
+                    crate::units::CommandlinePrefix::AtSign
+                ],
+            }]
+        );
+        assert_eq!(
+            srvc.service_config.startpost,
+            vec![crate::units::Commandline {
+                cmd: "/path/to/startpostbin".into(),
+                args: vec!["arg1".into(), "arg2".into(), "arg3".into()],
+                prefixes: vec![],
+            }]
+        );
+        assert_eq!(
+            srvc.service_config.stop,
+            vec![crate::units::Commandline {
+                cmd: "/path/to/stopbin".into(),
+                args: vec!["arg1".into(), "arg2".into(), "arg3".into()],
+                prefixes: vec![],
+            }]
+        );
         assert_eq!(
             srvc.service_config.sockets,
             vec!["socket_name1".to_owned(), "socket_name2".to_owned()]

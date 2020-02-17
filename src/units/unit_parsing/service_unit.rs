@@ -199,6 +199,76 @@ fn parse_timeout(descr: &str) -> Timeout {
     }
 }
 
+fn parse_cmdlines(raw_lines: &Vec<(u32, String)>) -> Result<Vec<Commandline>, ParsingErrorReason> {
+    let mut cmdlines = Vec::new();
+    for (_line, cmdline) in raw_lines {
+        cmdlines.push(parse_cmdline(cmdline)?);
+    }
+    Ok(cmdlines)
+}
+
+fn parse_cmdline(raw_line: &str) -> Result<Commandline, ParsingErrorReason> {
+    let mut split = shlex::split(raw_line).ok_or(ParsingErrorReason::Generic(format!(
+        "Could not parse cmdline: {}",
+        raw_line
+    )))?;
+    let mut cmd = split.remove(0);
+
+    let mut prefixes = Vec::new();
+    loop {
+        let prefix = match &cmd[..1] {
+            "-" => {
+                cmd = cmd[1..].to_owned();
+                CommandlinePrefix::Minus
+            }
+            "+" => {
+                return Err(ParsingErrorReason::UnsupportedSetting(
+                    "The prefix '+' for cmdlines is currently not supported".into(),
+                ));
+                //cmd = cmd[1..].to_owned();
+                //CommandlinePrefix::Plus
+            }
+            "@" => {
+                return Err(ParsingErrorReason::UnsupportedSetting(
+                    "The prefix '@' for cmdlines is currently not supported".into(),
+                ));
+                //cmd = cmd[1..].to_owned();
+                //CommandlinePrefix::AtSign
+            }
+            ":" => {
+                return Err(ParsingErrorReason::UnsupportedSetting(
+                    "The prefix ':' for cmdlines is currently not supported".into(),
+                ));
+                //cmd = cmd[1..].to_owned();
+                //CommandlinePrefix::Colon
+            }
+            "!" => match &cmd[1..2] {
+                "!" => {
+                    return Err(ParsingErrorReason::UnsupportedSetting(
+                        "The prefix '!!' for cmdlines is currently not supported".into(),
+                    ));
+                    //cmd = cmd[2..].to_owned();
+                    //CommandlinePrefix::DoubleExclamation
+                }
+                _ => {
+                    return Err(ParsingErrorReason::UnsupportedSetting(
+                        "The prefix '!' for cmdlines is currently not supported".into(),
+                    ));
+                    //cmd = cmd[1..].to_owned();
+                    //CommandlinePrefix::Exclamation
+                }
+            },
+            _ => break,
+        };
+        prefixes.push(prefix);
+    }
+    Ok(Commandline {
+        cmd,
+        prefixes,
+        args: split,
+    })
+}
+
 fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingErrorReason> {
     let exec = section.remove("EXECSTART");
     let stop = section.remove("EXECSTOP");
@@ -267,7 +337,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     let exec = match exec {
         Some(mut vec) => {
             if vec.len() == 1 {
-                vec.remove(0).1
+                parse_cmdline(&vec.remove(0).1)?
             } else {
                 return Err(ParsingErrorReason::SettingTooManyValues(
                     "ExecStart".to_owned(),
@@ -275,7 +345,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
                 ));
             }
         }
-        None => "".to_string(),
+        None => return Err(ParsingErrorReason::MissingSetting("ExecStart".to_owned())),
     };
 
     let srcv_type = match srcv_type {
@@ -339,19 +409,19 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
     };
 
     let stop = match stop {
-        Some(vec) => map_tupels_to_second(vec),
+        Some(vec) => parse_cmdlines(&vec)?,
         None => Vec::new(),
     };
     let stoppost = match stoppost {
-        Some(vec) => map_tupels_to_second(vec),
+        Some(vec) => parse_cmdlines(&vec)?,
         None => Vec::new(),
     };
     let startpre = match startpre {
-        Some(vec) => map_tupels_to_second(vec),
+        Some(vec) => parse_cmdlines(&vec)?,
         None => Vec::new(),
     };
     let startpost = match startpost {
-        Some(vec) => map_tupels_to_second(vec),
+        Some(vec) => parse_cmdlines(&vec)?,
         None => Vec::new(),
     };
 

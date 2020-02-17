@@ -9,16 +9,14 @@ fn start_service_with_filedescriptors(
     fd_store: &FDStore,
 ) -> Result<(), RunCmdError> {
     // check if executable even exists
-    let split: Vec<&str> = srvc.service_config.exec.split(' ').collect();
-
-    let cmd = std::path::PathBuf::from(split[0]);
+    let cmd = std::path::PathBuf::from(&srvc.service_config.exec.cmd);
     if !cmd.exists() {
         error!(
             "The service {} specified an executable that does not exist: {:?}",
-            name, &cmd
+            name, &srvc.service_config.exec.cmd
         );
         return Err(RunCmdError::SpawnError(
-            split[0].to_owned(),
+            srvc.service_config.exec.cmd.clone(),
             format!("Executable does not exist"),
         ));
     }
@@ -28,7 +26,7 @@ fn start_service_with_filedescriptors(
             name, &cmd
         );
         return Err(RunCmdError::SpawnError(
-            split[0].to_owned(),
+            srvc.service_config.exec.cmd.clone(),
             format!("Executable does not exist (is a directory)"),
         ));
     }

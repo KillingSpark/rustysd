@@ -38,7 +38,7 @@ pub fn wait_for_service(
                     if duration_elapsed > duration_timeout {
                         trace!("[FORK_PARENT] Service {} notification timed out", name);
                         return Err(RunCmdError::Timeout(
-                            srvc.service_config.exec.clone(),
+                            srvc.service_config.exec.to_string(),
                             format!("{:?}", duration_timeout),
                         ));
                     } else {
@@ -85,7 +85,7 @@ pub fn wait_for_service(
                     if start_time.elapsed() >= time_out {
                         error!("oneshot service {} reached timeout", name);
                         return Err(RunCmdError::Timeout(
-                            srvc.service_config.exec.clone(),
+                            srvc.service_config.exec.to_string(),
                             format!("{:?}", duration_timeout),
                         ));
                     }
@@ -103,10 +103,17 @@ pub fn wait_for_service(
                                     let entry_owned = pid_table_locked.remove(&pid).unwrap();
                                     if let PidEntry::OneshotExited(code) = entry_owned {
                                         if !code.success() {
-                                            return Err(RunCmdError::BadExitCode(
-                                                srvc.service_config.exec.clone(),
-                                                code,
-                                            ));
+                                            if !srvc
+                                                .service_config
+                                                .exec
+                                                .prefixes
+                                                .contains(&CommandlinePrefix::Minus)
+                                            {
+                                                return Err(RunCmdError::BadExitCode(
+                                                    srvc.service_config.exec.to_string(),
+                                                    code,
+                                                ));
+                                            }
                                         }
                                     }
                                     break;
@@ -156,14 +163,14 @@ pub fn wait_for_service(
                         crate::dbus_wait::WaitResult::Timedout => {
                             warn!("[FORK_PARENT] Did not find dbus name on bus: {}", dbus_name);
                             return Err(RunCmdError::Timeout(
-                                srvc.service_config.exec.clone(),
+                                srvc.service_config.exec.to_string(),
                                 format!("{:?}", duration_timeout),
                             ));
                         }
                     },
                     Err(e) => {
                         return Err(RunCmdError::WaitError(
-                            srvc.service_config.exec.clone(),
+                            srvc.service_config.exec.to_string(),
                             format!("Error while waiting for dbus name: {}", e),
                         ));
                     }

@@ -338,15 +338,38 @@ pub struct ExecConfig {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CommandlinePrefix {
+    AtSign,
+    Minus,
+    Colon,
+    Plus,
+    Exclamation,
+    DoubleExclamation,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Commandline {
+    pub cmd: String,
+    pub args: Vec<String>,
+    pub prefixes: Vec<CommandlinePrefix>,
+}
+
+impl ToString for Commandline {
+    fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {
     pub restart: ServiceRestart,
     pub accept: bool,
     pub notifyaccess: NotifyKind,
-    pub exec: String,
-    pub stop: Vec<String>,
-    pub stoppost: Vec<String>,
-    pub startpre: Vec<String>,
-    pub startpost: Vec<String>,
+    pub exec: Commandline,
+    pub stop: Vec<Commandline>,
+    pub stoppost: Vec<Commandline>,
+    pub startpre: Vec<Commandline>,
+    pub startpost: Vec<Commandline>,
     pub srcv_type: ServiceType,
     pub starttimeout: Option<Timeout>,
     pub stoptimeout: Option<Timeout>,

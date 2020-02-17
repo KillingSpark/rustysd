@@ -327,22 +327,20 @@ impl Service {
 
     fn run_cmd(
         &mut self,
-        cmd_str: &str,
+        cmdline: &Commandline,
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
         run_info: ArcRuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        let split =
-            shlex::split(cmd_str).ok_or_else(|| RunCmdError::BadQuoting(cmd_str.to_owned()))?;
-        let mut cmd = Command::new(&split[0]);
-        for part in &split[1..] {
+        let mut cmd = Command::new(&cmdline.cmd);
+        for part in &cmdline.args {
             cmd.arg(part);
         }
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.stdin(Stdio::null());
-        trace!("Run {} for service: {}", cmd_str, name);
+        trace!("Run {:?} for service: {}", cmdline, name);
         let spawn_result = {
             let mut pid_table_locked = run_info.pid_table.lock().unwrap();
             let res = cmd.spawn();
@@ -356,38 +354,51 @@ impl Service {
         };
         match spawn_result {
             Ok(mut child) => {
-                trace!("Wait for {} for service: {}", cmd_str, name);
-                let wait_result: Result<(), RunCmdError> =
-                    match wait_for_helper_child(&mut child, run_info.pid_table.clone(), timeout) {
-                        WaitResult::InTime(Err(e)) => {
-                            return Err(RunCmdError::WaitError(
-                                cmd_str.to_owned(),
-                                format!("{}", e),
-                            ));
-                        }
-                        WaitResult::InTime(Ok(exitstatus)) => {
-                            if exitstatus.success() {
-                                trace!("success running {} for service: {}", cmd_str, name);
+                trace!("Wait for {:?} for service: {}", cmdline, name);
+                let wait_result: Result<(), RunCmdError> = match wait_for_helper_child(
+                    &mut child,
+                    run_info.pid_table.clone(),
+                    timeout,
+                ) {
+                    WaitResult::InTime(Err(e)) => {
+                        return Err(RunCmdError::WaitError(
+                            cmdline.to_string(),
+                            format!("{}", e),
+                        ));
+                    }
+                    WaitResult::InTime(Ok(exitstatus)) => {
+                        if exitstatus.success() {
+                            trace!("success running {:?} for service: {}", cmdline, name);
+                            Ok(())
+                        } else {
+                            if cmdline.prefixes.contains(&CommandlinePrefix::Minus) {
+                                trace!(
+                                        "Ignore error exit code: {:?} while running {:?} for service: {}",
+                                        exitstatus,
+                                        cmdline,
+                                        name
+                                    );
                                 Ok(())
                             } else {
                                 trace!(
-                                    "error exit code: {:?} while running {} for service: {}",
+                                    "Error exit code: {:?} while running {:?} for service: {}",
                                     exitstatus,
-                                    cmd_str,
+                                    cmdline,
                                     name
                                 );
-                                Err(RunCmdError::BadExitCode(cmd_str.to_owned(), exitstatus))
+                                Err(RunCmdError::BadExitCode(cmdline.to_string(), exitstatus))
                             }
                         }
-                        WaitResult::TimedOut => {
-                            trace!("Timeout running {} for service: {}", cmd_str, name);
-                            let _ = child.kill();
-                            Err(RunCmdError::Timeout(
-                                cmd_str.to_owned(),
-                                format!("Timeout ({:?}) reached", timeout),
-                            ))
-                        }
-                    };
+                    }
+                    WaitResult::TimedOut => {
+                        trace!("Timeout running {:?} for service: {}", cmdline, name);
+                        let _ = child.kill();
+                        Err(RunCmdError::Timeout(
+                            cmdline.to_string(),
+                            format!("Timeout ({:?}) reached", timeout),
+                        ))
+                    }
+                };
                 {
                     let status_table_locked = run_info.status_table.read().unwrap();
                     let status = status_table_locked.get(&id).unwrap().lock().unwrap();
@@ -414,7 +425,7 @@ impl Service {
                 wait_result
             }
             Err(e) => Err(RunCmdError::SpawnError(
-                cmd_str.to_owned(),
+                cmdline.to_string(),
                 format!("{}", e),
             )),
         }
@@ -422,7 +433,7 @@ impl Service {
 
     fn run_all_cmds(
         &mut self,
-        cmds: &Vec<String>,
+        cmds: &Vec<Commandline>,
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
