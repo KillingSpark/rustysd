@@ -189,7 +189,6 @@ Requiring small changes / additions transparent to the other modules:
 * Support the different allowed prefixed for executables in execstart(-pre/post)
 
 Unclear how much work it is:
-* prune sockets that are only pulled in  because they are referenced by sockets.target 
 * Get all the meta-targets and default dependencies right
     * Individually these are probably small parts. But as a whole task it seems like much
 
