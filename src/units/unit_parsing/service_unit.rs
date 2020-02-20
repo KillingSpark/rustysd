@@ -72,7 +72,6 @@ pub fn parse_service(
         None
     };
     let uid = uid.unwrap_or(nix::unistd::getuid());
-    trace!("UID: {:?}", uid);
 
     let gid = if let Some(group) = &service_config.exec_config.group {
         if let Ok(gid) = group.parse::<u32>() {

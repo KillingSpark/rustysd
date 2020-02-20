@@ -1,0 +1,6 @@
+[Service]
+ExecStart= ./target/debug/testservice arg1 arg2 "this is a multi word argument"
+
+[Unit]
+
+[Install]

@@ -257,7 +257,7 @@ pub fn apply_sockets_to_services(
     for sock_unit in socket_table.values_mut() {
         let mut counter = 0;
 
-        if let UnitSpecialized::Socket(sock) = &sock_unit.specialized {
+        if let UnitSpecialized::Socket(sock) = &mut sock_unit.specialized {
             trace!("Searching services for socket: {}", sock_unit.conf.name());
             for srvc_unit in service_table.values_mut() {
                 let srvc = &mut srvc_unit.specialized;
@@ -274,6 +274,7 @@ pub fn apply_sockets_to_services(
                         );
 
                         srvc.socket_names.push(sock_unit.conf.name());
+                        sock.services.push(srvc_unit.conf.name());
                         add_sock_srvc_relations(
                             srvc_unit.id,
                             &mut srvc_unit.install,
@@ -293,6 +294,7 @@ pub fn apply_sockets_to_services(
                             srvc_unit.conf.name()
                         );
                         srvc.socket_names.push(sock_unit.conf.name());
+                        sock.services.push(srvc_unit.conf.name());
                         add_sock_srvc_relations(
                             srvc_unit.id,
                             &mut srvc_unit.install,
