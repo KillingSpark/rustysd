@@ -1,0 +1,7 @@
+[Unit]
+
+[Service]
+ExecStart= /usr/bin/echo "Do not execute this shouldnt even be loaded"
+Type=oneshot
+
+[Install]
