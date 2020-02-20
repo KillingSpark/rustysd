@@ -403,8 +403,12 @@ pub fn execute_command(
                 *last_id
             };
             // get all units there are
-            let units = load_all_units(&run_info.config.unit_dirs, &mut this_id, &run_info.config.target_unit)
-                .map_err(|e| format!("Error while loading unit definitons: {:?}", e))?;
+            let units = load_all_units(
+                &run_info.config.unit_dirs,
+                &mut this_id,
+                &run_info.config.target_unit,
+            )
+            .map_err(|e| format!("Error while loading unit definitons: {:?}", e))?;
 
             // collect all names
             // TODO there should probably be a global id -> name mapping so we dont always need to lock a unit just to get the name

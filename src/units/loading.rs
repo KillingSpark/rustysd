@@ -54,7 +54,7 @@ pub fn load_all_units(
     unit_table.extend(socket_unit_table);
     unit_table.extend(target_unit_table);
     fill_dependencies(&mut unit_table);
-    
+
     prune_units(target_unit, &mut unit_table).unwrap();
     trace!("Finished pruning units");
 
@@ -90,7 +90,10 @@ pub fn load_all_units(
     Ok(unit_table)
 }
 
-fn cleanup_removed_ids(units: &mut std::collections::HashMap<UnitId, Unit>, removed_ids: &Vec<UnitId>) {
+fn cleanup_removed_ids(
+    units: &mut std::collections::HashMap<UnitId, Unit>,
+    removed_ids: &Vec<UnitId>,
+) {
     for unit in units.values_mut() {
         for id in removed_ids {
             while let Some(idx) = unit.install.after.iter().position(|el| *el == *id) {
@@ -115,12 +118,15 @@ fn cleanup_removed_ids(units: &mut std::collections::HashMap<UnitId, Unit>, remo
     }
 }
 
-fn prune_unused_sockets(sockets: &mut std::collections::HashMap<UnitId, Unit>) -> Vec<UnitId>{
+fn prune_unused_sockets(sockets: &mut std::collections::HashMap<UnitId, Unit>) -> Vec<UnitId> {
     let mut ids_to_remove = Vec::new();
     for unit in sockets.values() {
         if let UnitSpecialized::Socket(sock) = &unit.specialized {
             if sock.services.is_empty() {
-                trace!("Prune socket {} because it was not added to any service", unit.conf.name());
+                trace!(
+                    "Prune socket {} because it was not added to any service",
+                    unit.conf.name()
+                );
                 ids_to_remove.push(unit.id);
             }
         }

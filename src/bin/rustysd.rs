@@ -112,10 +112,10 @@ fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> Arc<units::Runti
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let mut first_id = 0;
-    let unit_table = units::load_all_units(&conf.unit_dirs, &mut first_id, &conf.target_unit).unwrap();
+    let unit_table =
+        units::load_all_units(&conf.unit_dirs, &mut first_id, &conf.target_unit).unwrap();
     trace!("Finished loading units");
     first_id = first_id + 1;
-    
 
     if let Err(e) = units::sanity_check_dependencies(&unit_table) {
         match e {
