@@ -1,2 +1,5 @@
 [Unit]
 Description= Target that synchronizes startup. At this point all sockets should be up
+
+[Install]
+WantedBy=default.target
