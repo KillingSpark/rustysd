@@ -261,8 +261,7 @@ fn main() {
         println!("{}", usage);
         std::process::exit(0);
     } else if let Some(unknown) = cli_args.unknown_arg {
-        println!("{}\n\nUnknown cli arg: {}", usage, unknown);
-        std::process::exit(1);
+        unrecoverable_error(format!("{}\n\nUnknown cli arg: {}", usage, unknown));
     }
 
     let (log_conf, conf) = config::load_config(&cli_args.conf_path);
