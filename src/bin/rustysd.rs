@@ -201,67 +201,49 @@ fn start_signal_handler_thread(
     handle
 }
 
+const USAGE: &'static str = "Usage: rustysd [-c | --config PATH] [-d | --dry-run] [-h | --help]";
+
 #[derive(Default)]
 struct CliArgs {
     conf_path: Option<std::path::PathBuf>,
     dry_run: bool,
     show_help: bool,
-    unknown_arg: Option<String>
+    free_args: Vec<String>
 }
 
-fn parse_args() -> CliArgs {
-    let args = std::env::args().collect::<Vec<_>>();
-    // ignore exec name
-    let args = &args[1..];
-
-    let mut cli_args = CliArgs::default();
-    let mut idx = 0;
-    while idx < args.len() {
-        match args[idx].as_str() {
-            "-c" | "--config" => {
-                if args.len() < idx {
-                    unrecoverable_error(format!("config flag set but no path given"));
-                } else {
-                    let path_str = args[idx + 1].clone();
-                    let p = std::path::PathBuf::from(path_str);
-                    if !p.exists() {
-                        unrecoverable_error(format!("config path given that does not exist"));
-                    }
-                    if !p.is_dir() {
-                        unrecoverable_error(format!("config path given that is not a directory"));
-                    }
-                    cli_args.conf_path = Some(p);
-                    idx += 2;
-                }
-            }
-            "-d" | "--dry-run" => {
-                cli_args.dry_run = true;
-                idx += 1;
-            }
-            "-h" | "--help" => {
-                cli_args.show_help = true;
-                idx += 1;
-            }
-            unknown => {
-                cli_args.unknown_arg = Some(unknown.to_string());
-                break;
-            }
-        }
-    }
-    cli_args
+fn parse_args() -> Result<CliArgs, pico_args::Error> {
+    let mut args = pico_args::Arguments::from_env();
+    Ok(CliArgs {
+        conf_path: args.opt_value_from_str(["-c", "--config"])?,
+        dry_run: args.contains(["-d", "--dry-run"]),
+        show_help: args.contains(["-h", "--help"]),
+        free_args: args.free()?,
+    })
 }
 
 fn main() {
     pid1_specific_setup();
 
-    let cli_args = parse_args();
+    let cli_args = parse_args()
+        .unwrap_or_else(|e| {
+            unrecoverable_error(e.to_string());
+            unreachable!();
+        });
 
-    let usage = "Usage: rustysd [-c | --config PATH] [-d | --dry-run] [-h | --help]";
+    if let Some(path) = &cli_args.conf_path {
+        if !path.exists() {
+            unrecoverable_error(format!("config path given that does not exist"));
+        }
+        if !path.is_dir() {
+            unrecoverable_error(format!("config path given that is not a directory"));
+        }
+    }
+
     if cli_args.show_help {
-        println!("{}", usage);
+        println!("{}", USAGE);
         std::process::exit(0);
-    } else if let Some(unknown) = cli_args.unknown_arg {
-        unrecoverable_error(format!("{}\n\nUnknown cli arg: {}", usage, unknown));
+    } else if cli_args.free_args.len() > 0 {
+        unrecoverable_error(format!("{}\n\nUnknown cli arg(s): {:?}", USAGE, cli_args.free_args));
     }
 
     let (log_conf, conf) = config::load_config(&cli_args.conf_path);
