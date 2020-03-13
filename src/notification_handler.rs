@@ -110,7 +110,7 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
-            if let Some(StdIo::Piped(r,_w)) = &srvc.stdout {
+            if let Some(StdIo::Piped(r, _w)) = &srvc.stdout {
                 map.insert(*r, id);
             }
         });
@@ -183,7 +183,7 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
-            if let Some(StdIo::Piped(r,_w)) = &srvc.stderr {
+            if let Some(StdIo::Piped(r, _w)) = &srvc.stderr {
                 map.insert(*r, id);
             }
         });

@@ -208,7 +208,7 @@ struct CliArgs {
     conf_path: Option<std::path::PathBuf>,
     dry_run: bool,
     show_help: bool,
-    free_args: Vec<String>
+    free_args: Vec<String>,
 }
 
 fn parse_args() -> Result<CliArgs, pico_args::Error> {
@@ -224,11 +224,10 @@ fn parse_args() -> Result<CliArgs, pico_args::Error> {
 fn main() {
     pid1_specific_setup();
 
-    let cli_args = parse_args()
-        .unwrap_or_else(|e| {
-            unrecoverable_error(e.to_string());
-            unreachable!();
-        });
+    let cli_args = parse_args().unwrap_or_else(|e| {
+        unrecoverable_error(e.to_string());
+        unreachable!();
+    });
 
     if let Some(path) = &cli_args.conf_path {
         if !path.exists() {
@@ -243,7 +242,10 @@ fn main() {
         println!("{}", USAGE);
         std::process::exit(0);
     } else if cli_args.free_args.len() > 0 {
-        unrecoverable_error(format!("{}\n\nUnknown cli arg(s): {:?}", USAGE, cli_args.free_args));
+        unrecoverable_error(format!(
+            "{}\n\nUnknown cli arg(s): {:?}",
+            USAGE, cli_args.free_args
+        ));
     }
 
     let (log_conf, conf) = config::load_config(&cli_args.conf_path);
