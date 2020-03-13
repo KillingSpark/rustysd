@@ -100,9 +100,26 @@ pub fn parse_unit_section(
     })
 }
 
+fn make_stdio_option(setting: &str) -> Result<StdIoOption, ParsingErrorReason> {
+    if setting.starts_with("file:") {
+        let p = setting.trim_start_matches("file:");
+        Ok(StdIoOption::File(p.into()))
+    } else if setting.starts_with("append:") {
+        let p = setting.trim_start_matches("append:");
+        Ok(StdIoOption::AppendFile(p.into()))
+    } else {
+        return Err(ParsingErrorReason::UnsupportedSetting(format!(
+            "StandardOutput: {}",
+            setting
+        )));
+    }
+}
+
 pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, ParsingErrorReason> {
     let user = section.remove("USER");
     let group = section.remove("GROUP");
+    let stdout = section.remove("STANDARDOUTPUT");
+    let stderr = section.remove("STANDARDERROR");
     let supplementary_groups = section.remove("SUPPLEMENTARYGROUPS");
 
     let user = match user {
@@ -136,6 +153,47 @@ pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, Par
             }
         }
     };
+    let stdout_path = match stdout {
+        None => None,
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                Some(vec.remove(0).1)
+            } else if vec.len() > 1 {
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "Standardoutput".into(),
+                    super::map_tupels_to_second(vec),
+                ));
+            } else {
+                None
+            }
+        }
+    };
+    let stdout_path = if let Some(p) = stdout_path {
+        Some(make_stdio_option(&p)?)
+    } else {
+        None
+    };
+
+    let stderr_path = match stderr {
+        None => None,
+        Some(mut vec) => {
+            if vec.len() == 1 {
+                Some(vec.remove(0).1)
+            } else if vec.len() > 1 {
+                return Err(ParsingErrorReason::SettingTooManyValues(
+                    "Standarderror".into(),
+                    super::map_tupels_to_second(vec),
+                ));
+            } else {
+                None
+            }
+        }
+    };
+    let stderr_path = if let Some(p) = stderr_path {
+        Some(make_stdio_option(&p)?)
+    } else {
+        None
+    };
 
     let supplementary_groups = match supplementary_groups {
         None => Vec::new(),
@@ -148,6 +206,8 @@ pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, Par
     Ok(ExecConfig {
         user,
         group,
+        stderr_path,
+        stdout_path,
         supplementary_groups,
     })
 }

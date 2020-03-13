@@ -331,9 +331,17 @@ pub enum Timeout {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub enum StdIoOption {
+    File(PathBuf),
+    AppendFile(PathBuf),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExecConfig {
     pub user: Option<String>,
     pub group: Option<String>,
+    pub stdout_path: Option<StdIoOption>,
+    pub stderr_path: Option<StdIoOption>,
     pub supplementary_groups: Vec<String>,
 }
 
