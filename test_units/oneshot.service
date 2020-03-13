@@ -1,5 +1,5 @@
 [Service]
-ExecStart= /bin/false
+ExecStart= /bin/echo "This is a log from a service"
 ExecStartPre= /bin/sleep 1
 ExecStartPost= /bin/sleep 1
 ExecStop = echo "Stop"
@@ -7,6 +7,8 @@ ExecStop = /bin/false
 ExecStopPost = echo "Post stop"
 Type= oneshot
 TimeoutStartSec= 0min 4s
+
+StandardOutput= append:./oneshot_output
 
 [Unit]
 Before= test2.service

@@ -15,12 +15,12 @@ pub fn open_all_sockets(run_info: ArcRuntimeInfo, conf: &crate::config::Config) 
         conf.notification_sockets_dir.clone(),
         unixsock,
     );
-    let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
-    accept_control_connections_tcp(
-        run_info.clone(),
-        conf.notification_sockets_dir.clone(),
-        tcpsock,
-    );
+    //let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
+    //accept_control_connections_tcp(
+    //    run_info.clone(),
+    //    conf.notification_sockets_dir.clone(),
+    //    tcpsock,
+    //);
 }
 
 #[derive(Debug)]

@@ -160,8 +160,8 @@ pub fn parse_service(
 
             notifications: None,
             notifications_path: None,
-            stdout_dup: None,
-            stderr_dup: None,
+            stdout: None,
+            stderr: None,
             notifications_buffer: String::new(),
             stdout_buffer: Vec::new(),
             stderr_buffer: Vec::new(),

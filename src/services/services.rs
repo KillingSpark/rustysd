@@ -2,6 +2,7 @@ use super::start_service::*;
 use crate::platform::EventFd;
 use crate::units::*;
 use std::io::Write;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
@@ -22,6 +23,34 @@ pub struct PlatformSpecificServiceFields {
 #[derive(Debug)]
 pub struct PlatformSpecificServiceFields {}
 
+/// This looks like std::process::Stdio but it can be some more stuff like journal or kmsg so I explicitly
+/// made a new enum here
+#[derive(Debug)]
+pub enum StdIo {
+    File(std::fs::File),
+    Piped(RawFd, RawFd),
+
+    /// just like the regular file but will always point to /dev/null
+    Null(std::fs::File),
+}
+
+impl StdIo {
+    pub fn write_fd(&self) -> RawFd {
+        match self {
+            StdIo::File(f) => f.as_raw_fd(),
+            StdIo::Null(f) => f.as_raw_fd(),
+            StdIo::Piped(_r, w) => *w,
+        }
+    }
+    pub fn read_fd(&self) -> RawFd {
+        match self {
+            StdIo::File(f) => f.as_raw_fd(),
+            StdIo::Null(f) => f.as_raw_fd(),
+            StdIo::Piped(r, _w) => *r,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
@@ -39,8 +68,8 @@ pub struct Service {
     pub notifications: Option<UnixDatagram>,
     pub notifications_path: Option<std::path::PathBuf>,
 
-    pub stdout_dup: Option<(RawFd, RawFd)>,
-    pub stderr_dup: Option<(RawFd, RawFd)>,
+    pub stdout: Option<StdIo>,
+    pub stderr: Option<StdIo>,
     pub notifications_buffer: String,
     pub stdout_buffer: Vec<u8>,
     pub stderr_buffer: Vec<u8>,
@@ -337,8 +366,26 @@ impl Service {
         for part in &cmdline.args {
             cmd.arg(part);
         }
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
+        use std::os::unix::io::FromRawFd;
+        let stdout = if let Some(stdio) = &self.stdout {
+            unsafe {
+                let duped = nix::unistd::dup(stdio.write_fd()).unwrap();
+                Stdio::from(std::fs::File::from_raw_fd(duped))
+            }
+        } else {
+            Stdio::piped()
+        };
+        let stderr = if let Some(stdio) = &self.stderr {
+            unsafe {
+                let duped = nix::unistd::dup(stdio.write_fd()).unwrap();
+                Stdio::from(std::fs::File::from_raw_fd(duped))
+            }
+        } else {
+            Stdio::piped()
+        };
+
+        cmd.stdout(stdout);
+        cmd.stderr(stderr);
         cmd.stdin(Stdio::null());
         trace!("Run {:?} for service: {}", cmdline, name);
         let spawn_result = {

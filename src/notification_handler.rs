@@ -5,6 +5,7 @@
 use crate::platform::reset_event_fd;
 use crate::platform::EventFd;
 use crate::services::Service;
+use crate::services::StdIo;
 use crate::units::*;
 use std::{collections::HashMap, os::unix::io::AsRawFd};
 
@@ -109,8 +110,8 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
-            if let Some(fd) = &srvc.stdout_dup {
-                map.insert(fd.0, id);
+            if let Some(StdIo::Piped(r,_w)) = &srvc.stdout {
+                map.insert(*r, id);
             }
         });
 
@@ -182,8 +183,8 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
-            if let Some(fd) = &srvc.stderr_dup {
-                map.insert(fd.0, id);
+            if let Some(StdIo::Piped(r,_w)) = &srvc.stderr {
+                map.insert(*r, id);
             }
         });
 

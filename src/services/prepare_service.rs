@@ -1,6 +1,35 @@
+use super::StdIo;
 use crate::services::Service;
+use crate::units::StdIoOption;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixDatagram;
+
+fn open_stdio(setting: &Option<StdIoOption>) -> Result<StdIo, String> {
+    match setting {
+        Some(StdIoOption::File(path)) => {
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .read(true)
+                .open(path)
+                .map_err(|e| format!("Error opening file: {:?}: {}", path, e))?;
+            Ok(StdIo::File(file))
+        }
+        Some(StdIoOption::AppendFile(path)) => {
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .read(true)
+                .open(path)
+                .map_err(|e| format!("Error opening file: {:?}: {}", path, e))?;
+            Ok(StdIo::File(file))
+        }
+        None => {
+            let (r, w) = nix::unistd::pipe().unwrap();
+            Ok(super::StdIo::Piped(r, w))
+        }
+    }
+}
 
 pub fn prepare_service(
     srvc: &mut Service,
@@ -37,13 +66,11 @@ pub fn prepare_service(
         srvc.notifications = Some(stream);
     }
 
-    if srvc.stdout_dup.is_none() {
-        let (r, w) = nix::unistd::pipe().unwrap();
-        srvc.stdout_dup = Some((r, w));
+    if srvc.stdout.is_none() {
+        srvc.stdout = Some(open_stdio(&srvc.service_config.exec_config.stdout_path)?);
     }
-    if srvc.stderr_dup.is_none() {
-        let (r, w) = nix::unistd::pipe().unwrap();
-        srvc.stderr_dup = Some((r, w));
+    if srvc.stderr.is_none() {
+        srvc.stderr = Some(open_stdio(&srvc.service_config.exec_config.stderr_path)?);
     }
 
     srvc.notifications_path = Some(notify_socket_env_var);

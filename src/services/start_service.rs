@@ -55,15 +55,15 @@ fn start_service_with_filedescriptors(
                 }
             };
             let stdout = {
-                if let Some(rwpair) = &srvc.stdout_dup {
-                    rwpair.1
+                if let Some(stdio) = &srvc.stdout {
+                    stdio.write_fd()
                 } else {
                     unreachable!();
                 }
             };
             let stderr = {
-                if let Some(rwpair) = &srvc.stderr_dup {
-                    rwpair.1
+                if let Some(stdio) = &srvc.stderr {
+                    stdio.write_fd()
                 } else {
                     unreachable!();
                 }
