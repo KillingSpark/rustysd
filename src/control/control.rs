@@ -223,21 +223,16 @@ pub fn format_service(srvc_unit: &Unit, status: UnitStatus) -> Value {
 }
 
 use std::sync::{Arc, Mutex};
-fn find_unit_with_name(unit_name: &str, unit_table_locked: &UnitTable) -> Option<Arc<Mutex<Unit>>> {
+fn find_units_with_name(unit_name: &str, unit_table_locked: &UnitTable) -> Vec<Arc<Mutex<Unit>>> {
     trace!("Find unit for name: {}", unit_name);
-    let mut srvc: Vec<_> = unit_table_locked
+    unit_table_locked
         .values()
         .filter(|unit| {
             let name = unit.lock().unwrap().conf.name();
-            unit_name.starts_with(&name) && unit.lock().unwrap().is_service()
+            name.starts_with(&unit_name)
         })
         .cloned()
-        .collect();
-    if srvc.len() != 1 {
-        None
-    } else {
-        Some(srvc.remove(0))
-    }
+        .collect()
 }
 
 // TODO make this some kind of regex pattern matching
@@ -250,7 +245,7 @@ fn find_units_with_pattern(
         .values()
         .filter(|unit| {
             let name = unit.lock().unwrap().conf.name();
-            name_pattern.starts_with(&name) && unit.lock().unwrap().is_service()
+            name.starts_with(&name_pattern)
         })
         .cloned()
         .collect();
@@ -268,12 +263,16 @@ pub fn execute_command(
             crate::shutdown::shutdown_sequence(run_info);
         }
         Command::Restart(unit_name) => {
-            let id = if let Some(unit) =
-                find_unit_with_name(&unit_name, &*run_info.unit_table.read().unwrap())
-            {
-                unit.lock().unwrap().id
-            } else {
-                return Err(format!("No unit found with name: {}", unit_name));
+            let id = {
+                let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
+                if units.len() > 1 {
+                    return Err(format!("More than one unit found with name: {}", unit_name));
+                }
+                if units.len() == 0 {
+                    return Err(format!("No unit found with name: {}", unit_name));
+                }
+                let x = units[0].lock().unwrap().id;
+                x
             };
 
             crate::units::reactivate_unit(
@@ -285,12 +284,16 @@ pub fn execute_command(
             .map_err(|e| format!("{}", e))?;
         }
         Command::Stop(unit_name) => {
-            let id = if let Some(unit) =
-                find_unit_with_name(&unit_name, &*run_info.unit_table.read().unwrap())
-            {
-                unit.lock().unwrap().id
-            } else {
-                return Err(format!("No unit found with name: {}", unit_name));
+            let id = {
+                let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
+                if units.len() > 1 {
+                    return Err(format!("More than one unit found with name: {}", unit_name));
+                }
+                if units.len() == 0 {
+                    return Err(format!("No unit found with name: {}", unit_name));
+                }
+                let x = units[0].lock().unwrap().id;
+                x
             };
 
             crate::units::deactivate_unit_recursive(id, true, run_info)
