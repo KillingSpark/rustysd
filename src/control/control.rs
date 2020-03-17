@@ -266,7 +266,14 @@ pub fn execute_command(
             let id = {
                 let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
                 if units.len() > 1 {
-                    return Err(format!("More than one unit found with name: {}", unit_name));
+                    let names: Vec<_> = units
+                        .iter()
+                        .map(|unit| unit.lock().unwrap().conf.name())
+                        .collect();
+                    return Err(format!(
+                        "More than one unit found with name: {}: {:?}",
+                        unit_name, names
+                    ));
                 }
                 if units.len() == 0 {
                     return Err(format!("No unit found with name: {}", unit_name));
@@ -287,7 +294,14 @@ pub fn execute_command(
             let id = {
                 let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
                 if units.len() > 1 {
-                    return Err(format!("More than one unit found with name: {}", unit_name));
+                    let names: Vec<_> = units
+                        .iter()
+                        .map(|unit| unit.lock().unwrap().conf.name())
+                        .collect();
+                    return Err(format!(
+                        "More than one unit found with name: {}: {:?}",
+                        unit_name, names
+                    ));
                 }
                 if units.len() == 0 {
                     return Err(format!("No unit found with name: {}", unit_name));
