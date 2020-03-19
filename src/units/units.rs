@@ -107,7 +107,7 @@ impl UnitStatus {
         match self {
             UnitStatus::StoppedFinal(_) => true,
             UnitStatus::Stopped => true,
-            _ => false
+            _ => false,
         }
     }
 }
