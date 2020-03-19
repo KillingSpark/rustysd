@@ -30,6 +30,7 @@ pub enum Command {
     Restart(String),
     LoadNew(Vec<String>),
     LoadAllNew,
+    Remove(String),
     Stop(String),
     Shutdown,
 }
@@ -72,6 +73,24 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
                 }
             };
             Command::Restart(name)
+        }
+        "remove" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => s.clone(),
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => {
+                    return Err(ParseError::ParamsInvalid(format!(
+                        "Params must be a single string"
+                    )))
+                }
+            };
+            Command::Remove(name)
         }
         "stop" => {
             let name = match &call.params {
@@ -289,6 +308,29 @@ pub fn execute_command(
                 std::sync::Arc::new(Vec::new()),
             )
             .map_err(|e| format!("{}", e))?;
+        }
+        Command::Remove(unit_name) => {
+            let id = {
+                let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
+                if units.len() > 1 {
+                    let names: Vec<_> = units
+                        .iter()
+                        .map(|unit| unit.lock().unwrap().conf.name())
+                        .collect();
+                    return Err(format!(
+                        "More than one unit found with name: {}: {:?}",
+                        unit_name, names
+                    ));
+                }
+                if units.len() == 0 {
+                    return Err(format!("No unit found with name: {}", unit_name));
+                }
+                let x = units[0].lock().unwrap().id;
+                x
+            };
+
+            crate::units::remove_unit_with_dependencies(id, &run_info)
+                .map_err(|e| format!("{}", e))?;
         }
         Command::Stop(unit_name) => {
             let id = {

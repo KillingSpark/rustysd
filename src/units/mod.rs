@@ -18,3 +18,4 @@ pub use loading::load_all_units;
 pub use sanity_check::*;
 pub use unit_parsing::*;
 pub use units::*;
+pub use remove::*;
