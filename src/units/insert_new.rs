@@ -79,22 +79,6 @@ pub fn load_new_unit(
     }
 }
 
-pub fn collect_names_needed(new_unit: &units::Unit, names_needed: &mut Vec<String>) {
-    names_needed.extend(new_unit.conf.after.iter().cloned());
-    names_needed.extend(new_unit.conf.before.iter().cloned());
-
-    if let Some(conf) = &new_unit.install.install_config {
-        names_needed.extend(conf.required_by.iter().cloned());
-        names_needed.extend(conf.wanted_by.iter().cloned());
-    }
-    if let units::UnitSpecialized::Socket(sock) = &new_unit.specialized {
-        names_needed.extend(sock.services.iter().cloned());
-    }
-    if let units::UnitSpecialized::Service(srvc) = &new_unit.specialized {
-        names_needed.extend(srvc.service_config.sockets.iter().cloned());
-    }
-}
-
 // check that all names referenced in the new units exist either in the old units
 // or in the new units
 fn check_all_names_exist(
@@ -103,7 +87,7 @@ fn check_all_names_exist(
 ) -> Result<(), String> {
     let mut names_needed = Vec::new();
     for new_unit in new_units.values() {
-        collect_names_needed(new_unit, &mut names_needed);
+        crate::units::collect_names_needed(new_unit, &mut names_needed);
     }
     let mut names_needed: std::collections::HashMap<_, _> =
         names_needed.iter().map(|name| (name, ())).collect();

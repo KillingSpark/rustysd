@@ -254,6 +254,22 @@ impl Unit {
     }
 }
 
+pub fn collect_names_needed(new_unit: &units::Unit, names_needed: &mut Vec<String>) {
+    names_needed.extend(new_unit.conf.after.iter().cloned());
+    names_needed.extend(new_unit.conf.before.iter().cloned());
+
+    if let Some(conf) = &new_unit.install.install_config {
+        names_needed.extend(conf.required_by.iter().cloned());
+        names_needed.extend(conf.wanted_by.iter().cloned());
+    }
+    if let units::UnitSpecialized::Socket(sock) = &new_unit.specialized {
+        names_needed.extend(sock.services.iter().cloned());
+    }
+    if let units::UnitSpecialized::Service(srvc) = &new_unit.specialized {
+        names_needed.extend(srvc.service_config.sockets.iter().cloned());
+    }
+}
+
 #[derive(Debug)]
 pub struct UnitConfig {
     pub filepath: PathBuf,
