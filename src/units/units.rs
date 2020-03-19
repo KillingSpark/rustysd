@@ -102,6 +102,16 @@ pub enum UnitStatus {
     StoppedFinal(String),
 }
 
+impl UnitStatus {
+    pub fn is_stopped(&self) -> bool {
+        match self {
+            UnitStatus::StoppedFinal(_) => true,
+            UnitStatus::Stopped => true,
+            _ => false
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum UnitSpecialized {
     Socket(Socket),
@@ -109,7 +119,7 @@ pub enum UnitSpecialized {
     Target,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 /// These vecs are meant like this:
 /// Install::after: this unit should start after these units have been started
 /// Install::before: this unit should start before these units have been started
@@ -296,7 +306,7 @@ impl fmt::Debug for SocketConfig {
 
 unsafe impl Send for SocketConfig {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InstallConfig {
     pub wanted_by: Vec<String>,
     pub required_by: Vec<String>,

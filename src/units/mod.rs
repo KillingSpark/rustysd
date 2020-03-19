@@ -5,6 +5,7 @@ mod deactivate;
 mod dependency_resolving;
 mod insert_new;
 mod loading;
+mod remove;
 mod sanity_check;
 mod unit_parsing;
 mod units;
