@@ -684,15 +684,15 @@ This document is meant as a simple way of checking whether all features you need
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#StandardOutput=">StandardOutput=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27StandardOutput%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Standardoutput can be either handled by rustysds normal logging or be redirected to a file, either write or append. Other modes are not yet supported.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#StandardError=">StandardError=</a></td>
-  <td>❌</td>
+  <td>❓</td>
   <td><a href="https://github.com/search?q=%27StandardError%27+repo%3AKillingSpark%2Frustysd+language%3ARust&type=Code">Search</a></td>
-  <td></td>
+  <td>Standarderror can be either handled by rustysds normal logging or be redirected to a file, either write or append. Other modes are not yet supported.</td>
 </tr>
 <tr>
   <td><a href="https://www.freedesktop.org/software/systemd/man/systemd.exec.html#StandardInputText=">StandardInputText=</a></td>

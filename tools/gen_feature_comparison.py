@@ -66,6 +66,8 @@ SUPPORTED_FEATURES = {
     "User": {"icon": ICON_QMARK, "text": "The user id can be set for starting services. Currently only done for the main executable"},
     "Group": {"icon": ICON_QMARK, "text": "The group id can be set for starting services. Currently only done for the main executable"},
     "SupplementaryGroups": {"icon": ICON_QMARK, "text": "The supplementary group ids can be set for starting services. Currently only done for the main executable"},
+    "StandardOutput": {"icon": ICON_QMARK, "text": "Standardoutput can be either handled by rustysds normal logging or be redirected to a file, either write or append. Other modes are not yet supported."},
+    "StandardError": {"icon": ICON_QMARK, "text": "Standarderror can be either handled by rustysds normal logging or be redirected to a file, either write or append. Other modes are not yet supported."},
 }
 
 def main():
