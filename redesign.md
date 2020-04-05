@@ -90,3 +90,16 @@ Events are one of these:
 
 Initially rustysd has a set of inactive units. Then a command will be emulated that starts the configured target unit (default.target in most cases).
 This will trigger a recursive (and where possible parallel!) startup of all units that should be started to reach that target.
+
+### Fork and exec services
+The whole handling of services in rustysd as a parent-process is pretty solid. 
+
+There is some work done in the child process before execing, which is probably not allowed directly after forking. The process after forking needs to 
+only call async-signal-safe functions ([see here](http://man7.org/linux/man-pages/man7/signal-safety.7.html)). I am pretty sure the current implementation 
+violates this.
+
+So we need to either:
+1. provide another binary that does all necessary setup + execing again
+1. have a cli flag for rustysd that tells it it is in child mode an do the necessary setup + execing again
+
+Either way a chain of two execs needs to happen to make sure the environment is created for the service executable like systemd defines it.
