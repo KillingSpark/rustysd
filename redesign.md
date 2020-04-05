@@ -37,11 +37,12 @@ The Unit structures need refactoring. The goal should look like this:
     * RwLock around the unit status
 
 The status needs it's own RwLock so other threads can check the status of the unit while it is being started/stopped. Else checking of a units status 
-can be blocked by (for example) long running ExecPreStart processes. 
+can be blocked by (for example) long running ExecPreStart processes. This needs special care to work properly without deadlocks though. See the
+`Locking` paragraph.
+
 
 The unitset exposes functions to start/stop/add/remove units which deal with the whole dependency walking. The units themselves will only deal with their
-own stuff. E.g. when a service unit gets told to start it starts, without checking dependencies again. This needs special care to work properly though. See the
-`Locking` paragraph.
+own stuff. E.g. when a service unit gets told to start it starts, without checking dependencies again.
 
 To start a unit only the Immutable config and the mutable state are necessary (additionally the fdstore is necessary too).
 
@@ -54,26 +55,15 @@ To change the status of a unit (start/stop)
 1. the mutable state needs to be locked write()
 1. the status needs sometimes be locked write() to update it
 
-The last two need special care so the status always represents the current status of the unit. If the mutable state is to be locked write() the following
-steps need to be followed:
-1. Lock the status write()
-1. check that nothing else is currently working on the unit (e.g. status == Status::Starting)
-    1. If something else is currently working on it stop whetever you tried to do with an appropriate error or try again at a lter point 
-        (maybe there should be a condvar for each unit that can be waited on, which is signaled when the unit goes from starting -> started?)
-    1. If nothing is currently working on the unit and the status is the expected one (stopping a unit needs it to be in the status started) go 
-        forward with whatever you wanted to do
-1. update the status to the appropiate status that signals that the unit is in the process of changing its status (e.g. status = Status::Stopping)
-1. DROP THE STATUS LOCK HERE
-1. Lock the mutable state write() and proceed with your operation
+Only lock them in this order! The unitset has to be locked to get to the two others, which is ensured by the type system. The other two
+need attention while writing code.
 
-Once the mutable status is locked write() the status lock can be reaquired freely to update the status to one that signals the unit os no longer beeing worked on.
-
-If the status got updated after the unit is locked this bad scenario could happen:
-1. Thread 1 locks unit A to stop it
-1. Thread 2 checks status to check if it is ok to start unit B
-1. Thread 3 updates status of A to stopping
-
-Now the unit B was started even though unit A was stopped, which should not happen if B requires A.
+Generally it should work like this:
+1. lock mutable state
+1. lock status, update, unlock status
+1. check all preconditions and either
+    1. proceed with updated status
+    1. reset status and stop
 
 #### Changing the unit set (adding / removing units)
 To change the set of units the unitset needs to be locked write() which means while this runs no changes to units may happen.
