@@ -80,11 +80,13 @@ To change the set of units the unitset needs to be locked write() which means wh
 This sounds a bit limiting but it is what is needed to reliably answer the question 'is it currently legal to remove this set of units'.
 
 ### Events
-Events are what rustysd should work on. Currently it only does so after the initial startup, which is bad because it duplicates a lot of code.
+Events are what rustysd should work on. Currently it only does so after the initial startup, which is bad because it duplicates a lot of code. And 
+only the intial startup does actually start units in parallel.
 
 Events are one of these:
 1. A unix signal was received
 1. A command was sent over the control interface to stop/start/add/remove units
+1. A socket of a service that was currently waiting for socket-activation was activated
 
 Initially rustysd has a set of inactive units. Then a command will be emulated that starts the configured target unit (default.target in most cases).
-This will trigger a recursive startup of all units that should be started.
+This will trigger a recursive (and where possible parallel!) startup of all units that should be started to reach that target.
