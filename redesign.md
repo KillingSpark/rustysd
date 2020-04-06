@@ -23,6 +23,29 @@ Things that I will probably keep conceptually:
 Things that likely will change:
 1. Dont use u64 for IDs. Just use the names of the units, those have to be unique anyways. And the performance of comparing IDs shouldn't really matter. This is 
     an obvious case of premature optimiziation that made the code and tracing unnecessarily weird.
+1. The UnitStatus should be refactored into multiple enums to cleanly modle the reasons why a unit is currently not running
+    1. NeverStarted (Status after the unit has been loaded from the configs)
+    1. Starting (In the process of being started. Either Started or Stopping afterwards)
+    1. Started (The unit was started without errors)
+    1. Stopping (The unit is being stopped because either:)
+        * A stop command was issued
+        * A unit this unit requires was stopped somehow
+        * The services main process exited
+    1. Stopped (The unit has been stopped in some way) 
+        1. The reason should be represented with it's own enum:
+            1. Unexpected (Only possible for services, when the main process exited for a reason outside of rustysd
+                Units in this state might be eligible for an automatic restart)
+            1. Expected (Either this unit was stopped directly or a required unit was stopped)
+        1. There might have occured an error while starting
+            1. Clean
+            1. PreStartError
+            1. StartError
+            1. PostStartError
+        1. There might have occured an error while stopping
+            1. Clean
+            1. StopError
+            1. PostStopError
+
 
 ## The new design
 The Unit structures need refactoring. The goal should look like this:
