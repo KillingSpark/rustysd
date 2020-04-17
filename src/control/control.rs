@@ -184,7 +184,7 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
 
 pub fn format_socket(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+    map.insert("Name".into(), Value::String(socket_unit.id.name));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
 
     if let UnitSpecialized::Socket(sock) = &socket_unit.specialized {
@@ -208,14 +208,14 @@ pub fn format_socket(socket_unit: &Unit, status: UnitStatus) -> Value {
 
 pub fn format_target(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+    map.insert("Name".into(), Value::String(socket_unit.id.name));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
     Value::Object(map)
 }
 
 pub fn format_service(srvc_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(srvc_unit.conf.name()));
+    map.insert("Name".into(), Value::String(srvc_unit.id.name));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
     if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
         map.insert(
@@ -247,7 +247,7 @@ fn find_units_with_name(unit_name: &str, unit_table_locked: &UnitTable) -> Vec<A
     unit_table_locked
         .values()
         .filter(|unit| {
-            let name = unit.lock().unwrap().conf.name();
+            let name = unit.lock().unwrap().id.name;
             name.starts_with(&unit_name)
         })
         .cloned()
@@ -263,7 +263,7 @@ fn find_units_with_pattern(
     let units: Vec<_> = unit_table_locked
         .values()
         .filter(|unit| {
-            let name = unit.lock().unwrap().conf.name();
+            let name = unit.lock().unwrap().id.name;
             name.starts_with(&name_pattern)
         })
         .cloned()
@@ -287,7 +287,7 @@ pub fn execute_command(
                 if units.len() > 1 {
                     let names: Vec<_> = units
                         .iter()
-                        .map(|unit| unit.lock().unwrap().conf.name())
+                        .map(|unit| unit.lock().unwrap().id.name)
                         .collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
@@ -315,7 +315,7 @@ pub fn execute_command(
                 if units.len() > 1 {
                     let names: Vec<_> = units
                         .iter()
-                        .map(|unit| unit.lock().unwrap().conf.name())
+                        .map(|unit| unit.lock().unwrap().id.name)
                         .collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
@@ -338,7 +338,7 @@ pub fn execute_command(
                 if units.len() > 1 {
                     let names: Vec<_> = units
                         .iter()
-                        .map(|unit| unit.lock().unwrap().conf.name())
+                        .map(|unit| unit.lock().unwrap().id.name)
                         .collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
@@ -438,7 +438,7 @@ pub fn execute_command(
                     result_vec
                         .as_array_mut()
                         .unwrap()
-                        .push(Value::String(unit_locked.conf.name()));
+                        .push(Value::String(unit_locked.id.name));
                 }
             }
         }
@@ -475,7 +475,7 @@ pub fn execute_command(
                 let unit_table_locked = &*run_info.unit_table.read().unwrap();
                 unit_table_locked
                     .values()
-                    .map(|unit| unit.lock().unwrap().conf.name())
+                    .map(|unit| unit.lock().unwrap().id.name)
                     .collect::<Vec<_>>()
             };
 
@@ -484,10 +484,10 @@ pub fn execute_command(
             let mut new_units_names = Vec::new();
             let mut new_units = std::collections::HashMap::new();
             for (id, unit) in units {
-                if existing_names.contains(&unit.conf.name()) {
-                    ignored_units_names.push(Value::String(unit.conf.name()));
+                if existing_names.contains(&unit.id.name) {
+                    ignored_units_names.push(Value::String(unit.id.name));
                 } else {
-                    new_units_names.push(Value::String(unit.conf.name()));
+                    new_units_names.push(Value::String(unit.id.name));
                     new_units.insert(id, unit);
                 }
             }

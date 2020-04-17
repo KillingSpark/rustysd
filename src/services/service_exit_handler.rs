@@ -112,7 +112,7 @@ pub fn service_exit_handler(
         let unit_locked = &mut *unit.lock().unwrap();
         if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
             if srvc.service_config.srcv_type == ServiceType::OneShot {
-                srvc.kill_all_remaining_processes(&unit_locked.conf.name());
+                srvc.kill_all_remaining_processes(&unit_locked.id.name);
                 return Ok(());
             }
         }
@@ -121,12 +121,12 @@ pub fn service_exit_handler(
     trace!("Check if we want to restart the unit");
     let (name, sockets, restart_unit) = {
         let unit_locked = &mut *unit.lock().unwrap();
-        let name = unit_locked.conf.name();
+        let name = unit_locked.id.name;
         if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
             trace!(
                 "Service with id: {:?}, name: {} pid: {} exited with: {:?}",
                 srvc_id,
-                unit_locked.conf.name(),
+                unit_locked.id.name,
                 pid,
                 code
             );
@@ -157,7 +157,7 @@ pub fn service_exit_handler(
             // tell socket activation to listen to these sockets again
             for unit in run_info.unit_table.read().unwrap().values() {
                 let mut unit_locked = unit.lock().unwrap();
-                if sockets.contains(&unit_locked.conf.name()) {
+                if sockets.contains(&unit_locked.id.name) {
                     if let UnitSpecialized::Socket(sock) = &mut unit_locked.specialized {
                         sock.activated = false;
                     }

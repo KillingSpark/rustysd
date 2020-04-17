@@ -22,7 +22,7 @@ pub fn start_socketactivation_thread(
                         let socket_name = {
                             let sock_unit = unit_table_locked.get(&socket_id).unwrap();
                             let sock_unit_locked = sock_unit.lock().unwrap();
-                            sock_unit_locked.conf.name()
+                            sock_unit_locked.id.name
                         };
 
                         let mut srvc_unit_id = None;
@@ -35,7 +35,7 @@ pub fn start_socketactivation_thread(
                                     srvc_unit_id = Some(unit_locked.id);
                                     trace!(
                                         "Start service {} by socket activation",
-                                        unit_locked.conf.name()
+                                        unit_locked.id.name
                                     );
                                 }
                             }

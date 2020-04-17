@@ -163,7 +163,7 @@ pub fn activate_unit(
     trace!("Lock unit: {}", id_to_start);
     let mut unit_locked = unit.lock().unwrap();
     trace!("Locked unit: {}", id_to_start);
-    let name = unit_locked.conf.name();
+    let name = unit_locked.id.name;
 
     let status_table_locked = run_info.status_table.read().unwrap();
 
@@ -193,7 +193,7 @@ pub fn activate_unit(
     if !unstarted_deps.is_empty() {
         trace!(
             "Unit: {} ignores activation. Not all dependencies have been started (still waiting for: {:?})",
-            unit_locked.conf.name(),
+            unit_locked.id.name,
             unstarted_deps,
         );
         return Ok(StartResult::WaitForDependencies);
@@ -214,7 +214,7 @@ pub fn activate_unit(
         if wait_for_socket_act && !needs_intial_run {
             trace!(
                 "Don't activate Unit: {:?}. Has status: {:?}",
-                unit_locked.conf.name(),
+                unit_locked.id.name,
                 *status_locked
             );
             return Ok(StartResult::WaitForDependencies);
@@ -262,7 +262,7 @@ pub fn activate_units(
         let unit_locked = unit.lock().unwrap();
         if unit_locked.install.after.is_empty() {
             root_units.push(*id);
-            trace!("Root unit: {}", unit_locked.conf.name());
+            trace!("Root unit: {}", unit_locked.id.name);
         }
     }
 

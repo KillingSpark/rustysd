@@ -35,12 +35,12 @@ fn get_next_service_to_shutdown(
             })
             .collect::<Vec<_>>();
         if kill_before.is_empty() {
-            trace!("Chose unit: {}", unit_locked.conf.name());
+            trace!("Chose unit: {}", unit_locked.id.name);
             return Some(unit_locked.id);
         } else {
             trace!(
                 "Dont kill service {} yet. These IDs depend on it: {:?}",
-                unit_locked.conf.name(),
+                unit_locked.id.name,
                 kill_before
             );
         }
@@ -55,17 +55,17 @@ fn shutdown_unit(unit_locked: &mut Unit, run_info: ArcRuntimeInfo) {
             Ok(lock) => lock,
             Err(err) => err.into_inner(),
         };
-        trace!("Set unit status: {}", unit_locked.conf.name());
+        trace!("Set unit status: {}", unit_locked.id.name);
         let status = status_table_locked.get(&unit_locked.id).unwrap();
         let mut status_locked = status.lock().unwrap();
         *status_locked = UnitStatus::Stopping;
     }
     match &mut unit_locked.specialized {
         UnitSpecialized::Service(srvc) => {
-            let kill_res = srvc.kill(unit_locked.id, &unit_locked.conf.name(), run_info.clone());
+            let kill_res = srvc.kill(unit_locked.id, &unit_locked.id.name, run_info.clone());
             match kill_res {
                 Ok(()) => {
-                    trace!("Killed service unit: {}", unit_locked.conf.name());
+                    trace!("Killed service unit: {}", unit_locked.id.name);
                 }
                 Err(e) => error!("{}", e),
             }
@@ -74,12 +74,12 @@ fn shutdown_unit(unit_locked: &mut Unit, run_info: ArcRuntimeInfo) {
                     Ok(()) => {
                         trace!(
                             "Closed notification socket for service unit: {}",
-                            unit_locked.conf.name()
+                            unit_locked.id.name
                         );
                     }
                     Err(e) => error!(
                         "Error closing notification socket for service unit {}: {}",
-                        unit_locked.conf.name(),
+                        unit_locked.id.name,
                         e
                     ),
                 }
@@ -91,12 +91,12 @@ fn shutdown_unit(unit_locked: &mut Unit, run_info: ArcRuntimeInfo) {
                         Ok(()) => {
                             trace!(
                                 "Removed notification socket for service unit: {}",
-                                unit_locked.conf.name()
+                                unit_locked.id.name
                             );
                         }
                         Err(e) => error!(
                             "Error removing notification socket for service unit {}: {}",
-                            unit_locked.conf.name(),
+                            unit_locked.id.name,
                             e
                         ),
                     }
@@ -104,15 +104,15 @@ fn shutdown_unit(unit_locked: &mut Unit, run_info: ArcRuntimeInfo) {
             }
         }
         UnitSpecialized::Socket(sock) => {
-            trace!("Close socket unit: {}", unit_locked.conf.name());
+            trace!("Close socket unit: {}", unit_locked.id.name);
             match sock.close_all(
-                unit_locked.conf.name(),
+                unit_locked.id.name,
                 &mut *run_info.fd_store.write().unwrap(),
             ) {
                 Err(e) => error!("Error while closing sockets: {}", e),
                 Ok(()) => {}
             }
-            trace!("Closed socket unit: {}", unit_locked.conf.name());
+            trace!("Closed socket unit: {}", unit_locked.id.name);
         }
         UnitSpecialized::Target => {
             // Nothing to do
@@ -124,7 +124,7 @@ fn shutdown_unit(unit_locked: &mut Unit, run_info: ArcRuntimeInfo) {
             Ok(lock) => lock,
             Err(err) => err.into_inner(),
         };
-        trace!("Set unit status: {}", unit_locked.conf.name());
+        trace!("Set unit status: {}", unit_locked.id.name);
         let status = status_table_locked.get(&unit_locked.id).unwrap();
         let mut status_locked = status.lock().unwrap();
         *status_locked = UnitStatus::StoppedFinal("Rustysd shutdown".into());

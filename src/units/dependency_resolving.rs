@@ -11,7 +11,7 @@ pub fn prune_units(
 ) -> Result<(), String> {
     let mut ids_to_keep = Vec::new();
     let startunit = unit_table.values().fold(None, |mut result, unit| {
-        if unit.conf.name() == target_unit_name {
+        if unit.id.name == target_unit_name {
             result = Some(unit.id);
         }
         result
@@ -32,7 +32,7 @@ pub fn prune_units(
     }
     for id in &ids_to_remove {
         let unit = unit_table.remove(id).unwrap();
-        trace!("Pruning unit: {}", unit.conf.name());
+        trace!("Pruning unit: {}", unit.id.name);
     }
 
     add_implicit_before_after(unit_table);
@@ -130,7 +130,7 @@ pub fn add_implicit_before_after(units: &mut HashMap<UnitId, Unit>) {
     let mut name_to_id = HashMap::new();
 
     for (id, unit) in &*units {
-        let name = unit.conf.name();
+        let name = unit.id.name;
         name_to_id.insert(name, *id);
     }
 
@@ -166,7 +166,7 @@ pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
     let mut name_to_id = HashMap::new();
 
     for (id, unit) in &*units {
-        let name = unit.conf.name();
+        let name = unit.id.name;
         name_to_id.insert(name, *id);
     }
 
@@ -258,23 +258,23 @@ pub fn apply_sockets_to_services(
         let mut counter = 0;
 
         if let UnitSpecialized::Socket(sock) = &mut sock_unit.specialized {
-            trace!("Searching services for socket: {}", sock_unit.conf.name());
+            trace!("Searching services for socket: {}", sock_unit.id.name);
             for srvc_unit in service_table.values_mut() {
                 let srvc = &mut srvc_unit.specialized;
                 if let UnitSpecialized::Service(srvc) = srvc {
                     // add sockets for services with the exact same name
                     if (srvc_unit.conf.name_without_suffix()
                         == sock_unit.conf.name_without_suffix())
-                        && !srvc.socket_names.contains(&sock_unit.conf.name())
+                        && !srvc.socket_names.contains(&sock_unit.id.name)
                     {
                         trace!(
                             "add socket: {} to service: {}",
-                            sock_unit.conf.name(),
-                            srvc_unit.conf.name()
+                            sock_unit.id.name,
+                            srvc_unit.id.name
                         );
 
-                        srvc.socket_names.push(sock_unit.conf.name());
-                        sock.services.push(srvc_unit.conf.name());
+                        srvc.socket_names.push(sock_unit.id.name);
+                        sock.services.push(srvc_unit.id.name);
                         add_sock_srvc_relations(
                             srvc_unit.id,
                             &mut srvc_unit.install,
@@ -285,16 +285,16 @@ pub fn apply_sockets_to_services(
                     }
 
                     // add sockets to services that specify that the socket belongs to them
-                    if srvc.service_config.sockets.contains(&sock_unit.conf.name())
-                        && !srvc.socket_names.contains(&sock_unit.conf.name())
+                    if srvc.service_config.sockets.contains(&sock_unit.id.name)
+                        && !srvc.socket_names.contains(&sock_unit.id.name)
                     {
                         trace!(
                             "add socket: {} to service: {}",
-                            sock_unit.conf.name(),
-                            srvc_unit.conf.name()
+                            sock_unit.id.name,
+                            srvc_unit.id.name
                         );
-                        srvc.socket_names.push(sock_unit.conf.name());
-                        sock.services.push(srvc_unit.conf.name());
+                        srvc.socket_names.push(sock_unit.id.name);
+                        sock.services.push(srvc_unit.id.name);
                         add_sock_srvc_relations(
                             srvc_unit.id,
                             &mut srvc_unit.install,
@@ -311,16 +311,16 @@ pub fn apply_sockets_to_services(
                 for srvc_unit in service_table.values_mut() {
                     let srvc = &mut srvc_unit.specialized;
                     if let UnitSpecialized::Service(srvc) = srvc {
-                        if (*srvc_name == srvc_unit.conf.name())
-                            && !srvc.socket_names.contains(&sock_unit.conf.name())
+                        if (*srvc_name == srvc_unit.id.name)
+                            && !srvc.socket_names.contains(&sock_unit.id.name)
                         {
                             trace!(
                                 "add socket: {} to service: {}",
-                                sock_unit.conf.name(),
-                                srvc_unit.conf.name()
+                                sock_unit.id.name,
+                                srvc_unit.id.name
                             );
 
-                            srvc.socket_names.push(sock_unit.conf.name());
+                            srvc.socket_names.push(sock_unit.id.name);
                             add_sock_srvc_relations(
                                 srvc_unit.id,
                                 &mut srvc_unit.install,
@@ -336,12 +336,12 @@ pub fn apply_sockets_to_services(
         if counter > 1 {
             return Err(format!(
                 "Added socket: {} to too many services (should be at most one): {}",
-                sock_unit.conf.name(),
+                sock_unit.id.name,
                 counter
             ));
         }
         if counter == 0 {
-            warn!("Added socket: {} to no service", sock_unit.conf.name());
+            warn!("Added socket: {} to no service", sock_unit.id.name);
         }
     }
 

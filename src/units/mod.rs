@@ -10,6 +10,7 @@ mod sanity_check;
 mod unit_parsing;
 mod units;
 mod from_parsed_config;
+mod runtime_info;
 
 pub use activate::*;
 pub use deactivate::*;
@@ -20,3 +21,4 @@ pub use remove::*;
 pub use sanity_check::*;
 pub use unit_parsing::*;
 pub use units::*;
+pub use runtime_info::*;

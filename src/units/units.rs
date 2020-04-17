@@ -1,12 +1,9 @@
-use crate::fd_store::FDStore;
 use crate::platform::EventFd;
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use crate::units::*;
 
-use nix::unistd::Pid;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::RwLock;
 use std::{fmt, path::PathBuf};
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
@@ -16,12 +13,15 @@ pub enum UnitIdKind {
     Service,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub struct UnitId(pub UnitIdKind, pub u64);
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct UnitId {
+    pub kind: UnitIdKind,
+    pub name: String,
+}
 
 impl fmt::Debug for UnitId {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.write_str(format!("{}", self.1).as_str())
+        fmt.write_str(format!("{}", self.name).as_str())
     }
 }
 
@@ -33,62 +33,30 @@ impl fmt::Display for UnitId {
 
 impl std::cmp::PartialOrd for UnitId {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.1.partial_cmp(&other.1)
+        self.name.partial_cmp(&other.name)
     }
 }
 
 impl std::cmp::Ord for UnitId {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.1.cmp(&other.1)
+        self.name.cmp(&other.name)
     }
 }
 
-pub type UnitTable = HashMap<UnitId, Arc<Mutex<Unit>>>;
-pub type ArcMutUnitTable = Arc<RwLock<UnitTable>>;
-
-pub type StatusTable = HashMap<UnitId, Arc<Mutex<UnitStatus>>>;
-pub type ArcMutStatusTable = Arc<RwLock<StatusTable>>;
-
-pub type PidTable = HashMap<Pid, PidEntry>;
-pub type ArcMutPidTable = Arc<Mutex<PidTable>>;
-
-pub type ArcMutFDStore = Arc<RwLock<FDStore>>;
-
-pub struct RuntimeInfo {
-    pub unit_table: ArcMutUnitTable,
-    pub status_table: ArcMutStatusTable,
-    pub pid_table: ArcMutPidTable,
-    pub fd_store: ArcMutFDStore,
-    pub config: crate::config::Config,
-    pub last_id: Arc<Mutex<u64>>,
-}
-
-// This will be passed through to all the different threads as a central state struct
-pub type ArcRuntimeInfo = Arc<RuntimeInfo>;
-
-pub fn lock_all(
-    units: &mut Vec<(UnitId, Arc<Mutex<Unit>>)>,
-) -> HashMap<UnitId, std::sync::MutexGuard<'_, Unit>> {
-    let mut units_locked = HashMap::new();
-    // sort to make sure units always get locked in the same ordering
-    units.sort_by(|(lid, _), (rid, _)| lid.cmp(rid));
-
-    for (id, unit) in units {
-        trace!("Lock unit: {:?}", id);
-        let other_unit_locked = unit.lock().unwrap();
-        trace!("Locked unit: {:?}", id);
-        units_locked.insert(id.clone(), other_unit_locked);
+impl PartialEq<str> for UnitId {
+    fn eq(&self, other: &str) -> bool {
+        self.name.eq(other)
     }
-
-    units_locked
 }
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub enum PidEntry {
-    Service(UnitId, ServiceType),
-    OneshotExited(crate::signal_handler::ChildTermination),
-    Helper(UnitId, String),
-    HelperExited(crate::signal_handler::ChildTermination),
+impl PartialEq<String> for UnitId {
+    fn eq(&self, other: &String) -> bool {
+        self.name.eq(other)
+    }
+}
+impl PartialEq<dyn AsRef<str>> for UnitId {
+    fn eq(&self, other: &dyn AsRef<str>) -> bool {
+        self.name.eq(other.as_ref())
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -112,56 +80,67 @@ impl UnitStatus {
     }
 }
 
-#[derive(Debug)]
-pub enum UnitSpecialized {
-    Socket(Socket),
-    Service(Service),
-    Target,
-}
-
-#[derive(Debug, Default, Clone)]
-/// These vecs are meant like this:
-/// Install::after: this unit should start after these units have been started
-/// Install::before: this unit should start before these units have been started
-/// ....
-pub struct Install {
-    pub wants: Vec<UnitId>,
-    pub requires: Vec<UnitId>,
-
-    pub wanted_by: Vec<UnitId>,
-    pub required_by: Vec<UnitId>,
-
-    pub before: Vec<UnitId>,
-    pub after: Vec<UnitId>,
-
-    pub install_config: Option<InstallConfig>,
-}
-
 pub struct Unit {
     pub id: UnitId,
-    pub conf: UnitConfig,
-    pub specialized: UnitSpecialized,
+    pub common: Common,
+    pub specific: Specific,
+}
 
-    pub install: Install,
+pub struct Common {
+    pub unit: UnitConfig,
+    pub dependencies: Dependencies,
+    pub status: RwLock<UnitStatus>,
+}
+
+pub enum Specific {
+    Service(ServiceSpecific),
+    Socket(SocketSpecific),
+    Target(TargetSpecific),
+}
+
+pub struct ServiceSpecific {
+    pub conf: ServiceConfig,
+    pub state: RwLock<ServiceState>,
+}
+pub struct SocketSpecific {
+    pub conf: SocketConfig,
+    pub state: RwLock<SocketState>,
+}
+pub struct TargetSpecific {}
+
+pub struct CommonState {
+    pub uptime: u64,
+    pub restart_count: u64,
+}
+pub struct ServiceState {
+    pub common: CommonState,
+    pub srvc: Service,
+}
+pub struct SocketState {
+    pub common: CommonState,
+    pub sock: Socket,
+}
+pub struct TargetState {
+    pub common: CommonState,
 }
 
 impl Unit {
     pub fn is_service(&self) -> bool {
-        if let UnitSpecialized::Service(_) = self.specialized {
+        if let UnitIdKind::Service = self.id.kind {
             true
         } else {
             false
         }
     }
     pub fn is_socket(&self) -> bool {
-        if let UnitSpecialized::Socket(_) = self.specialized {
+        if let UnitIdKind::Socket = self.id.kind {
             true
         } else {
             false
         }
     }
     pub fn is_target(&self) -> bool {
-        if let UnitSpecialized::Target = self.specialized {
+        if let UnitIdKind::Target = self.id.kind {
             true
         } else {
             false
@@ -169,54 +148,47 @@ impl Unit {
     }
 
     pub fn dedup_dependencies(&mut self) {
-        self.install.wants.sort();
-        self.install.wanted_by.sort();
-        self.install.required_by.sort();
-        self.install.before.sort();
-        self.install.after.sort();
-        self.install.requires.sort();
-        // dedup after sorting
-        self.install.wants.dedup();
-        self.install.requires.dedup();
-        self.install.wanted_by.dedup();
-        self.install.required_by.dedup();
-        self.install.before.dedup();
-        self.install.after.dedup();
+        self.common.dependencies.dedup();
     }
 
     pub fn activate(
         &mut self,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<UnitStatus, UnitOperationError> {
-        match &mut self.specialized {
-            UnitSpecialized::Target => trace!("Reached target {}", self.conf.name()),
-            UnitSpecialized::Socket(sock) => {
-                sock.open_all(
-                    self.conf.name(),
-                    self.id,
-                    &mut *run_info.fd_store.write().unwrap(),
-                )
-                .map_err(|e| UnitOperationError {
-                    unit_name: self.conf.name(),
-                    unit_id: self.id,
-                    reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
-                })?;
+        match self.specific {
+            Specific::Target(_) => trace!("Reached target {}", self.id.name),
+            Specific::Socket(specific) => {
+                let state = &mut *specific.state.read().unwrap();
+                state
+                    .sock
+                    .open_all(
+                        self.id.name,
+                        self.id,
+                        &mut *run_info.fd_store.write().unwrap(),
+                    )
+                    .map_err(|e| UnitOperationError {
+                        unit_name: self.id.name,
+                        unit_id: self.id,
+                        reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
+                    })?;
             }
-            UnitSpecialized::Service(srvc) => {
-                match srvc
+            Specific::Service(specific) => {
+                let state = &mut *specific.state.read().unwrap();
+                match state
+                    .srvc
                     .start(
                         self.id,
-                        &self.conf.name(),
+                        &self.id.name,
                         run_info,
                         notification_socket_path,
                         eventfds,
                         allow_ignore,
                     )
                     .map_err(|e| UnitOperationError {
-                        unit_name: self.conf.name(),
+                        unit_name: self.id.name,
                         unit_id: self.id,
                         reason: UnitOperationErrorReason::ServiceStartError(e),
                     })? {
@@ -229,22 +201,28 @@ impl Unit {
         }
         Ok(UnitStatus::Started)
     }
-    pub fn deactivate(&mut self, run_info: ArcRuntimeInfo) -> Result<(), UnitOperationError> {
-        trace!("Deactivate unit: {}", self.conf.name());
-        match &mut self.specialized {
-            UnitSpecialized::Target => { /* nothing to do */ }
-            UnitSpecialized::Socket(sock) => {
-                sock.close_all(self.conf.name(), &mut *run_info.fd_store.write().unwrap())
+    pub fn deactivate(&mut self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
+        trace!("Deactivate unit: {}", self.id.name);
+        match self.specific {
+            Specific::Target(_) => { /* nothing to do */ }
+            Specific::Socket(specific) => {
+                let state = &mut *specific.state.read().unwrap();
+                state
+                    .sock
+                    .close_all(self.id.name, &mut *run_info.fd_store.write().unwrap())
                     .map_err(|e| UnitOperationError {
-                        unit_name: self.conf.name(),
+                        unit_name: self.id.name,
                         unit_id: self.id,
                         reason: UnitOperationErrorReason::SocketCloseError(e),
                     })?;
             }
-            UnitSpecialized::Service(srvc) => {
-                srvc.kill(self.id, &self.conf.name(), run_info)
+            Specific::Service(specific) => {
+                let state = &mut *specific.state.read().unwrap();
+                state
+                    .srvc
+                    .kill(self.id, &self.id.name, run_info)
                     .map_err(|e| UnitOperationError {
-                        unit_name: self.conf.name(),
+                        unit_name: self.id.name,
                         unit_id: self.id,
                         reason: UnitOperationErrorReason::ServiceStopError(e),
                     })?;
@@ -255,31 +233,170 @@ impl Unit {
 }
 
 pub fn collect_names_needed(new_unit: &units::Unit, names_needed: &mut Vec<String>) {
-    names_needed.extend(new_unit.conf.after.iter().cloned());
-    names_needed.extend(new_unit.conf.before.iter().cloned());
+    names_needed.extend(
+        new_unit
+            .common
+            .dependencies
+            .after
+            .iter()
+            .cloned()
+            .map(|id| id.name),
+    );
+    names_needed.extend(
+        new_unit
+            .common
+            .dependencies
+            .before
+            .iter()
+            .cloned()
+            .map(|id| id.name),
+    );
+    names_needed.extend(
+        new_unit
+            .common
+            .dependencies
+            .wanted_by
+            .iter()
+            .cloned()
+            .map(|id| id.name),
+    );
+    names_needed.extend(
+        new_unit
+            .common
+            .dependencies
+            .wants
+            .iter()
+            .cloned()
+            .map(|id| id.name),
+    );
+    names_needed.extend(
+        new_unit
+            .common
+            .dependencies
+            .required_by
+            .iter()
+            .cloned()
+            .map(|id| id.name),
+    );
+    names_needed.extend(
+        new_unit
+            .common
+            .dependencies
+            .requires
+            .iter()
+            .cloned()
+            .map(|id| id.name),
+    );
 
-    if let Some(conf) = &new_unit.install.install_config {
-        names_needed.extend(conf.required_by.iter().cloned());
-        names_needed.extend(conf.wanted_by.iter().cloned());
+    if let Specific::Socket(sock) = &new_unit.specific {
+        names_needed.extend(sock.conf.services.iter().cloned());
     }
-    if let units::UnitSpecialized::Socket(sock) = &new_unit.specialized {
-        names_needed.extend(sock.services.iter().cloned());
-    }
-    if let units::UnitSpecialized::Service(srvc) = &new_unit.specialized {
-        names_needed.extend(srvc.service_config.sockets.iter().cloned());
+    if let Specific::Service(srvc) = &new_unit.specific {
+        names_needed.extend(srvc.conf.sockets.iter().cloned());
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnitConfig {
     pub filepath: PathBuf,
-
     pub description: String,
+}
 
-    pub wants: Vec<String>,
-    pub requires: Vec<String>,
-    pub before: Vec<String>,
-    pub after: Vec<String>,
+#[derive(Debug, Clone)]
+/// These vecs are meant like this:
+/// Install::after: this unit should start after these units have been started
+/// Install::before: this unit should start before these units have been started
+/// ....
+pub struct Dependencies {
+    pub wants: Vec<UnitId>,
+    pub wanted_by: Vec<UnitId>,
+    pub requires: Vec<UnitId>,
+    pub required_by: Vec<UnitId>,
+    pub before: Vec<UnitId>,
+    pub after: Vec<UnitId>,
+}
+
+impl Dependencies {
+    pub fn dedup(&mut self) {
+        self.wants.sort();
+        self.wanted_by.sort();
+        self.required_by.sort();
+        self.before.sort();
+        self.after.sort();
+        self.requires.sort();
+        // dedup after sorting
+        self.wants.dedup();
+        self.requires.dedup();
+        self.wanted_by.dedup();
+        self.required_by.dedup();
+        self.before.dedup();
+        self.after.dedup();
+    }
+
+    /// Remove all occurences of this id from the vec
+    fn remove_from_vec(ids: &mut Vec<UnitId>, id: &UnitId) {
+        while let Some(idx) = ids.iter().position(|e| *e == *id) {
+            ids.remove(idx);
+        }
+    }
+
+    pub fn remove_id(&mut self, id: &UnitId) {
+        Self::remove_from_vec(&mut self.wants, id);
+        Self::remove_from_vec(&mut self.wanted_by, id);
+        Self::remove_from_vec(&mut self.requires, id);
+        Self::remove_from_vec(&mut self.required_by, id);
+        Self::remove_from_vec(&mut self.before, id);
+        Self::remove_from_vec(&mut self.after, id);
+    }
+
+    pub fn comes_after(&self, name: &str) -> bool {
+        for id in &self.after {
+            if id.eq(name) {
+                return true;
+            }
+        }
+        false
+    }
+    pub fn comes_before(&self, name: &str) -> bool {
+        for id in &self.before {
+            if id.eq(name) {
+                return true;
+            }
+        }
+        false
+    }
+    pub fn requires(&self, name: &str) -> bool {
+        for id in &self.requires {
+            if id.eq(name) {
+                return true;
+            }
+        }
+        false
+    }
+    pub fn required_by(&self, name: &str) -> bool {
+        for id in &self.required_by {
+            if id.eq(name) {
+                return true;
+            }
+        }
+        false
+    }
+    pub fn wants(&self, name: &str) -> bool {
+        for id in &self.wants {
+            if id.eq(name) {
+                return true;
+            }
+        }
+        false
+    }
+    pub fn wanted_by(&self, name: &str) -> bool {
+        for id in &self.wanted_by {
+            if id.eq(name) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl UnitConfig {
@@ -304,18 +421,10 @@ impl UnitConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct SocketConfig {
+pub struct SingleSocketConfig {
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
 }
-
-
-#[derive(Debug, Clone)]
-pub struct InstallConfig {
-    pub wanted_by: Vec<String>,
-    pub required_by: Vec<String>,
-}
-
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExecConfig {
@@ -325,7 +434,6 @@ pub struct ExecConfig {
     pub stderr_path: Option<StdIoOption>,
     pub supplementary_groups: Vec<String>,
 }
-
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {
@@ -347,4 +455,12 @@ pub struct ServiceConfig {
     pub dbus_name: Option<String>,
 
     pub sockets: Vec<String>,
+}
+
+pub struct SocketConfig {
+    pub sockets: Vec<SingleSocketConfig>,
+    pub filedesc_name: String,
+    pub services: Vec<String>,
+
+    pub exec_section: ExecConfig,
 }

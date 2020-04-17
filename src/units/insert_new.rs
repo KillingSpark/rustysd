@@ -2,7 +2,6 @@ use crate::units;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 fn find_new_unit_path(unit_dirs: &[PathBuf], find_name: &str) -> Result<Option<PathBuf>, String> {
     for dir in unit_dirs {
@@ -46,29 +45,29 @@ pub fn load_new_unit(
         let parsed = units::parse_file(&content)
             .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path.clone())))?;
         let unit = if find_name.ends_with(".service") {
-            units::parse_service(
-                parsed,
-                &unit_path,
-                units::UnitId(units::UnitIdKind::Service, next_id),
-            )
-            .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
-            .into()
+            let new_id = units::UnitId {
+                kind: units::UnitIdKind::Service,
+                name: unit_path.file_name().unwrap().to_str().unwrap().to_owned(),
+            };
+            units::parse_service(parsed, &unit_path, new_id)
+                .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
+                .into()
         } else if find_name.ends_with(".socket") {
-            units::parse_socket(
-                parsed,
-                &unit_path,
-                units::UnitId(units::UnitIdKind::Socket, next_id),
-            )
-            .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
-            .into()
+            let new_id = units::UnitId {
+                kind: units::UnitIdKind::Socket,
+                name: unit_path.file_name().unwrap().to_str().unwrap().to_owned(),
+            };
+            units::parse_socket(parsed, &unit_path, new_id)
+                .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
+                .into()
         } else if find_name.ends_with(".target") {
-            units::parse_target(
-                parsed,
-                &unit_path,
-                units::UnitId(units::UnitIdKind::Target, next_id),
-            )
-            .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
-            .into()
+            let new_id = units::UnitId {
+                kind: units::UnitIdKind::Target,
+                name: unit_path.file_name().unwrap().to_str().unwrap().to_owned(),
+            };
+            units::parse_target(parsed, &unit_path, new_id)
+                .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
+                .into()
         } else {
             return Err(format!(
                 "File suffix not recognized for file {:?}",
@@ -96,22 +95,21 @@ fn check_all_names_exist(
         names_needed.iter().map(|name| (name, ())).collect();
 
     for unit in unit_table_locked.values() {
-        let unit_locked = unit.lock().unwrap();
         for new_unit in new_units.values() {
-            if unit_locked.id == new_unit.id {
+            if unit.id == new_unit.id {
                 return Err(format!("Id {} exists already", new_unit.id));
             }
-            if unit_locked.conf.name() == new_unit.conf.name() {
-                return Err(format!("Name {} exists already", new_unit.conf.name()));
+            if unit.id.name == new_unit.id.name {
+                return Err(format!("Name {} exists already", new_unit.id.name));
             }
         }
-        if names_needed.contains_key(&unit_locked.conf.name()) {
-            names_needed.remove(&unit_locked.conf.name()).unwrap();
+        if names_needed.contains_key(&unit.id.name) {
+            names_needed.remove(&unit.id.name).unwrap();
         }
     }
     for unit in new_units.values() {
-        if names_needed.contains_key(&unit.conf.name()) {
-            names_needed.remove(&unit.conf.name()).unwrap();
+        if names_needed.contains_key(&unit.id.name) {
+            names_needed.remove(&unit.id.name).unwrap();
         }
     }
     if names_needed.len() > 0 {
@@ -130,59 +128,39 @@ fn check_all_names_exist(
 /// 1. removing the unit again if the activation fails
 pub fn insert_new_units(
     new_units: HashMap<units::UnitId, units::Unit>,
-    run_info: units::ArcRuntimeInfo,
+    run_info: &mut units::RuntimeInfo,
 ) -> Result<(), String> {
     // TODO check if new unit only refs existing units
     // TODO check if all ref'd units are not failed
     {
-        let unit_table_locked = &mut *run_info.unit_table.write().unwrap();
+        let unit_table = &mut run_info.unit_table;
         trace!("Check all names exist");
-        check_all_names_exist(&new_units, &unit_table_locked)?;
+        check_all_names_exist(&new_units, unit_table)?;
 
         for (new_id, mut new_unit) in new_units.into_iter() {
-            trace!("Add new unit: {}", new_unit.conf.name());
+            trace!("Add new unit: {}", new_unit.id.name);
             // Setup relations of before <-> after / requires <-> requiredby
-            for unit in unit_table_locked.values() {
-                let mut unit_locked = unit.lock().unwrap();
-                let name = unit_locked.conf.name();
-                let id = unit_locked.id;
-                if new_unit.conf.after.contains(&name) {
-                    new_unit.install.after.push(id);
-                    unit_locked.install.before.push(new_id);
+            for unit in unit_table.values() {
+                if new_unit.common.dependencies.after.contains(&unit.id) {
+                    unit.common.dependencies.before.push(new_id);
                 }
-                if new_unit.conf.before.contains(&name) {
-                    new_unit.install.before.push(id);
-                    unit_locked.install.after.push(new_id);
+                if new_unit.common.dependencies.before.contains(&unit.id) {
+                    unit.common.dependencies.after.push(new_id);
                 }
-                if new_unit.conf.requires.contains(&name) {
-                    new_unit.install.requires.push(id);
-                    unit_locked.install.required_by.push(new_id);
+                if new_unit.common.dependencies.requires.contains(&unit.id) {
+                    unit.common.dependencies.required_by.push(new_id);
                 }
-                if new_unit.conf.wants.contains(&name) {
-                    new_unit.install.wants.push(id);
-                    unit_locked.install.wanted_by.push(new_id);
+                if new_unit.common.dependencies.wants.contains(&unit.id) {
+                    unit.common.dependencies.wanted_by.push(new_id);
                 }
-                if let Some(conf) = &new_unit.install.install_config {
-                    if conf.required_by.contains(&name) {
-                        new_unit.install.required_by.push(id);
-                        unit_locked.install.requires.push(new_id);
-                    }
-                    if conf.wanted_by.contains(&name) {
-                        new_unit.install.wanted_by.push(id);
-                        unit_locked.install.wants.push(new_id);
-                    }
+                if new_unit.common.dependencies.required_by.contains(&unit.id) {
+                    unit.common.dependencies.requires.push(new_id);
+                }
+                if new_unit.common.dependencies.wanted_by.contains(&unit.id) {
+                    unit.common.dependencies.wants.push(new_id);
                 }
             }
-            {
-                unit_table_locked.insert(new_id, Arc::new(Mutex::new(new_unit)));
-            }
-            {
-                let status_table_locked = &mut *run_info.status_table.write().unwrap();
-                status_table_locked.insert(
-                    new_id,
-                    Arc::new(Mutex::new(units::UnitStatus::NeverStarted)),
-                );
-            }
+            unit_table.insert(new_id, new_unit);
         }
     }
     Ok(())

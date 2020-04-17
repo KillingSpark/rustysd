@@ -91,7 +91,7 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                     srvc.notifications_buffer.push_str(&note_str);
                                     crate::notification_handler::handle_notifications_from_buffer(
                                         srvc,
-                                        &srvc_unit_locked.conf.name(),
+                                        &srvc_unit_locked.id.name,
                                     );
                                 }
                             }
@@ -135,7 +135,7 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table_locked.get(id) {
                             let mut srvc_unit_locked = srvc_unit.lock().unwrap();
-                            let name = srvc_unit_locked.conf.name();
+                            let name = srvc_unit_locked.id.name;
                             let status_table_locked = run_info.status_table.read().unwrap();
                             let status = status_table_locked
                                 .get(&srvc_unit_locked.id)
@@ -208,7 +208,7 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table_locked.get(id) {
                             let mut srvc_unit_locked = srvc_unit.lock().unwrap();
-                            let name = srvc_unit_locked.conf.name();
+                            let name = srvc_unit_locked.id.name;
                             let status_table_locked = run_info.status_table.read().unwrap();
                             let status = status_table_locked
                                 .get(&srvc_unit_locked.id)

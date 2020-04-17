@@ -268,7 +268,7 @@ impl UdpSocketConfig {
 pub struct Socket {
     pub name: String,
     pub exec_config: ExecConfig,
-    pub sockets: Vec<SocketConfig>,
+    pub sockets: Vec<SingleSocketConfig>,
     pub services: Vec<String>,
     pub activated: bool,
 }
