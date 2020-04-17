@@ -165,6 +165,7 @@ impl Unit {
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<UnitStatus, UnitOperationError> {
+        // TODO change status here!
         match self.specific {
             Specific::Target(_) => trace!("Reached target {}", self.id.name),
             Specific::Socket(specific) => {

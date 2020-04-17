@@ -49,7 +49,7 @@ pub fn start_socketactivation_thread(
                             } else {
                                 match crate::units::activate_unit(
                                     srvc_unit_id,
-                                    run_info,
+                                    &*run_info,
                                     note_sock_path.clone(),
                                     eventfds.clone(),
                                     false,

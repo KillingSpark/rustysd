@@ -1,6 +1,6 @@
 //! Activate units (recursively and parallel along the dependency tree)
 
-use super::units::*;
+use super::*;
 use crate::platform::EventFd;
 use crate::services::ServiceErrorReason;
 use std::sync::{Arc, Mutex};
@@ -73,7 +73,7 @@ impl std::fmt::Display for UnitOperationError {
 
 fn activate_units_recursive(
     ids_to_start: Vec<UnitId>,
-    run_info: ArcRuntimeInfo,
+    run_info: ArcMutRuntimeInfo,
     tpool: ThreadPool,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
@@ -94,7 +94,7 @@ fn activate_units_recursive(
 
             match activate_unit(
                 id,
-                run_info_copy.clone(),
+                &*run_info_copy.read().unwrap(),
                 note_sock_copy,
                 eventfds_copy,
                 true,
@@ -143,41 +143,34 @@ pub fn activate_unit(
     // 1.5) Check if this unit should be started right now
     // 2) Then lock the needed other units (only for sockets of services right now)
     // With that we always maintain a consistent order between locks so deadlocks shouldnt occur
-    let unit = {
-        let units_locked = run_info.unit_table.read().unwrap();
-        match units_locked.get(&id_to_start) {
-            Some(unit) => Arc::clone(unit),
-            None => {
-                // If this occurs, there is a flaw in the handling of dependencies
-                // IDs should be purged globally when units get removed
-                return Err(UnitOperationError {
-                    reason: UnitOperationErrorReason::GenericStartError(
-                        "Tried to activate a unit that can not be found".into(),
-                    ),
-                    unit_name: "unknown unit".into(),
-                    unit_id: id_to_start,
-                });
-            }
+    let unit = match run_info.unit_table.get(&id_to_start) {
+        Some(unit) => unit,
+        None => {
+            // If this occurs, there is a flaw in the handling of dependencies
+            // IDs should be purged globally when units get removed
+            return Err(UnitOperationError {
+                reason: UnitOperationErrorReason::GenericStartError(
+                    "Tried to activate a unit that can not be found".into(),
+                ),
+                unit_name: id_to_start.name,
+                unit_id: id_to_start,
+            });
         }
     };
-    trace!("Lock unit: {}", id_to_start);
-    let mut unit_locked = unit.lock().unwrap();
-    trace!("Locked unit: {}", id_to_start);
-    let name = unit_locked.id.name;
-
-    let status_table_locked = run_info.status_table.read().unwrap();
+    let name = unit.id.name;
 
     // if not all dependencies are yet started ignore this call. This unit will be activated again when
     // the next dependency gets ready
-    let unstarted_deps = unit_locked
-        .install
+    let unstarted_deps = unit
+        .common
+        .dependencies
         .after
         .iter()
         .fold(Vec::new(), |mut acc, elem| {
-            let required = unit_locked.install.requires.contains(elem);
+            let required = unit.common.dependencies.requires.contains(elem);
 
-            let status = status_table_locked.get(elem).unwrap();
-            let status_locked = status.lock().unwrap();
+            let elem_unit = run_info.unit_table.get(elem).unwrap();
+            let status_locked = elem_unit.common.status.read().unwrap();
             let ready = if required {
                 *status_locked == UnitStatus::Started
                     || *status_locked == UnitStatus::StartedWaitingForSocket
@@ -193,7 +186,7 @@ pub fn activate_unit(
     if !unstarted_deps.is_empty() {
         trace!(
             "Unit: {} ignores activation. Not all dependencies have been started (still waiting for: {:?})",
-            unit_locked.id.name,
+            unit.id.name,
             unstarted_deps,
         );
         return Ok(StartResult::WaitForDependencies);
@@ -201,68 +194,45 @@ pub fn activate_unit(
 
     // Check if the unit is currently starting. Update the status to starting if not
     {
-        let status = status_table_locked.get(&id_to_start).unwrap();
-        trace!("Lock status for: {}", name);
-        let mut status_locked = status.lock().unwrap();
-        trace!("Locked status for: {}", name);
-
         // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
         // TODO make this relation less weird. Maybe add a separate code path for socket activation
-        let wait_for_socket_act = *status_locked == UnitStatus::Started && allow_ignore;
+        let status_locked = unit.common.status.read().unwrap();
+        let wait_for_socket_act =
+            *status_locked == UnitStatus::StartedWaitingForSocket && allow_ignore;
         let needs_intial_run =
             *status_locked == UnitStatus::NeverStarted || *status_locked == UnitStatus::Stopped;
         if wait_for_socket_act && !needs_intial_run {
             trace!(
                 "Don't activate Unit: {:?}. Has status: {:?}",
-                unit_locked.id.name,
+                unit.id.name,
                 *status_locked
             );
             return Ok(StartResult::WaitForDependencies);
         }
-        if needs_intial_run {
-            *status_locked = UnitStatus::Starting;
-        }
     }
-    let next_services_ids = unit_locked.install.before.clone();
+    let next_services_ids = unit.common.dependencies.before.clone();
 
-    unit_locked
-        .activate(
-            run_info.clone(),
-            notification_socket_path.clone(),
-            &eventfds,
-            allow_ignore,
-        )
-        .map(|new_status| {
-            // Update the status while we still lock the unit
-            let status_table_locked = run_info.status_table.read().unwrap();
-            let status = status_table_locked.get(&unit_locked.id).unwrap();
-            let mut status_locked = status.lock().unwrap();
-            *status_locked = new_status;
-            StartResult::Started(next_services_ids)
-        })
-        .map_err(|e| {
-            // Update the status while we still lock the unit
-            let status_table_locked = run_info.status_table.read().unwrap();
-            let status = status_table_locked.get(&unit_locked.id).unwrap();
-            let mut status_locked = status.lock().unwrap();
-            *status_locked = UnitStatus::StoppedFinal(format!("{}", e));
-            e
-        })
+    unit.activate(
+        run_info.clone(),
+        notification_socket_path.clone(),
+        &eventfds,
+        allow_ignore,
+    )
+    .map(|new_status| StartResult::Started(next_services_ids))
     // drop all the locks "at once". Ordering of dropping should be irrelevant?
 }
 
 pub fn activate_units(
-    run_info: ArcRuntimeInfo,
+    run_info: ArcMutRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: Vec<EventFd>,
 ) {
     let mut root_units = Vec::new();
 
-    for (id, unit) in &*run_info.unit_table.read().unwrap() {
-        let unit_locked = unit.lock().unwrap();
-        if unit_locked.install.after.is_empty() {
+    for (id, unit) in &run_info.read().unwrap().unit_table {
+        if unit.common.dependencies.after.is_empty() {
             root_units.push(*id);
-            trace!("Root unit: {}", unit_locked.id.name);
+            trace!("Root unit: {}", unit.id.name);
         }
     }
 
