@@ -262,8 +262,10 @@ pub fn apply_sockets_to_services(
 
                     // add sockets to services that specify that the socket belongs to them
                     // or sockets to services that specify that they belong to the service
-                    if srvc.conf.sockets.contains(&sock_unit.id.name)
-                        || sock.conf.services.contains(&srvc_unit.id.name)
+                    if (srvc.conf.sockets.contains(&sock_unit.id.name)
+                        && !sock.conf.services.contains(&srvc_unit.id.name))
+                        || (sock.conf.services.contains(&srvc_unit.id.name)
+                            && !srvc.conf.sockets.contains(&sock_unit.id.name))
                     {
                         trace!(
                             "add socket: {} to service: {}",
