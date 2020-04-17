@@ -5,13 +5,15 @@ use crate::units::*;
 pub fn wait_for_service(
     srvc: &mut Service,
     name: &str,
-    pid_table: ArcMutPidTable,
+    run_info: &RuntimeInfo,
 ) -> Result<(), RunCmdError> {
+    let pid_table = &run_info.pid_table;
     trace!(
         "[FORK_PARENT] Service: {} forked with pid: {}",
         name,
         srvc.pid.unwrap()
     );
+
 
     let start_time = std::time::Instant::now();
     let duration_timeout = srvc.get_start_timeout();

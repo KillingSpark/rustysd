@@ -6,14 +6,18 @@ use std::sync::Arc;
 pub fn service_exit_handler_new_thread(
     pid: nix::unistd::Pid,
     code: ChildTermination,
-    run_info: ArcRuntimeInfo,
+    run_info: ArcMutRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: Vec<EventFd>,
 ) {
     std::thread::spawn(move || {
-        if let Err(e) =
-            service_exit_handler(pid, code, run_info, notification_socket_path, &eventfds)
-        {
+        if let Err(e) = service_exit_handler(
+            pid,
+            code,
+            &*run_info.read().unwrap(),
+            notification_socket_path,
+            &eventfds,
+        ) {
             error!("{}", e);
         }
     });
@@ -22,7 +26,7 @@ pub fn service_exit_handler_new_thread(
 pub fn service_exit_handler(
     pid: nix::unistd::Pid,
     code: ChildTermination,
-    run_info: ArcRuntimeInfo,
+    run_info: &RuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: &[EventFd],
 ) -> Result<(), String> {
@@ -97,22 +101,19 @@ pub fn service_exit_handler(
         }
     };
 
-    let unit = {
-        let unit_table_locked = run_info.unit_table.read().unwrap();
-        match unit_table_locked.get(&srvc_id) {
-            Some(unit) => Arc::clone(unit),
-            None => {
-                panic!("Tried to run a unit that has been removed from the map");
-            }
+    let unit = match run_info.unit_table.get(&srvc_id) {
+        Some(unit) => unit,
+        None => {
+            panic!("Tried to run a unit that has been removed from the map");
         }
     };
 
     // kill oneshot service processes. There should be none but just in case...
     {
-        let unit_locked = &mut *unit.lock().unwrap();
-        if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
-            if srvc.service_config.srcv_type == ServiceType::OneShot {
-                srvc.kill_all_remaining_processes(&unit_locked.id.name);
+        if let Specific::Service(srvc) = &mut unit.specific {
+            if srvc.conf.srcv_type == ServiceType::OneShot {
+                let mut_state = &mut *srvc.state.write().unwrap();
+                mut_state.srvc.kill_all_remaining_processes(&unit.id.name);
                 return Ok(());
             }
         }
@@ -120,19 +121,18 @@ pub fn service_exit_handler(
 
     trace!("Check if we want to restart the unit");
     let (name, sockets, restart_unit) = {
-        let unit_locked = &mut *unit.lock().unwrap();
-        let name = unit_locked.id.name;
-        if let UnitSpecialized::Service(srvc) = &mut unit_locked.specialized {
+        let name = unit.id.name;
+        if let Specific::Service(srvc) = &mut unit.specific {
             trace!(
                 "Service with id: {:?}, name: {} pid: {} exited with: {:?}",
                 srvc_id,
-                unit_locked.id.name,
+                unit.id.name,
                 pid,
                 code
             );
 
-            if srvc.service_config.restart == ServiceRestart::Always {
-                let sockets = srvc.socket_names.clone();
+            if srvc.conf.restart == ServiceRestart::Always {
+                let sockets = srvc.conf.sockets.clone();
                 (name, sockets, true)
             } else {
                 (name, Vec::new(), false)
@@ -144,8 +144,7 @@ pub fn service_exit_handler(
 
     // check that the status is "Started". If thats not the case this service got killed by something else (control interface for example) so dont interfere
     {
-        let status_table_locked = run_info.status_table.read().unwrap();
-        let status_locked = &*status_table_locked.get(&srvc_id).unwrap().lock().unwrap();
+        let status_locked = &*unit.common.status.read().unwrap();
         if *status_locked != UnitStatus::Started && *status_locked != UnitStatus::Starting {
             trace!("Exit handler ignores exit of service {}. Its status is not 'Started/Starting', it is: {:?}", name, *status_locked);
             return Ok(());
@@ -155,11 +154,11 @@ pub fn service_exit_handler(
     if restart_unit {
         {
             // tell socket activation to listen to these sockets again
-            for unit in run_info.unit_table.read().unwrap().values() {
-                let mut unit_locked = unit.lock().unwrap();
-                if sockets.contains(&unit_locked.id.name) {
-                    if let UnitSpecialized::Socket(sock) = &mut unit_locked.specialized {
-                        sock.activated = false;
+            for unit in run_info.unit_table.values() {
+                if sockets.contains(&unit.id.name) {
+                    if let Specific::Socket(sock) = &mut unit.specific {
+                        let mut_state = &mut *sock.state.write().unwrap();
+                        mut_state.sock.activated = false;
                     }
                 }
             }
