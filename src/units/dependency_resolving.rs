@@ -37,48 +37,54 @@ pub fn prune_units(
 
     add_implicit_before_after(unit_table);
     for unit in unit_table.values_mut() {
-        unit.install.before = unit
-            .install
+        unit.common.dependencies.before = unit
+            .common
+            .dependencies
             .before
             .iter()
             .filter(|id| ids_to_keep.contains(id))
             .map(|id| *id)
             .collect();
 
-        unit.install.after = unit
-            .install
+        unit.common.dependencies.after = unit
+            .common
+            .dependencies
             .after
             .iter()
             .filter(|id| ids_to_keep.contains(id))
             .map(|id| *id)
             .collect();
 
-        unit.install.requires = unit
-            .install
+        unit.common.dependencies.requires = unit
+            .common
+            .dependencies
             .requires
             .iter()
             .filter(|id| ids_to_keep.contains(id))
             .map(|id| *id)
             .collect();
 
-        unit.install.wants = unit
-            .install
+        unit.common.dependencies.wants = unit
+            .common
+            .dependencies
             .wants
             .iter()
             .filter(|id| ids_to_keep.contains(id))
             .map(|id| *id)
             .collect();
 
-        unit.install.required_by = unit
-            .install
+        unit.common.dependencies.required_by = unit
+            .common
+            .dependencies
             .required_by
             .iter()
             .filter(|id| ids_to_keep.contains(id))
             .map(|id| *id)
             .collect();
 
-        unit.install.wanted_by = unit
-            .install
+        unit.common.dependencies.wanted_by = unit
+            .common
+            .dependencies
             .wanted_by
             .iter()
             .filter(|id| ids_to_keep.contains(id))
@@ -103,16 +109,16 @@ fn find_needed_units_recursive(
     let unit = unit_table.get(&needed_id).unwrap();
     let mut new_needed_ids = Vec::new();
 
-    for new_id in &unit.install.requires {
+    for new_id in &unit.common.dependencies.requires {
         new_needed_ids.push(*new_id);
     }
-    for new_id in &unit.install.wants {
+    for new_id in &unit.common.dependencies.wants {
         new_needed_ids.push(*new_id);
     }
-    for new_id in &unit.install.required_by {
+    for new_id in &unit.common.dependencies.required_by {
         new_needed_ids.push(*new_id);
     }
-    for new_id in &unit.install.wanted_by {
+    for new_id in &unit.common.dependencies.wanted_by {
         new_needed_ids.push(*new_id);
     }
     new_needed_ids.sort();
@@ -127,110 +133,84 @@ fn find_needed_units_recursive(
 
 // add after/before relations for required_by/wanted_by relations after pruning
 pub fn add_implicit_before_after(units: &mut HashMap<UnitId, Unit>) {
-    let mut name_to_id = HashMap::new();
-
-    for (id, unit) in &*units {
-        let name = unit.id.name;
-        name_to_id.insert(name, *id);
-    }
-
     let mut before = Vec::new();
     let mut after = Vec::new();
     for unit in (*units).values_mut() {
-        if let Some(conf) = &unit.install.install_config {
-            for name in &conf.wanted_by {
-                let id = name_to_id[name.as_str()];
-                before.push((id, unit.id));
-                after.push((unit.id, id));
-            }
-            for name in &conf.required_by {
-                let id = name_to_id[name.as_str()];
-                before.push((id, unit.id));
-                after.push((unit.id, id));
-            }
+        for id in &unit.common.dependencies.wanted_by {
+            before.push((id.clone(), unit.id.clone()));
+            after.push((unit.id.clone(), id.clone()));
+        }
+        for id in &unit.common.dependencies.required_by {
+            before.push((id.clone(), unit.id.clone()));
+            after.push((unit.id.clone(), id.clone()));
         }
     }
 
     for (before, after) in before {
         let unit = units.get_mut(&after).unwrap();
-        unit.install.before.push(before);
+        unit.common.dependencies.before.push(before);
     }
     for (after, before) in after {
         let unit = units.get_mut(&before).unwrap();
-        unit.install.after.push(after);
+        unit.common.dependencies.after.push(after);
     }
 }
 
 // make edges between units visible on bot sides: required <-> required_by  after <-> before
 pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
-    let mut name_to_id = HashMap::new();
-
-    for (id, unit) in &*units {
-        let name = unit.id.name;
-        name_to_id.insert(name, *id);
-    }
-
     let mut required_by = Vec::new();
     let mut wanted_by: Vec<(UnitId, UnitId)> = Vec::new();
     let mut before = Vec::new();
     let mut after = Vec::new();
 
     for unit in (*units).values_mut() {
-        let conf = &unit.conf;
-        for name in &conf.wants {
-            let id = name_to_id[name.as_str()];
-            unit.install.wants.push(id);
-            wanted_by.push((id, unit.id));
+        let conf = &unit.common.dependencies;
+        for id in &conf.wants {
+            unit.common.dependencies.wants.push(id.clone());
+            wanted_by.push((id.clone(), unit.id.clone()));
         }
-        for name in &conf.requires {
-            let id = name_to_id[name.as_str()];
-            unit.install.requires.push(id);
-            required_by.push((id, unit.id));
+        for id in &conf.requires {
+            unit.common.dependencies.requires.push(id.clone());
+            required_by.push((id.clone(), unit.id.clone()));
         }
-        for name in &conf.before {
-            let id = name_to_id[name.as_str()];
-            unit.install.before.push(id);
-            after.push((unit.id, id))
+        for id in &conf.before {
+            unit.common.dependencies.before.push(id.clone());
+            after.push((unit.id.clone(), id.clone()))
         }
-        for name in &conf.after {
-            let id = name_to_id[name.as_str()];
-            unit.install.after.push(id);
-            before.push((unit.id, id))
+        for id in &conf.after {
+            unit.common.dependencies.after.push(id.clone());
+            before.push((unit.id.clone(), id.clone()))
         }
 
-        if let Some(conf) = &unit.install.install_config {
-            for name in &conf.wanted_by {
-                let id = name_to_id[name.as_str()];
-                wanted_by.push((unit.id, id));
-            }
-            for name in &conf.required_by {
-                let id = name_to_id[name.as_str()];
-                required_by.push((unit.id, id));
-            }
+        for id in &conf.wanted_by {
+            wanted_by.push((unit.id.clone(), id.clone()));
+        }
+        for id in &conf.required_by {
+            required_by.push((unit.id.clone(), id.clone()));
         }
     }
 
     for (wanted, wanting) in wanted_by {
         let unit = units.get_mut(&wanting).unwrap();
-        unit.install.wants.push(wanted);
+        unit.common.dependencies.wants.push(wanted);
         let unit = units.get_mut(&wanted).unwrap();
-        unit.install.wanted_by.push(wanting);
+        unit.common.dependencies.wanted_by.push(wanting);
     }
 
     for (required, requiring) in required_by {
         let unit = units.get_mut(&requiring).unwrap();
-        unit.install.requires.push(required);
+        unit.common.dependencies.requires.push(required);
         let unit = units.get_mut(&required).unwrap();
-        unit.install.required_by.push(requiring);
+        unit.common.dependencies.required_by.push(requiring);
     }
 
     for (before, after) in before {
         let unit = units.get_mut(&after).unwrap();
-        unit.install.before.push(before);
+        unit.common.dependencies.before.push(before);
     }
     for (after, before) in after {
         let unit = units.get_mut(&before).unwrap();
-        unit.install.after.push(after);
+        unit.common.dependencies.after.push(after);
     }
 
     for srvc in units.values_mut() {
@@ -240,9 +220,9 @@ pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
 
 fn add_sock_srvc_relations(
     srvc_id: UnitId,
-    srvc_install: &mut Install,
+    srvc_install: &mut Dependencies,
     sock_id: UnitId,
-    sock_install: &mut Install,
+    sock_install: &mut Dependencies,
 ) {
     srvc_install.after.push(sock_id);
     srvc_install.requires.push(sock_id);
@@ -257,15 +237,14 @@ pub fn apply_sockets_to_services(
     for sock_unit in socket_table.values_mut() {
         let mut counter = 0;
 
-        if let UnitSpecialized::Socket(sock) = &mut sock_unit.specialized {
+        if let Specific::Socket(sock) = &mut sock_unit.specific {
             trace!("Searching services for socket: {}", sock_unit.id.name);
             for srvc_unit in service_table.values_mut() {
-                let srvc = &mut srvc_unit.specialized;
-                if let UnitSpecialized::Service(srvc) = srvc {
+                let srvc = &mut srvc_unit.specific;
+                if let Specific::Service(srvc) = srvc {
                     // add sockets for services with the exact same name
-                    if (srvc_unit.conf.name_without_suffix()
-                        == sock_unit.conf.name_without_suffix())
-                        && !srvc.socket_names.contains(&sock_unit.id.name)
+                    if (srvc_unit.name_without_suffix() == sock_unit.name_without_suffix())
+                        && !srvc.has_socket(&sock_unit.id.name)
                     {
                         trace!(
                             "add socket: {} to service: {}",
@@ -273,62 +252,35 @@ pub fn apply_sockets_to_services(
                             srvc_unit.id.name
                         );
 
-                        srvc.socket_names.push(sock_unit.id.name);
-                        sock.services.push(srvc_unit.id.name);
+                        srvc.conf.sockets.push(sock_unit.id.name.clone());
+                        sock.conf.services.push(srvc_unit.id.name.clone());
                         add_sock_srvc_relations(
                             srvc_unit.id,
-                            &mut srvc_unit.install,
+                            &mut srvc_unit.common.dependencies,
                             sock_unit.id,
-                            &mut sock_unit.install,
+                            &mut sock_unit.common.dependencies,
                         );
                         counter += 1;
                     }
 
                     // add sockets to services that specify that the socket belongs to them
-                    if srvc.service_config.sockets.contains(&sock_unit.id.name)
-                        && !srvc.socket_names.contains(&sock_unit.id.name)
+                    // or sockets to services that specify that they belong to the service
+                    if srvc.conf.sockets.contains(&sock_unit.id.name)
+                        || sock.conf.services.contains(&srvc_unit.id.name)
                     {
                         trace!(
                             "add socket: {} to service: {}",
                             sock_unit.id.name,
                             srvc_unit.id.name
                         );
-                        srvc.socket_names.push(sock_unit.id.name);
-                        sock.services.push(srvc_unit.id.name);
+                        sock.conf.services.push(srvc_unit.id.name.clone());
                         add_sock_srvc_relations(
                             srvc_unit.id,
-                            &mut srvc_unit.install,
+                            &mut srvc_unit.common.dependencies,
                             sock_unit.id,
-                            &mut sock_unit.install,
+                            &mut sock_unit.common.dependencies,
                         );
                         counter += 1;
-                    }
-                }
-            }
-
-            // add socket to the specified services
-            for srvc_name in &sock.services {
-                for srvc_unit in service_table.values_mut() {
-                    let srvc = &mut srvc_unit.specialized;
-                    if let UnitSpecialized::Service(srvc) = srvc {
-                        if (*srvc_name == srvc_unit.id.name)
-                            && !srvc.socket_names.contains(&sock_unit.id.name)
-                        {
-                            trace!(
-                                "add socket: {} to service: {}",
-                                sock_unit.id.name,
-                                srvc_unit.id.name
-                            );
-
-                            srvc.socket_names.push(sock_unit.id.name);
-                            add_sock_srvc_relations(
-                                srvc_unit.id,
-                                &mut srvc_unit.install,
-                                sock_unit.id,
-                                &mut sock_unit.install,
-                            );
-                            counter += 1;
-                        }
                     }
                 }
             }
@@ -336,8 +288,7 @@ pub fn apply_sockets_to_services(
         if counter > 1 {
             return Err(format!(
                 "Added socket: {} to too many services (should be at most one): {}",
-                sock_unit.id.name,
-                counter
+                sock_unit.id.name, counter
             ));
         }
         if counter == 0 {
@@ -346,8 +297,8 @@ pub fn apply_sockets_to_services(
     }
 
     for srvc_unit in service_table.values_mut() {
-        if let UnitSpecialized::Service(srvc) = &mut srvc_unit.specialized {
-            srvc.socket_names.sort();
+        if let Specific::Service(srvc) = &mut srvc_unit.specific {
+            srvc.conf.sockets.sort();
         }
     }
 

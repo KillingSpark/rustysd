@@ -154,6 +154,11 @@ impl Unit {
         }
     }
 
+    pub fn name_without_suffix(&self) -> String {
+        let split: Vec<_> = self.id.name.split('.').collect();
+        split[0..split.len() - 1].join(".")
+    }
+
     pub fn dedup_dependencies(&mut self) {
         self.common.dependencies.dedup();
     }
