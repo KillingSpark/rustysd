@@ -116,7 +116,7 @@ pub struct SocketSpecific {
 pub struct TargetSpecific {}
 
 pub struct CommonState {
-    pub uptime: u64,
+    pub up_since: Option<std::time::Instant>,
     pub restart_count: u64,
 }
 pub struct ServiceState {

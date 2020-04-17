@@ -173,7 +173,7 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
@@ -220,14 +220,14 @@ impl Service {
                 }
             }
 
-            super::fork_parent::wait_for_service(self, name, run_info.pid_table.clone()).map_err(
-                |start_err| match self.run_poststop(id, name, run_info.clone()) {
+            super::fork_parent::wait_for_service(self, name, run_info).map_err(|start_err| {
+                match self.run_poststop(id, name, run_info.clone()) {
                     Ok(_) => ServiceErrorReason::StartFailed(start_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
                     }
-                },
-            )?;
+                }
+            })?;
             self.run_poststart(id, name, run_info.clone())
                 .map_err(
                     |poststart_err| match self.run_poststop(id, name, run_info.clone()) {
@@ -268,12 +268,7 @@ impl Service {
         }
     }
 
-    fn stop(
-        &mut self,
-        id: UnitId,
-        name: &str,
-        run_info: ArcRuntimeInfo,
-    ) -> Result<(), RunCmdError> {
+    fn stop(&mut self, id: UnitId, name: &str, run_info: &RuntimeInfo) -> Result<(), RunCmdError> {
         let stop_res = self.run_stop_cmd(id, name, run_info.clone());
 
         if self.service_config.srcv_type != ServiceType::OneShot {
@@ -290,16 +285,16 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), ServiceErrorReason> {
-        self.stop(id, name, run_info.clone())
+        self.stop(id, name, run_info)
             .map_err(|stop_err| {
                 trace!(
                     "Stop process failed with: {:?} for service: {}. Running poststop commands",
                     stop_err,
                     name
                 );
-                match self.run_poststop(id, name, run_info.clone()) {
+                match self.run_poststop(id, name, run_info) {
                     Ok(_) => ServiceErrorReason::StopFailed(stop_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
@@ -311,7 +306,7 @@ impl Service {
                     "Stop processes for service: {} ran succesfully. Running poststop commands",
                     name
                 );
-                self.run_poststop(id, name, run_info.clone())
+                self.run_poststop(id, name, run_info)
                     .map_err(|e| ServiceErrorReason::PoststopFailed(e))
             })
     }
@@ -360,7 +355,7 @@ impl Service {
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         let mut cmd = Command::new(&cmdline.cmd);
         for part in &cmdline.args {
@@ -403,9 +398,7 @@ impl Service {
             Ok(mut child) => {
                 trace!("Wait for {:?} for service: {}", cmdline, name);
                 let wait_result: Result<(), RunCmdError> = match wait_for_helper_child(
-                    &mut child,
-                    run_info.pid_table.clone(),
-                    timeout,
+                    &mut child, run_info, timeout,
                 ) {
                     WaitResult::InTime(Err(e)) => {
                         return Err(RunCmdError::WaitError(
@@ -447,20 +440,20 @@ impl Service {
                     }
                 };
                 {
-                    let status_table_locked = run_info.status_table.read().unwrap();
-                    let status = status_table_locked.get(&id).unwrap().lock().unwrap();
+                    let unit = run_info.unit_table.get(&id).unwrap();
+                    let status = &*unit.common.status.read().unwrap();
                     use std::io::Read;
                     if let Some(stream) = &mut child.stderr {
                         let mut buf = Vec::new();
                         let _bytes = stream.read_to_end(&mut buf).unwrap();
                         self.stderr_buffer.extend(buf);
-                        self.log_stderr_lines(name, &status).unwrap();
+                        self.log_stderr_lines(name, status).unwrap();
                     }
                     if let Some(stream) = &mut child.stdout {
                         let mut buf = Vec::new();
                         let _bytes = stream.read_to_end(&mut buf).unwrap();
                         self.stdout_buffer.extend(buf);
-                        self.log_stdout_lines(name, &status).unwrap();
+                        self.log_stdout_lines(name, status).unwrap();
                     }
                 }
 
@@ -484,7 +477,7 @@ impl Service {
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         for cmd in cmds {
             self.run_cmd(cmd, id, name, timeout, run_info.clone())?;
@@ -496,7 +489,7 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.stop.is_empty() {
             return Ok(());
@@ -509,7 +502,7 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.startpre.is_empty() {
             return Ok(());
@@ -522,7 +515,7 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.startpost.is_empty() {
             return Ok(());
@@ -536,7 +529,7 @@ impl Service {
         &mut self,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         if self.service_config.startpost.is_empty() {
             return Ok(());
@@ -614,7 +607,7 @@ enum WaitResult {
 /// that has not been ported to rust
 fn wait_for_helper_child(
     child: &mut std::process::Child,
-    pid_table: ArcMutPidTable,
+    run_info: &RuntimeInfo,
     time_out: Option<std::time::Duration>,
 ) -> WaitResult {
     let pid = nix::unistd::Pid::from_raw(child.id() as i32);
@@ -627,7 +620,7 @@ fn wait_for_helper_child(
             }
         }
         {
-            let mut pid_table_locked = pid_table.lock().unwrap();
+            let mut pid_table_locked = run_info.pid_table.lock().unwrap();
             match pid_table_locked.get(&pid) {
                 Some(entry) => {
                     match entry {

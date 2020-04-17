@@ -30,7 +30,6 @@ fn find_new_unit_path(unit_dirs: &[PathBuf], find_name: &str) -> Result<Option<P
 pub fn load_new_unit(
     unit_dirs: &[PathBuf],
     find_name: &str,
-    next_id: u64,
 ) -> Result<units::Unit, String> {
     if let Some(unit_path) = find_new_unit_path(unit_dirs, find_name)? {
         let content = fs::read_to_string(&unit_path).map_err(|e| {
