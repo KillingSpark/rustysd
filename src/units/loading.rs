@@ -52,6 +52,9 @@ pub fn load_all_units(
     unit_table.extend(service_unit_table);
     unit_table.extend(socket_unit_table);
     unit_table.extend(target_unit_table);
+
+    trace!("Units found: {}", unit_table.len());
+
     fill_dependencies(&mut unit_table);
 
     prune_units(target_unit, &mut unit_table).unwrap();
@@ -140,49 +143,31 @@ fn parse_all_units(
 
             if entry.path().to_str().unwrap().ends_with(".service") {
                 trace!("Service found: {:?}", entry.path());
-                let new_id = UnitId {
-                    kind: UnitIdKind::Service,
-                    name: path.file_name().unwrap().to_str().unwrap().to_owned(),
-                };
-                services.insert(
-                    new_id.clone(),
-                    parse_service(parsed_file, &entry.path())
-                        .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
-                        .try_into()
-                        .map_err(|err| {
-                            ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
-                        })?,
-                );
+                let unit: Unit = parse_service(parsed_file, &entry.path())
+                    .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                    .try_into()
+                    .map_err(|err| {
+                        ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                    })?;
+                services.insert(unit.id.clone(), unit);
             } else if entry.path().to_str().unwrap().ends_with(".socket") {
                 trace!("Socket found: {:?}", entry.path());
-                let new_id = UnitId {
-                    kind: UnitIdKind::Socket,
-                    name: path.file_name().unwrap().to_str().unwrap().to_owned(),
-                };
-                sockets.insert(
-                    new_id.clone(),
-                    parse_socket(parsed_file, &entry.path())
-                        .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
-                        .try_into()
-                        .map_err(|err| {
-                            ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
-                        })?,
-                );
+                let unit: Unit = parse_socket(parsed_file, &entry.path())
+                    .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                    .try_into()
+                    .map_err(|err| {
+                        ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                    })?;
+                sockets.insert(unit.id.clone(), unit);
             } else if entry.path().to_str().unwrap().ends_with(".target") {
                 trace!("Target found: {:?}", entry.path());
-                let new_id = UnitId {
-                    kind: UnitIdKind::Target,
-                    name: path.file_name().unwrap().to_str().unwrap().to_owned(),
-                };
-                targets.insert(
-                    new_id.clone(),
-                    parse_target(parsed_file, &entry.path())
-                        .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
-                        .try_into()
-                        .map_err(|err| {
-                            ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
-                        })?,
-                );
+                let unit: Unit = parse_target(parsed_file, &entry.path())
+                    .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                    .try_into()
+                    .map_err(|err| {
+                        ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                    })?;
+                targets.insert(unit.id.clone(), unit);
             }
         }
     }

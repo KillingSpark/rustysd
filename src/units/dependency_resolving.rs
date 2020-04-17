@@ -164,6 +164,7 @@ pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
     let mut after = Vec::new();
 
     for unit in (*units).values_mut() {
+        trace!("Fill deps for unit: {:?}", unit.id);
         let conf = &mut unit.common.dependencies;
         for id in &conf.wants {
             wanted_by.push((id.clone(), unit.id.clone()));
@@ -186,6 +187,7 @@ pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
     }
 
     for (wanted, wanting) in wanted_by {
+        trace!("{:?} wants {:?}", wanting, wanted);
         let unit = units.get_mut(&wanting).unwrap();
         unit.common.dependencies.wants.push(wanted.clone());
         let unit = units.get_mut(&wanted).unwrap();
