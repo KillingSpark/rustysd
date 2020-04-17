@@ -184,7 +184,7 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
 
 pub fn format_socket(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(socket_unit.id.name));
+    map.insert("Name".into(), Value::String(socket_unit.id.name.clone()));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
 
     if let Specific::Socket(sock) = &socket_unit.specific {
@@ -209,14 +209,14 @@ pub fn format_socket(socket_unit: &Unit, status: UnitStatus) -> Value {
 
 pub fn format_target(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(socket_unit.id.name));
+    map.insert("Name".into(), Value::String(socket_unit.id.name.clone()));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
     Value::Object(map)
 }
 
 pub fn format_service(srvc_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(srvc_unit.id.name));
+    map.insert("Name".into(), Value::String(srvc_unit.id.name.clone()));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
     if let Specific::Service(srvc) = &srvc_unit.specific {
         map.insert(
@@ -289,7 +289,7 @@ pub fn execute_command(
                 let unit_table = &run_info.unit_table;
                 let units = find_units_with_name(&unit_name, unit_table);
                 if units.len() > 1 {
-                    let names: Vec<_> = units.iter().map(|unit| unit.id.name).collect();
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
                         unit_name, names
@@ -315,7 +315,7 @@ pub fn execute_command(
             let id = {
                 let units = find_units_with_name(&unit_name, &run_info.unit_table);
                 if units.len() > 1 {
-                    let names: Vec<_> = units.iter().map(|unit| unit.id.name).collect();
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
                         unit_name, names
@@ -324,7 +324,7 @@ pub fn execute_command(
                 if units.len() == 0 {
                     return Err(format!("No unit found with name: {}", unit_name));
                 }
-                let x = units[0].id;
+                let x = units[0].id.clone();
                 x
             };
 
@@ -336,7 +336,7 @@ pub fn execute_command(
             let id = {
                 let units = find_units_with_name(&unit_name, &run_info.unit_table);
                 if units.len() > 1 {
-                    let names: Vec<_> = units.iter().map(|unit| unit.id.name).collect();
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
                         unit_name, names
@@ -345,7 +345,7 @@ pub fn execute_command(
                 if units.len() == 0 {
                     return Err(format!("No unit found with name: {}", unit_name));
                 }
-                let x = units[0].id;
+                let x = units[0].id.clone();
                 x
             };
 
@@ -413,7 +413,7 @@ pub fn execute_command(
                     result_vec
                         .as_array_mut()
                         .unwrap()
-                        .push(Value::String(unit.id.name));
+                        .push(Value::String(unit.id.name.clone()));
                 }
             }
         }
@@ -422,7 +422,7 @@ pub fn execute_command(
             let mut map = std::collections::HashMap::new();
             for name in &names {
                 let unit = load_new_unit(&run_info.config.unit_dirs, &name)?;
-                map.insert(unit.id, unit);
+                map.insert(unit.id.clone(), unit);
             }
             insert_new_units(map, run_info)?;
         }
@@ -436,7 +436,7 @@ pub fn execute_command(
             // collect all names
             let existing_names = unit_table
                 .values()
-                .map(|unit| unit.id.name)
+                .map(|unit| unit.id.name.clone())
                 .collect::<Vec<_>>();
 
             // filter out existing units
@@ -445,9 +445,9 @@ pub fn execute_command(
             let mut new_units = std::collections::HashMap::new();
             for (id, unit) in units {
                 if existing_names.contains(&unit.id.name) {
-                    ignored_units_names.push(Value::String(unit.id.name));
+                    ignored_units_names.push(Value::String(unit.id.name.clone()));
                 } else {
-                    new_units_names.push(Value::String(unit.id.name));
+                    new_units_names.push(Value::String(unit.id.name.clone()));
                     new_units.insert(id, unit);
                 }
             }

@@ -152,12 +152,11 @@ pub fn activate_unit(
                 reason: UnitOperationErrorReason::GenericStartError(
                     "Tried to activate a unit that can not be found".into(),
                 ),
-                unit_name: id_to_start.name,
-                unit_id: id_to_start,
+                unit_name: id_to_start.name.clone(),
+                unit_id: id_to_start.clone(),
             });
         }
     };
-    let name = unit.id.name;
 
     // if not all dependencies are yet started ignore this call. This unit will be activated again when
     // the next dependency gets ready
@@ -218,7 +217,7 @@ pub fn activate_unit(
         &eventfds,
         allow_ignore,
     )
-    .map(|new_status| StartResult::Started(next_services_ids))
+    .map(|_| StartResult::Started(next_services_ids))
     // drop all the locks "at once". Ordering of dropping should be irrelevant?
 }
 
@@ -231,7 +230,7 @@ pub fn activate_units(
 
     for (id, unit) in &run_info.read().unwrap().unit_table {
         if unit.common.dependencies.after.is_empty() {
-            root_units.push(*id);
+            root_units.push(id.clone());
             trace!("Root unit: {}", unit.id.name);
         }
     }

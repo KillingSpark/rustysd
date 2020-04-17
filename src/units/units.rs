@@ -18,6 +18,12 @@ pub struct UnitId {
     pub kind: UnitIdKind,
     pub name: String,
 }
+impl UnitId {
+    pub fn name_without_suffix(&self) -> String {
+        let split: Vec<_> = self.name.split('.').collect();
+        split[0..split.len() - 1].join(".")
+    }
+}
 
 impl fmt::Debug for UnitId {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
@@ -164,7 +170,7 @@ impl Unit {
     }
 
     pub fn activate(
-        &mut self,
+        &self,
         run_info: &RuntimeInfo,
         notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
@@ -214,7 +220,7 @@ impl Unit {
         }
         Ok(UnitStatus::Started)
     }
-    pub fn deactivate(&mut self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
+    pub fn deactivate(&self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
         // TODO change status here!
         trace!("Deactivate unit: {}", self.id.name);
         match &self.specific {
@@ -429,11 +435,6 @@ impl UnitConfig {
         //let split: Vec<_> = name.split('.').collect();
         //split[0..split.len() - 1].join(".")
         name
-    }
-    pub fn name_without_suffix(&self) -> String {
-        let name = self.name();
-        let split: Vec<_> = name.split('.').collect();
-        split[0..split.len() - 1].join(".")
     }
 }
 

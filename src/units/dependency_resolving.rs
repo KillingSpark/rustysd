@@ -12,7 +12,7 @@ pub fn prune_units(
     let mut ids_to_keep = Vec::new();
     let startunit = unit_table.values().fold(None, |mut result, unit| {
         if unit.id.name == target_unit_name {
-            result = Some(unit.id);
+            result = Some(unit.id.clone());
         }
         result
     });
@@ -27,7 +27,7 @@ pub fn prune_units(
     let mut ids_to_remove = Vec::new();
     for id in unit_table.keys() {
         if !ids_to_keep.contains(id) {
-            ids_to_remove.push(*id);
+            ids_to_remove.push(id.clone());
         }
     }
     for id in &ids_to_remove {
@@ -43,7 +43,7 @@ pub fn prune_units(
             .before
             .iter()
             .filter(|id| ids_to_keep.contains(id))
-            .map(|id| *id)
+            .map(|id| id.clone())
             .collect();
 
         unit.common.dependencies.after = unit
@@ -52,7 +52,7 @@ pub fn prune_units(
             .after
             .iter()
             .filter(|id| ids_to_keep.contains(id))
-            .map(|id| *id)
+            .map(|id| id.clone())
             .collect();
 
         unit.common.dependencies.requires = unit
@@ -61,7 +61,7 @@ pub fn prune_units(
             .requires
             .iter()
             .filter(|id| ids_to_keep.contains(id))
-            .map(|id| *id)
+            .map(|id| id.clone())
             .collect();
 
         unit.common.dependencies.wants = unit
@@ -70,7 +70,7 @@ pub fn prune_units(
             .wants
             .iter()
             .filter(|id| ids_to_keep.contains(id))
-            .map(|id| *id)
+            .map(|id| id.clone())
             .collect();
 
         unit.common.dependencies.required_by = unit
@@ -79,7 +79,7 @@ pub fn prune_units(
             .required_by
             .iter()
             .filter(|id| ids_to_keep.contains(id))
-            .map(|id| *id)
+            .map(|id| id.clone())
             .collect();
 
         unit.common.dependencies.wanted_by = unit
@@ -88,7 +88,7 @@ pub fn prune_units(
             .wanted_by
             .iter()
             .filter(|id| ids_to_keep.contains(id))
-            .map(|id| *id)
+            .map(|id| id.clone())
             .collect();
 
         unit.dedup_dependencies();
@@ -104,22 +104,22 @@ fn find_needed_units_recursive(
     if visited_ids.contains(&needed_id) {
         return;
     }
-    visited_ids.push(needed_id);
+    visited_ids.push(needed_id.clone());
 
     let unit = unit_table.get(&needed_id).unwrap();
     let mut new_needed_ids = Vec::new();
 
     for new_id in &unit.common.dependencies.requires {
-        new_needed_ids.push(*new_id);
+        new_needed_ids.push(new_id.clone());
     }
     for new_id in &unit.common.dependencies.wants {
-        new_needed_ids.push(*new_id);
+        new_needed_ids.push(new_id.clone());
     }
     for new_id in &unit.common.dependencies.required_by {
-        new_needed_ids.push(*new_id);
+        new_needed_ids.push(new_id.clone());
     }
     for new_id in &unit.common.dependencies.wanted_by {
-        new_needed_ids.push(*new_id);
+        new_needed_ids.push(new_id.clone());
     }
     new_needed_ids.sort();
     new_needed_ids.dedup();
@@ -127,7 +127,7 @@ fn find_needed_units_recursive(
     trace!("Id {:?} references ids: {:?}", needed_id, new_needed_ids);
 
     for new_id in &new_needed_ids {
-        find_needed_units_recursive(*new_id, unit_table, visited_ids);
+        find_needed_units_recursive(new_id.clone(), unit_table, visited_ids);
     }
 }
 
@@ -164,24 +164,19 @@ pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
     let mut after = Vec::new();
 
     for unit in (*units).values_mut() {
-        let conf = &unit.common.dependencies;
+        let conf = &mut unit.common.dependencies;
         for id in &conf.wants {
-            unit.common.dependencies.wants.push(id.clone());
             wanted_by.push((id.clone(), unit.id.clone()));
         }
         for id in &conf.requires {
-            unit.common.dependencies.requires.push(id.clone());
             required_by.push((id.clone(), unit.id.clone()));
         }
         for id in &conf.before {
-            unit.common.dependencies.before.push(id.clone());
             after.push((unit.id.clone(), id.clone()))
         }
         for id in &conf.after {
-            unit.common.dependencies.after.push(id.clone());
             before.push((unit.id.clone(), id.clone()))
         }
-
         for id in &conf.wanted_by {
             wanted_by.push((unit.id.clone(), id.clone()));
         }
@@ -192,14 +187,14 @@ pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
 
     for (wanted, wanting) in wanted_by {
         let unit = units.get_mut(&wanting).unwrap();
-        unit.common.dependencies.wants.push(wanted);
+        unit.common.dependencies.wants.push(wanted.clone());
         let unit = units.get_mut(&wanted).unwrap();
         unit.common.dependencies.wanted_by.push(wanting);
     }
 
     for (required, requiring) in required_by {
         let unit = units.get_mut(&requiring).unwrap();
-        unit.common.dependencies.requires.push(required);
+        unit.common.dependencies.requires.push(required.clone());
         let unit = units.get_mut(&required).unwrap();
         unit.common.dependencies.required_by.push(requiring);
     }
@@ -224,10 +219,10 @@ fn add_sock_srvc_relations(
     sock_id: UnitId,
     sock_install: &mut Dependencies,
 ) {
-    srvc_install.after.push(sock_id);
-    srvc_install.requires.push(sock_id);
-    sock_install.before.push(srvc_id);
-    sock_install.required_by.push(srvc_id);
+    srvc_install.after.push(sock_id.clone());
+    srvc_install.requires.push(sock_id.clone());
+    sock_install.before.push(srvc_id.clone());
+    sock_install.required_by.push(srvc_id.clone());
 }
 
 pub fn apply_sockets_to_services(
@@ -243,7 +238,7 @@ pub fn apply_sockets_to_services(
                 let srvc = &mut srvc_unit.specific;
                 if let Specific::Service(srvc) = srvc {
                     // add sockets for services with the exact same name
-                    if (srvc_unit.name_without_suffix() == sock_unit.name_without_suffix())
+                    if (srvc_unit.id.name_without_suffix() == sock_unit.id.name_without_suffix())
                         && !srvc.has_socket(&sock_unit.id.name)
                     {
                         trace!(
@@ -255,9 +250,9 @@ pub fn apply_sockets_to_services(
                         srvc.conf.sockets.push(sock_unit.id.name.clone());
                         sock.conf.services.push(srvc_unit.id.name.clone());
                         add_sock_srvc_relations(
-                            srvc_unit.id,
+                            srvc_unit.id.clone(),
                             &mut srvc_unit.common.dependencies,
-                            sock_unit.id,
+                            sock_unit.id.clone(),
                             &mut sock_unit.common.dependencies,
                         );
                         counter += 1;
@@ -275,9 +270,9 @@ pub fn apply_sockets_to_services(
                         );
                         sock.conf.services.push(srvc_unit.id.name.clone());
                         add_sock_srvc_relations(
-                            srvc_unit.id,
+                            srvc_unit.id.clone(),
                             &mut srvc_unit.common.dependencies,
-                            sock_unit.id,
+                            sock_unit.id.clone(),
                             &mut sock_unit.common.dependencies,
                         );
                         counter += 1;

@@ -20,7 +20,8 @@ pub fn deactivate_unit(
     killfinal: bool,
     run_info: &RuntimeInfo,
 ) -> Result<(), UnitOperationError> {
-    let unit = run_info.unit_table.get(&id_to_kill).unwrap().clone();
+    // TODO deal with kill final
+    let unit = run_info.unit_table.get(&id_to_kill).unwrap();
     unit.deactivate(run_info.clone())?;
     Ok(())
 }
@@ -53,9 +54,9 @@ pub fn reactivate_unit(
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
 ) -> std::result::Result<(), UnitOperationError> {
-    deactivate_unit(id_to_restart, false, run_info.clone())?;
+    deactivate_unit(id_to_restart.clone(), false, run_info.clone())?;
     crate::units::activate_unit(
-        id_to_restart,
+        id_to_restart.clone(),
         run_info,
         notification_socket_path,
         eventfds,

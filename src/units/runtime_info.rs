@@ -7,14 +7,13 @@ use std::sync::{Arc, Mutex, RwLock};
 
 pub type UnitTable = HashMap<UnitId, Unit>;
 pub type PidTable = HashMap<Pid, PidEntry>;
-pub type ArcMutFDStore = RwLock<FDStore>;
+pub type MutFDStore = RwLock<FDStore>;
 
 pub struct RuntimeInfo {
     pub unit_table: UnitTable,
     pub pid_table: Mutex<PidTable>,
-    pub fd_store: ArcMutFDStore,
+    pub fd_store: MutFDStore,
     pub config: crate::config::Config,
-    pub last_id: Arc<Mutex<u64>>,
 }
 
 // This will be passed through to all the different threads as a central state struct

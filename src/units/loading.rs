@@ -108,7 +108,7 @@ fn prune_unused_sockets(sockets: &mut std::collections::HashMap<UnitId, Unit>) -
                     "Prune socket {} because it was not added to any service",
                     unit.id.name
                 );
-                ids_to_remove.push(unit.id);
+                ids_to_remove.push(unit.id.clone());
             }
         }
     }
@@ -144,7 +144,7 @@ fn parse_all_units(
                     name: path.file_name().unwrap().to_str().unwrap().to_owned(),
                 };
                 services.insert(
-                    new_id,
+                    new_id.clone(),
                     parse_service(parsed_file, &entry.path(), new_id.clone())
                         .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
                         .into(),
@@ -156,7 +156,7 @@ fn parse_all_units(
                     name: path.file_name().unwrap().to_str().unwrap().to_owned(),
                 };
                 sockets.insert(
-                    new_id,
+                    new_id.clone(),
                     parse_socket(parsed_file, &entry.path(), new_id.clone())
                         .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
                         .into(),
@@ -168,7 +168,7 @@ fn parse_all_units(
                     name: path.file_name().unwrap().to_str().unwrap().to_owned(),
                 };
                 targets.insert(
-                    new_id,
+                    new_id.clone(),
                     parse_target(parsed_file, &entry.path(), new_id.clone())
                         .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
                         .into(),

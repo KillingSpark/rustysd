@@ -136,27 +136,27 @@ pub fn insert_new_units(
         trace!("Check all names exist");
         check_all_names_exist(&new_units, unit_table)?;
 
-        for (new_id, mut new_unit) in new_units.into_iter() {
+        for (new_id, new_unit) in new_units.into_iter() {
             trace!("Add new unit: {}", new_unit.id.name);
             // Setup relations of before <-> after / requires <-> requiredby
-            for unit in unit_table.values() {
+            for unit in unit_table.values_mut() {
                 if new_unit.common.dependencies.after.contains(&unit.id) {
-                    unit.common.dependencies.before.push(new_id);
+                    unit.common.dependencies.before.push(new_id.clone());
                 }
                 if new_unit.common.dependencies.before.contains(&unit.id) {
-                    unit.common.dependencies.after.push(new_id);
+                    unit.common.dependencies.after.push(new_id.clone());
                 }
                 if new_unit.common.dependencies.requires.contains(&unit.id) {
-                    unit.common.dependencies.required_by.push(new_id);
+                    unit.common.dependencies.required_by.push(new_id.clone());
                 }
                 if new_unit.common.dependencies.wants.contains(&unit.id) {
-                    unit.common.dependencies.wanted_by.push(new_id);
+                    unit.common.dependencies.wanted_by.push(new_id.clone());
                 }
                 if new_unit.common.dependencies.required_by.contains(&unit.id) {
-                    unit.common.dependencies.requires.push(new_id);
+                    unit.common.dependencies.requires.push(new_id.clone());
                 }
                 if new_unit.common.dependencies.wanted_by.contains(&unit.id) {
-                    unit.common.dependencies.wants.push(new_id);
+                    unit.common.dependencies.wants.push(new_id.clone());
                 }
             }
             unit_table.insert(new_id, new_unit);
