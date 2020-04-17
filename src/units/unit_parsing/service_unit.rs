@@ -46,11 +46,6 @@ pub fn parse_service(
         }
     }
 
-    let unit_config = if let Some(unit_config) = unit_config {
-        unit_config
-    } else {
-        return Err(ParsingErrorReason::SectionNotFound("Unit".to_owned()));
-    };
     let service_config = if let Some(service_config) = service_config {
         service_config
     } else {
@@ -124,7 +119,7 @@ pub fn parse_service(
 
     Ok(ParsedServiceConfig {
         common: ParsedCommonConfig {
-            unit: unit_config,
+            unit: unit_config.unwrap_or_else(Default::default),
             install: install_config.unwrap_or_else(Default::default),
         },
         srvc: service_config,

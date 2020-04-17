@@ -21,16 +21,9 @@ pub fn parse_target(
         }
     }
 
-    let conf = match unit_config {
-        Some(conf) => conf,
-        None => {
-            return Err(ParsingErrorReason::SectionNotFound("Unit".to_owned()));
-        }
-    };
-
     Ok(ParsedTargetConfig {
         common: ParsedCommonConfig {
-            unit: conf,
+            unit: unit_config.unwrap_or_else(Default::default),
             install: install_config.unwrap_or_else(Default::default),
         },
     })

@@ -26,6 +26,7 @@ pub struct ParsedTargetConfig {
     common: ParsedCommonConfig,
 }
 
+#[derive(Default)]
 pub struct ParsedUnitSection {
     pub description: String,
 

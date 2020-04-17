@@ -10,12 +10,10 @@ pub fn parse_socket(
     let mut socket_config = None;
     let mut install_config = None;
     let mut unit_config = None;
-    let mut exec_config = None;
 
     for (name, mut section) in parsed_file {
         match name.as_str() {
             "[Socket]" => {
-                exec_config = Some(super::parse_exec_section(&mut section)?);
                 socket_config = match parse_socket_section(section) {
                     Ok(conf) => Some(conf),
                     Err(e) => return Err(e),
@@ -37,16 +35,9 @@ pub fn parse_socket(
         None => return Err(ParsingErrorReason::SectionNotFound("Socket".to_owned())),
     };
 
-    let unit_config = match unit_config {
-        Some(conf) => conf,
-        None => return Err(ParsingErrorReason::SectionNotFound("Unit".to_owned())),
-    };
-
-    let exec_config = exec_config.unwrap();
-
     Ok(ParsedSocketConfig {
         common: ParsedCommonConfig {
-            unit: unit_config,
+            unit: unit_config.unwrap_or_else(Default::default),
             install: install_config.unwrap_or_else(Default::default),
         },
         sock: socket_config,
