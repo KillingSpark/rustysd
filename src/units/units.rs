@@ -102,6 +102,13 @@ pub struct ServiceSpecific {
     pub conf: ServiceConfig,
     pub state: RwLock<ServiceState>,
 }
+
+impl ServiceSpecific {
+    pub fn has_socket(&self, socket: &str) -> bool {
+        self.conf.sockets.iter().any(|id| id.eq(socket))
+    }
+}
+
 pub struct SocketSpecific {
     pub conf: SocketConfig,
     pub state: RwLock<SocketState>,

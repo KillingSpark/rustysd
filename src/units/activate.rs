@@ -132,7 +132,7 @@ pub enum StartResult {
 
 pub fn activate_unit(
     id_to_start: UnitId,
-    run_info: ArcRuntimeInfo,
+    run_info: &RuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
     allow_ignore: bool,
