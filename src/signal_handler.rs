@@ -7,7 +7,7 @@ use signal_hook::iterator::Signals;
 
 pub fn handle_signals(
     signals: Signals,
-    run_info: ArcRuntimeInfo,
+    run_info: ArcMutRuntimeInfo,
     notification_socket_path: std::path::PathBuf,
     eventfds: Vec<EventFd>,
 ) {

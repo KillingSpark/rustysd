@@ -12,14 +12,14 @@ pub fn sanity_check_dependencies(
 ) -> Result<(), SanityCheckError> {
     let mut root_ids = Vec::new();
     for unit in unit_table.values() {
-        if unit.install.after.len() == 0 {
+        if unit.common.dependencies.after.len() == 0 {
             root_ids.push(unit.id);
         }
     }
     // check whether there are cycles in the startup sequence
     let mut finished_ids = HashMap::new();
     let mut not_finished_ids: HashMap<_, _> =
-        unit_table.keys().copied().map(|id| (id, ())).collect();
+        unit_table.keys().cloned().map(|id| (id, ())).collect();
     let mut circles = Vec::new();
 
     loop {
@@ -32,7 +32,7 @@ pub fn sanity_check_dependencies(
                 .keys()
                 .filter(|id| {
                     let unit = unit_table.get(id).unwrap();
-                    let in_degree = unit.install.after.iter().fold(0, |acc, id| {
+                    let in_degree = unit.common.dependencies.after.iter().fold(0, |acc, id| {
                         if finished_ids.contains_key(id) {
                             acc
                         } else {
@@ -46,7 +46,7 @@ pub fn sanity_check_dependencies(
                 *id
             } else {
                 // make sensible error-message
-                circles.push(not_finished_ids.keys().copied().collect());
+                circles.push(not_finished_ids.keys().cloned().collect());
                 break;
             }
         };
@@ -100,7 +100,7 @@ fn search_backedge(
     visited_ids.push(*id);
 
     let unit = unit_table.get(id).unwrap();
-    for next_id in &unit.install.before {
+    for next_id in &unit.common.dependencies.before {
         let res = search_backedge(
             next_id,
             unit_table,
