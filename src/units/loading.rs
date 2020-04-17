@@ -163,9 +163,9 @@ fn parse_all_units(
                 let new_id = UnitId(UnitIdKind::Service, *last_id);
                 services.insert(
                     new_id,
-                    parse_service(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
-                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
-                    })?,
+                    parse_service(parsed_file, &entry.path(), new_id.clone())
+                        .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                        .into(),
                 );
             } else if entry.path().to_str().unwrap().ends_with(".socket") {
                 *last_id += 1;
@@ -173,9 +173,9 @@ fn parse_all_units(
                 let new_id = UnitId(UnitIdKind::Socket, *last_id);
                 sockets.insert(
                     new_id,
-                    parse_socket(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
-                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
-                    })?,
+                    parse_socket(parsed_file, &entry.path(), new_id.clone())
+                        .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                        .into(),
                 );
             } else if entry.path().to_str().unwrap().ends_with(".target") {
                 *last_id += 1;
@@ -183,9 +183,9 @@ fn parse_all_units(
                 let new_id = UnitId(UnitIdKind::Target, *last_id);
                 targets.insert(
                     new_id,
-                    parse_target(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
-                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
-                    })?,
+                    parse_target(parsed_file, &entry.path(), new_id.clone())
+                        .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                        .into(),
                 );
             }
         }

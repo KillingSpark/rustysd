@@ -77,7 +77,7 @@ pub fn string_to_bool(s: &str) -> bool {
 pub fn parse_unit_section(
     mut section: ParsedSection,
     path: &PathBuf,
-) -> Result<UnitConfig, ParsingErrorReason> {
+) -> Result<ParsedUnitSection, ParsingErrorReason> {
     let wants = section.remove("WANTS");
     let requires = section.remove("REQUIRES");
     let after = section.remove("AFTER");
@@ -90,8 +90,7 @@ pub fn parse_unit_section(
         ));
     }
 
-    Ok(UnitConfig {
-        filepath: path.clone(),
+    Ok(ParsedUnitSection {
         description: description.map(|x| (x[0]).1.clone()).unwrap_or_default(),
         wants: map_tupels_to_second(wants.unwrap_or_default()),
         requires: map_tupels_to_second(requires.unwrap_or_default()),
@@ -115,7 +114,9 @@ fn make_stdio_option(setting: &str) -> Result<StdIoOption, ParsingErrorReason> {
     }
 }
 
-pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, ParsingErrorReason> {
+pub fn parse_exec_section(
+    section: &mut ParsedSection,
+) -> Result<ParsedExecSection, ParsingErrorReason> {
     let user = section.remove("USER");
     let group = section.remove("GROUP");
     let stdout = section.remove("STANDARDOUTPUT");
@@ -203,7 +204,7 @@ pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, Par
         }),
     };
 
-    Ok(ExecConfig {
+    Ok(ParsedExecSection {
         user,
         group,
         stderr_path,
@@ -214,7 +215,7 @@ pub fn parse_exec_section(section: &mut ParsedSection) -> Result<ExecConfig, Par
 
 pub fn parse_install_section(
     mut section: ParsedSection,
-) -> Result<InstallConfig, ParsingErrorReason> {
+) -> Result<ParsedInstallSection, ParsingErrorReason> {
     let wantedby = section.remove("WANTEDBY");
     let requiredby = section.remove("REQUIREDBY");
 
@@ -224,7 +225,7 @@ pub fn parse_install_section(
         ));
     }
 
-    Ok(InstallConfig {
+    Ok(ParsedInstallSection {
         wanted_by: map_tupels_to_second(wantedby.unwrap_or_default()),
         required_by: map_tupels_to_second(requiredby.unwrap_or_default()),
     })

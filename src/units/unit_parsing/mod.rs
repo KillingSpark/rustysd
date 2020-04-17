@@ -8,6 +8,147 @@ pub use socket_unit::*;
 pub use target_unit::*;
 pub use unit_parser::*;
 
+use std::path::PathBuf;
+
+pub struct ParsedCommonConfig {
+    unit: ParsedUnitSection,
+    install: ParsedInstallSection,
+}
+pub struct ParsedServiceConfig {
+    common: ParsedCommonConfig,
+    srvc: ParsedServiceSection,
+}
+pub struct ParsedSocketConfig {
+    common: ParsedCommonConfig,
+    sock: ParsedSocketSection,
+}
+pub struct ParsedTargetConfig {
+    common: ParsedCommonConfig,
+}
+
+pub struct ParsedUnitSection {
+    pub description: String,
+
+    pub wants: Vec<String>,
+    pub requires: Vec<String>,
+    pub before: Vec<String>,
+    pub after: Vec<String>,
+}
+#[derive(Clone)]
+pub struct ParsedSingleSocketConfig {
+    pub kind: crate::sockets::SocketKind,
+    pub specialized: crate::sockets::SpecializedSocketConfig,
+}
+
+impl std::fmt::Debug for ParsedSingleSocketConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "SocketConfig {{ kind: {:?}, specialized: {:?} }}",
+            self.kind, self.specialized
+        )?;
+        Ok(())
+    }
+}
+
+pub struct ParsedSocketSection {
+    pub sockets: Vec<ParsedSingleSocketConfig>,
+    pub filedesc_name: Option<String>,
+    pub services: Vec<String>,
+
+    pub exec_section: ParsedExecSection,
+}
+pub struct ParsedServiceSection {
+    pub restart: ServiceRestart,
+    pub accept: bool,
+    pub notifyaccess: NotifyKind,
+    pub exec: Commandline,
+    pub stop: Vec<Commandline>,
+    pub stoppost: Vec<Commandline>,
+    pub startpre: Vec<Commandline>,
+    pub startpost: Vec<Commandline>,
+    pub srcv_type: ServiceType,
+    pub starttimeout: Option<Timeout>,
+    pub stoptimeout: Option<Timeout>,
+    pub generaltimeout: Option<Timeout>,
+
+    pub dbus_name: Option<String>,
+
+    pub sockets: Vec<String>,
+
+    pub exec_section: ParsedExecSection,
+}
+
+#[derive(Default)]
+pub struct ParsedInstallSection {
+    pub wanted_by: Vec<String>,
+    pub required_by: Vec<String>,
+}
+pub struct ParsedExecSection {
+    pub user: Option<String>,
+    pub group: Option<String>,
+    pub stdout_path: Option<StdIoOption>,
+    pub stderr_path: Option<StdIoOption>,
+    pub supplementary_groups: Vec<String>,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+pub enum ServiceType {
+    Simple,
+    Notify,
+    Dbus,
+    OneShot,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum NotifyKind {
+    Main,
+    Exec,
+    All,
+    None,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ServiceRestart {
+    Always,
+    No,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum Timeout {
+    Duration(std::time::Duration),
+    Infinity,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum StdIoOption {
+    File(PathBuf),
+    AppendFile(PathBuf),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CommandlinePrefix {
+    AtSign,
+    Minus,
+    Colon,
+    Plus,
+    Exclamation,
+    DoubleExclamation,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Commandline {
+    pub cmd: String,
+    pub args: Vec<String>,
+    pub prefixes: Vec<CommandlinePrefix>,
+}
+
+impl ToString for Commandline {
+    fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
 #[derive(Debug)]
 pub struct ParsingError {
     inner: ParsingErrorReason,

@@ -1,4 +1,3 @@
-use crate::services::{Service, ServiceRuntimeInfo};
 use crate::units::*;
 use std::path::PathBuf;
 
@@ -26,7 +25,7 @@ pub fn parse_service(
     parsed_file: ParsedFile,
     path: &PathBuf,
     chosen_id: UnitId,
-) -> Result<Unit, ParsingErrorReason> {
+) -> Result<ParsedServiceConfig, ParsingErrorReason> {
     let mut service_config = None;
     let mut install_config = None;
     let mut unit_config = None;
@@ -47,13 +46,18 @@ pub fn parse_service(
         }
     }
 
+    let unit_config = if let Some(unit_config) = unit_config {
+        unit_config
+    } else {
+        return Err(ParsingErrorReason::SectionNotFound("Unit".to_owned()));
+    };
     let service_config = if let Some(service_config) = service_config {
         service_config
     } else {
         return Err(ParsingErrorReason::SectionNotFound("Service".to_owned()));
     };
 
-    let uid = if let Some(user) = &service_config.exec_config.user {
+    let uid = if let Some(user) = &service_config.exec_section.user {
         if let Ok(uid) = user.parse::<u32>() {
             Some(nix::unistd::Uid::from_raw(uid))
         } else {
@@ -73,7 +77,7 @@ pub fn parse_service(
     };
     let uid = uid.unwrap_or(nix::unistd::getuid());
 
-    let gid = if let Some(group) = &service_config.exec_config.group {
+    let gid = if let Some(group) = &service_config.exec_section.group {
         if let Ok(gid) = group.parse::<u32>() {
             Some(nix::unistd::Gid::from_raw(gid))
         } else {
@@ -94,7 +98,7 @@ pub fn parse_service(
     let gid = gid.unwrap_or(nix::unistd::getgid());
 
     let mut supp_gids = Vec::new();
-    for group in &service_config.exec_config.supplementary_groups {
+    for group in &service_config.exec_section.supplementary_groups {
         let gid = if let Ok(gid) = group.parse::<u32>() {
             nix::unistd::Gid::from_raw(gid)
         } else {
@@ -118,56 +122,12 @@ pub fn parse_service(
         cgroup_path: make_cgroup_path(&path.file_name().unwrap().to_str().unwrap())?,
     };
 
-    Ok(Unit {
-        id: chosen_id,
-        conf: unit_config.unwrap_or(UnitConfig {
-            filepath: path.clone(),
-
-            description: "".into(),
-
-            wants: Vec::new(),
-            requires: Vec::new(),
-            before: Vec::new(),
-            after: Vec::new(),
-        }),
-        install: Install {
-            wants: Vec::new(),
-            wanted_by: Vec::new(),
-            requires: Vec::new(),
-            required_by: Vec::new(),
-            before: Vec::new(),
-            after: Vec::new(),
-            install_config,
+    Ok(ParsedServiceConfig {
+        common: ParsedCommonConfig {
+            unit: unit_config,
+            install: install_config.unwrap_or_else(Default::default),
         },
-        specialized: UnitSpecialized::Service(Service {
-            supp_gids,
-            uid,
-            gid,
-            pid: None,
-            signaled_ready: false,
-
-            service_config,
-            socket_names: Vec::new(),
-
-            process_group: None,
-
-            status_msgs: Vec::new(),
-
-            runtime_info: ServiceRuntimeInfo {
-                restarted: 0,
-                up_since: None,
-            },
-
-            notifications: None,
-            notifications_path: None,
-            stdout: None,
-            stderr: None,
-            notifications_buffer: String::new(),
-            stdout_buffer: Vec::new(),
-            stderr_buffer: Vec::new(),
-
-            platform_specific,
-        }),
+        srvc: service_config,
     })
 }
 
@@ -268,7 +228,9 @@ fn parse_cmdline(raw_line: &str) -> Result<Commandline, ParsingErrorReason> {
     })
 }
 
-fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, ParsingErrorReason> {
+fn parse_service_section(
+    mut section: ParsedSection,
+) -> Result<ParsedServiceSection, ParsingErrorReason> {
     let exec = section.remove("EXECSTART");
     let stop = section.remove("EXECSTOP");
     let stoppost = section.remove("EXECSTOPPOST");
@@ -480,8 +442,7 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         }
     }
 
-    Ok(ServiceConfig {
-        exec_config,
+    Ok(ParsedServiceSection {
         srcv_type,
         notifyaccess,
         restart,
@@ -496,5 +457,6 @@ fn parse_service_section(mut section: ParsedSection) -> Result<ServiceConfig, Pa
         stoptimeout,
         generaltimeout,
         sockets: map_tupels_to_second(sockets.unwrap_or_default()),
+        exec_section: exec_config,
     })
 }

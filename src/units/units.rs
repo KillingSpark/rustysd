@@ -303,24 +303,12 @@ impl UnitConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SocketConfig {
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
 }
 
-impl fmt::Debug for SocketConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(
-            f,
-            "SocketConfig {{ kind: {:?}, specialized: {:?} }}",
-            self.kind, self.specialized
-        )?;
-        Ok(())
-    }
-}
-
-unsafe impl Send for SocketConfig {}
 
 #[derive(Debug, Clone)]
 pub struct InstallConfig {
@@ -328,39 +316,6 @@ pub struct InstallConfig {
     pub required_by: Vec<String>,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
-pub enum ServiceType {
-    Simple,
-    Notify,
-    Dbus,
-    OneShot,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum NotifyKind {
-    Main,
-    Exec,
-    All,
-    None,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum ServiceRestart {
-    Always,
-    No,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum Timeout {
-    Duration(std::time::Duration),
-    Infinity,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum StdIoOption {
-    File(PathBuf),
-    AppendFile(PathBuf),
-}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExecConfig {
@@ -371,28 +326,6 @@ pub struct ExecConfig {
     pub supplementary_groups: Vec<String>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum CommandlinePrefix {
-    AtSign,
-    Minus,
-    Colon,
-    Plus,
-    Exclamation,
-    DoubleExclamation,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Commandline {
-    pub cmd: String,
-    pub args: Vec<String>,
-    pub prefixes: Vec<CommandlinePrefix>,
-}
-
-impl ToString for Commandline {
-    fn to_string(&self) -> String {
-        format!("{:?}", self)
-    }
-}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {

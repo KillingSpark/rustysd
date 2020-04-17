@@ -52,6 +52,7 @@ pub fn load_new_unit(
                 units::UnitId(units::UnitIdKind::Service, next_id),
             )
             .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
+            .into()
         } else if find_name.ends_with(".socket") {
             units::parse_socket(
                 parsed,
@@ -59,6 +60,7 @@ pub fn load_new_unit(
                 units::UnitId(units::UnitIdKind::Socket, next_id),
             )
             .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
+            .into()
         } else if find_name.ends_with(".target") {
             units::parse_target(
                 parsed,
@@ -66,6 +68,7 @@ pub fn load_new_unit(
                 units::UnitId(units::UnitIdKind::Target, next_id),
             )
             .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
+            .into()
         } else {
             return Err(format!(
                 "File suffix not recognized for file {:?}",

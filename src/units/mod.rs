@@ -9,6 +9,7 @@ mod remove;
 mod sanity_check;
 mod unit_parsing;
 mod units;
+mod from_parsed_config;
 
 pub use activate::*;
 pub use deactivate::*;

@@ -5,7 +5,7 @@ pub fn parse_target(
     parsed_file: ParsedFile,
     path: &PathBuf,
     chosen_id: UnitId,
-) -> Result<Unit, ParsingErrorReason> {
+) -> Result<ParsedTargetConfig, ParsingErrorReason> {
     let mut install_config = None;
     let mut unit_config = None;
 
@@ -28,18 +28,10 @@ pub fn parse_target(
         }
     };
 
-    Ok(Unit {
-        conf,
-        id: chosen_id,
-        install: Install {
-            install_config: install_config,
-            wants: Vec::new(),
-            wanted_by: Vec::new(),
-            requires: Vec::new(),
-            required_by: Vec::new(),
-            before: Vec::new(),
-            after: Vec::new(),
+    Ok(ParsedTargetConfig {
+        common: ParsedCommonConfig {
+            unit: conf,
+            install: install_config.unwrap_or_else(Default::default),
         },
-        specialized: UnitSpecialized::Target,
     })
 }
