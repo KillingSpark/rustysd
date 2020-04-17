@@ -7,22 +7,6 @@ use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
 
-#[derive(Debug)]
-pub struct ServiceRuntimeInfo {
-    pub restarted: u64,
-    pub up_since: Option<std::time::Instant>,
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Debug)]
-pub struct PlatformSpecificServiceFields {
-    pub cgroup_path: std::path::PathBuf,
-}
-
-#[cfg(not(target_os = "linux"))]
-#[derive(Debug)]
-pub struct PlatformSpecificServiceFields {}
-
 /// This looks like std::process::Stdio but it can be some more stuff like journal or kmsg so I explicitly
 /// made a new enum here
 #[derive(Debug)]
@@ -54,15 +38,10 @@ impl StdIo {
 #[derive(Debug)]
 pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
-    pub service_config: ServiceConfig,
-
-    pub socket_names: Vec<String>,
-
     pub status_msgs: Vec<String>,
 
     pub process_group: Option<nix::unistd::Pid>,
 
-    pub runtime_info: ServiceRuntimeInfo,
     pub signaled_ready: bool,
 
     pub notifications: Option<UnixDatagram>,
@@ -73,11 +52,6 @@ pub struct Service {
     pub notifications_buffer: String,
     pub stdout_buffer: Vec<u8>,
     pub stderr_buffer: Vec<u8>,
-    pub uid: nix::unistd::Uid,
-    pub gid: nix::unistd::Gid,
-    pub supp_gids: Vec<nix::unistd::Gid>,
-
-    pub platform_specific: PlatformSpecificServiceFields,
 }
 
 #[derive(Debug)]
@@ -171,6 +145,7 @@ impl std::fmt::Display for ServiceErrorReason {
 impl Service {
     pub fn start(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
@@ -184,19 +159,19 @@ impl Service {
         if let Some(pgid) = self.process_group {
             return Err(ServiceErrorReason::AlreadyHasPID(pgid));
         }
-        if self.service_config.accept {
+        if conf.accept {
             return Err(ServiceErrorReason::Generic(
                 "Inetd style activation is not supported".into(),
             ));
         }
-        if !allow_ignore || self.socket_names.is_empty() {
+        if !allow_ignore || conf.sockets.is_empty() {
             trace!("Start service {}", name);
 
-            super::prepare_service::prepare_service(self, name, &notification_socket_path)
+            super::prepare_service::prepare_service(self, conf, name, &notification_socket_path)
                 .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
-            self.run_prestart(id.clone(), name, run_info.clone())
+            self.run_prestart(conf, id.clone(), name, run_info.clone())
                 .map_err(|prestart_err| {
-                    match self.run_poststop(id.clone(), name, run_info.clone()) {
+                    match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(prestart_err),
                         Err(poststop_err) => ServiceErrorReason::PrestartAndPoststopFailed(
                             prestart_err,
@@ -209,28 +184,30 @@ impl Service {
                 // This mainly just forks the process. The waiting (if necessary) is done below
                 // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
-                start_service(self, name.clone(), &*run_info.fd_store.read().unwrap())
-                    .map_err(|e| ServiceErrorReason::StartFailed(e))?;
+                start_service(
+                    self,
+                    conf,
+                    name.clone(),
+                    &*run_info.fd_store.read().unwrap(),
+                )
+                .map_err(|e| ServiceErrorReason::StartFailed(e))?;
                 if let Some(new_pid) = self.pid {
-                    pid_table_locked.insert(
-                        new_pid,
-                        PidEntry::Service(id.clone(), self.service_config.srcv_type),
-                    );
+                    pid_table_locked.insert(new_pid, PidEntry::Service(id.clone(), conf.srcv_type));
                     crate::platform::notify_event_fds(&eventfds);
                 }
             }
 
-            super::fork_parent::wait_for_service(self, name, run_info).map_err(|start_err| {
-                match self.run_poststop(id.clone(), name, run_info.clone()) {
+            super::fork_parent::wait_for_service(self, conf, name, run_info).map_err(
+                |start_err| match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
                     Ok(_) => ServiceErrorReason::StartFailed(start_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
                     }
-                }
-            })?;
-            self.run_poststart(id.clone(), name, run_info.clone())
+                },
+            )?;
+            self.run_poststart(conf, id.clone(), name, run_info.clone())
                 .map_err(|poststart_err| {
-                    match self.run_poststop(id.clone(), name, run_info.clone()) {
+                    match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(poststart_err),
                         Err(poststop_err) => ServiceErrorReason::PoststartAndPoststopFailed(
                             poststart_err,
@@ -268,33 +245,37 @@ impl Service {
         }
     }
 
-    fn stop(&mut self, id: UnitId, name: &str, run_info: &RuntimeInfo) -> Result<(), RunCmdError> {
-        let stop_res = self.run_stop_cmd(id, name, run_info.clone());
-
-        if self.service_config.srcv_type != ServiceType::OneShot {
+    fn stop(
+        &mut self,
+        conf: &ServiceConfig,
+        id: UnitId,
+        name: &str,
+        run_info: &RuntimeInfo,
+    ) -> Result<(), RunCmdError> {
+        let stop_res = self.run_stop_cmd(conf, id, name, run_info.clone());
+        if conf.srcv_type != ServiceType::OneShot {
             // already happened when the oneshot process exited in the exit handler
             self.kill_all_remaining_processes(name);
         }
-
         self.pid = None;
         self.process_group = None;
         stop_res
     }
-
     pub fn kill(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), ServiceErrorReason> {
-        self.stop(id.clone(), name, run_info)
+        self.stop(conf, id.clone(), name, run_info)
             .map_err(|stop_err| {
                 trace!(
                     "Stop process failed with: {:?} for service: {}. Running poststop commands",
                     stop_err,
                     name
                 );
-                match self.run_poststop(id.clone(), name, run_info) {
+                match self.run_poststop(conf, id.clone(), name, run_info) {
                     Ok(_) => ServiceErrorReason::StopFailed(stop_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
@@ -306,19 +287,19 @@ impl Service {
                     "Stop processes for service: {} ran succesfully. Running poststop commands",
                     name
                 );
-                self.run_poststop(id.clone(), name, run_info)
+                self.run_poststop(conf, id.clone(), name, run_info)
                     .map_err(|e| ServiceErrorReason::PoststopFailed(e))
             })
     }
 
-    pub fn get_start_timeout(&self) -> Option<std::time::Duration> {
-        if let Some(timeout) = &self.service_config.starttimeout {
+    pub fn get_start_timeout(&self, conf: &ServiceConfig) -> Option<std::time::Duration> {
+        if let Some(timeout) = &conf.starttimeout {
             match timeout {
                 Timeout::Duration(dur) => Some(*dur),
                 Timeout::Infinity => None,
             }
         } else {
-            if let Some(timeout) = &self.service_config.generaltimeout {
+            if let Some(timeout) = &conf.generaltimeout {
                 match timeout {
                     Timeout::Duration(dur) => Some(*dur),
                     Timeout::Infinity => None,
@@ -330,14 +311,14 @@ impl Service {
         }
     }
 
-    fn get_stop_timeout(&self) -> Option<std::time::Duration> {
-        if let Some(timeout) = &self.service_config.stoptimeout {
+    fn get_stop_timeout(&self, conf: &ServiceConfig) -> Option<std::time::Duration> {
+        if let Some(timeout) = &conf.stoptimeout {
             match timeout {
                 Timeout::Duration(dur) => Some(*dur),
                 Timeout::Infinity => None,
             }
         } else {
-            if let Some(timeout) = &self.service_config.generaltimeout {
+            if let Some(timeout) = &conf.generaltimeout {
                 match timeout {
                     Timeout::Duration(dur) => Some(*dur),
                     Timeout::Infinity => None,
@@ -487,55 +468,58 @@ impl Service {
 
     fn run_stop_cmd(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.stop.is_empty() {
+        if conf.stop.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_stop_timeout();
-        let cmds = self.service_config.stop.clone();
+        let timeout = self.get_stop_timeout(conf);
+        let cmds = conf.stop.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
     fn run_prestart(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.startpre.is_empty() {
+        if conf.startpre.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_start_timeout();
-        let cmds = self.service_config.startpre.clone();
+        let timeout = self.get_start_timeout(conf);
+        let cmds = conf.startpre.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
     fn run_poststart(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.startpost.is_empty() {
+        if conf.startpost.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_start_timeout();
-        let cmds = self.service_config.startpost.clone();
+        let timeout = self.get_start_timeout(conf);
+        let cmds = conf.startpost.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
-
     fn run_poststop(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.startpost.is_empty() {
+        if conf.startpost.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_start_timeout();
-        let cmds = self.service_config.stoppost.clone();
+        let timeout = self.get_start_timeout(conf);
+        let cmds = conf.stoppost.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
 

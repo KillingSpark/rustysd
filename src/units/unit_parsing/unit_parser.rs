@@ -76,7 +76,6 @@ pub fn string_to_bool(s: &str) -> bool {
 
 pub fn parse_unit_section(
     mut section: ParsedSection,
-    path: &PathBuf,
 ) -> Result<ParsedUnitSection, ParsingErrorReason> {
     let wants = section.remove("WANTS");
     let requires = section.remove("REQUIRES");

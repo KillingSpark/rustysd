@@ -1,30 +1,9 @@
 use crate::units::*;
 use std::path::PathBuf;
 
-#[cfg(feature = "cgroups")]
-fn make_cgroup_path(srvc_name: &str) -> Result<PathBuf, ParsingErrorReason> {
-    let rustysd_cgroup =
-        crate::platform::cgroups::get_own_freezer(&PathBuf::from("/sys/fs/cgroup"))
-            .map_err(|e| ParsingErrorReason::Generic(format!("Couldnt get own cgroup: {}", e)))?;
-    let service_cgroup = rustysd_cgroup.join(srvc_name);
-    trace!(
-        "Service {} will be moved into cgroup: {:?}",
-        srvc_name,
-        service_cgroup
-    );
-    Ok(service_cgroup)
-}
-
-#[cfg(not(feature = "cgroups"))]
-fn make_cgroup_path(_srvc_name: &str) -> Result<PathBuf, ParsingErrorReason> {
-    // doesnt matter, wont be used anyways
-    Ok(PathBuf::from("/ree"))
-}
-
 pub fn parse_service(
     parsed_file: ParsedFile,
     path: &PathBuf,
-    chosen_id: UnitId,
 ) -> Result<ParsedServiceConfig, ParsingErrorReason> {
     let mut service_config = None;
     let mut install_config = None;
@@ -36,7 +15,7 @@ pub fn parse_service(
                 service_config = Some(parse_service_section(section)?);
             }
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section, path)?);
+                unit_config = Some(parse_unit_section(section)?);
             }
             "[Install]" => {
                 install_config = Some(parse_install_section(section)?);
@@ -52,73 +31,9 @@ pub fn parse_service(
         return Err(ParsingErrorReason::SectionNotFound("Service".to_owned()));
     };
 
-    let uid = if let Some(user) = &service_config.exec_section.user {
-        if let Ok(uid) = user.parse::<u32>() {
-            Some(nix::unistd::Uid::from_raw(uid))
-        } else {
-            if let Ok(pwentry) = crate::platform::pwnam::getpwnam_r(&user)
-                .map_err(|e| ParsingErrorReason::Generic(e))
-            {
-                Some(pwentry.uid)
-            } else {
-                return Err(ParsingErrorReason::Generic(format!(
-                    "Couldnt get uid for username: {}",
-                    user
-                )));
-            }
-        }
-    } else {
-        None
-    };
-    let uid = uid.unwrap_or(nix::unistd::getuid());
-
-    let gid = if let Some(group) = &service_config.exec_section.group {
-        if let Ok(gid) = group.parse::<u32>() {
-            Some(nix::unistd::Gid::from_raw(gid))
-        } else {
-            if let Ok(groupentry) = crate::platform::grnam::getgrnam_r(&group)
-                .map_err(|e| ParsingErrorReason::Generic(e))
-            {
-                Some(groupentry.gid)
-            } else {
-                return Err(ParsingErrorReason::Generic(format!(
-                    "Couldnt get gid for groupname: {}",
-                    group
-                )));
-            }
-        }
-    } else {
-        None
-    };
-    let gid = gid.unwrap_or(nix::unistd::getgid());
-
-    let mut supp_gids = Vec::new();
-    for group in &service_config.exec_section.supplementary_groups {
-        let gid = if let Ok(gid) = group.parse::<u32>() {
-            nix::unistd::Gid::from_raw(gid)
-        } else {
-            if let Ok(groupentry) = crate::platform::grnam::getgrnam_r(&group)
-                .map_err(|e| ParsingErrorReason::Generic(e))
-            {
-                groupentry.gid
-            } else {
-                return Err(ParsingErrorReason::Generic(format!(
-                    "Couldnt get gid for groupname: {}",
-                    group
-                )));
-            }
-        };
-        supp_gids.push(gid);
-    }
-
-    // TODO make the cgroup path dynamic so multiple rustysd instances can exist
-    let platform_specific = crate::services::PlatformSpecificServiceFields {
-        #[cfg(target_os = "linux")]
-        cgroup_path: make_cgroup_path(&path.file_name().unwrap().to_str().unwrap())?,
-    };
-
     Ok(ParsedServiceConfig {
         common: ParsedCommonConfig {
+            name: path.file_name().unwrap().to_str().unwrap().to_owned(),
             unit: unit_config.unwrap_or_else(Default::default),
             install: install_config.unwrap_or_else(Default::default),
         },

@@ -5,13 +5,12 @@ use std::path::PathBuf;
 pub fn parse_socket(
     parsed_file: ParsedFile,
     path: &PathBuf,
-    chosen_id: UnitId,
 ) -> Result<ParsedSocketConfig, ParsingErrorReason> {
     let mut socket_config = None;
     let mut install_config = None;
     let mut unit_config = None;
 
-    for (name, mut section) in parsed_file {
+    for (name, section) in parsed_file {
         match name.as_str() {
             "[Socket]" => {
                 socket_config = match parse_socket_section(section) {
@@ -20,7 +19,7 @@ pub fn parse_socket(
                 };
             }
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section, path)?);
+                unit_config = Some(parse_unit_section(section)?);
             }
             "[Install]" => {
                 install_config = Some(parse_install_section(section)?);
@@ -37,6 +36,7 @@ pub fn parse_socket(
 
     Ok(ParsedSocketConfig {
         common: ParsedCommonConfig {
+            name: path.file_name().unwrap().to_str().unwrap().to_owned(),
             unit: unit_config.unwrap_or_else(Default::default),
             install: install_config.unwrap_or_else(Default::default),
         },

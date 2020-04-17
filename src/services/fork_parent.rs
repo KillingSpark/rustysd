@@ -1,9 +1,11 @@
 use crate::services::RunCmdError;
 use crate::services::Service;
+use crate::units::ServiceConfig;
 use crate::units::*;
 
 pub fn wait_for_service(
     srvc: &mut Service,
+    conf: &ServiceConfig,
     name: &str,
     run_info: &RuntimeInfo,
 ) -> Result<(), RunCmdError> {
@@ -14,10 +16,9 @@ pub fn wait_for_service(
         srvc.pid.unwrap()
     );
 
-
     let start_time = std::time::Instant::now();
-    let duration_timeout = srvc.get_start_timeout();
-    match srvc.service_config.srcv_type {
+    let duration_timeout = srvc.get_start_timeout(conf);
+    match conf.srcv_type {
         ServiceType::Notify => {
             trace!(
                 "[FORK_PARENT] Waiting for a notification for service {}",
@@ -40,7 +41,7 @@ pub fn wait_for_service(
                     if duration_elapsed > duration_timeout {
                         trace!("[FORK_PARENT] Service {} notification timed out", name);
                         return Err(RunCmdError::Timeout(
-                            srvc.service_config.exec.to_string(),
+                            conf.exec.to_string(),
                             format!("{:?}", duration_timeout),
                         ));
                     } else {
@@ -87,7 +88,7 @@ pub fn wait_for_service(
                     if start_time.elapsed() >= time_out {
                         error!("oneshot service {} reached timeout", name);
                         return Err(RunCmdError::Timeout(
-                            srvc.service_config.exec.to_string(),
+                            conf.exec.to_string(),
                             format!("{:?}", duration_timeout),
                         ));
                     }
@@ -105,14 +106,13 @@ pub fn wait_for_service(
                                     let entry_owned = pid_table_locked.remove(&pid).unwrap();
                                     if let PidEntry::OneshotExited(code) = entry_owned {
                                         if !code.success() {
-                                            if !srvc
-                                                .service_config
+                                            if !conf
                                                 .exec
                                                 .prefixes
                                                 .contains(&CommandlinePrefix::Minus)
                                             {
                                                 return Err(RunCmdError::BadExitCode(
-                                                    srvc.service_config.exec.to_string(),
+                                                    conf.exec.to_string(),
                                                     code,
                                                 ));
                                             }
@@ -155,7 +155,7 @@ pub fn wait_for_service(
             }
         }
         ServiceType::Dbus => {
-            if let Some(dbus_name) = &srvc.service_config.dbus_name {
+            if let Some(dbus_name) = &conf.dbus_name {
                 trace!("[FORK_PARENT] Waiting for dbus name: {}", dbus_name);
                 match crate::dbus_wait::wait_for_name_system_bus(&dbus_name, duration_timeout) {
                     Ok(res) => match res {
@@ -165,14 +165,14 @@ pub fn wait_for_service(
                         crate::dbus_wait::WaitResult::Timedout => {
                             warn!("[FORK_PARENT] Did not find dbus name on bus: {}", dbus_name);
                             return Err(RunCmdError::Timeout(
-                                srvc.service_config.exec.to_string(),
+                                conf.exec.to_string(),
                                 format!("{:?}", duration_timeout),
                             ));
                         }
                     },
                     Err(e) => {
                         return Err(RunCmdError::WaitError(
-                            srvc.service_config.exec.to_string(),
+                            conf.exec.to_string(),
                             format!("Error while waiting for dbus name: {}", e),
                         ));
                     }

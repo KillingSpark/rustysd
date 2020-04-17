@@ -1,5 +1,6 @@
 use crate::units::*;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -145,9 +146,12 @@ fn parse_all_units(
                 };
                 services.insert(
                     new_id.clone(),
-                    parse_service(parsed_file, &entry.path(), new_id.clone())
+                    parse_service(parsed_file, &entry.path())
                         .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
-                        .into(),
+                        .try_into()
+                        .map_err(|err| {
+                            ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                        })?,
                 );
             } else if entry.path().to_str().unwrap().ends_with(".socket") {
                 trace!("Socket found: {:?}", entry.path());
@@ -157,9 +161,12 @@ fn parse_all_units(
                 };
                 sockets.insert(
                     new_id.clone(),
-                    parse_socket(parsed_file, &entry.path(), new_id.clone())
+                    parse_socket(parsed_file, &entry.path())
                         .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
-                        .into(),
+                        .try_into()
+                        .map_err(|err| {
+                            ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                        })?,
                 );
             } else if entry.path().to_str().unwrap().ends_with(".target") {
                 trace!("Target found: {:?}", entry.path());
@@ -169,9 +176,12 @@ fn parse_all_units(
                 };
                 targets.insert(
                     new_id.clone(),
-                    parse_target(parsed_file, &entry.path(), new_id.clone())
+                    parse_target(parsed_file, &entry.path())
                         .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
-                        .into(),
+                        .try_into()
+                        .map_err(|err| {
+                            ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                        })?,
                 );
             }
         }

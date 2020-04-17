@@ -2,21 +2,23 @@ use super::fork_child;
 use crate::fd_store::FDStore;
 use crate::services::RunCmdError;
 use crate::services::Service;
+use crate::units::ServiceConfig;
 
 fn start_service_with_filedescriptors(
     srvc: &mut Service,
+    conf: &ServiceConfig,
     name: &str,
     fd_store: &FDStore,
 ) -> Result<(), RunCmdError> {
     // check if executable even exists
-    let cmd = std::path::PathBuf::from(&srvc.service_config.exec.cmd);
+    let cmd = std::path::PathBuf::from(&conf.exec.cmd);
     if !cmd.exists() {
         error!(
             "The service {} specified an executable that does not exist: {:?}",
-            name, &srvc.service_config.exec.cmd
+            name, &conf.exec.cmd
         );
         return Err(RunCmdError::SpawnError(
-            srvc.service_config.exec.cmd.clone(),
+            conf.exec.cmd.clone(),
             format!("Executable does not exist"),
         ));
     }
@@ -26,7 +28,7 @@ fn start_service_with_filedescriptors(
             name, &cmd
         );
         return Err(RunCmdError::SpawnError(
-            srvc.service_config.exec.cmd.clone(),
+            conf.exec.cmd.clone(),
             format!("Executable does not exist (is a directory)"),
         ));
     }
@@ -70,6 +72,7 @@ fn start_service_with_filedescriptors(
             };
             fork_child::after_fork_child(
                 srvc,
+                conf,
                 &name,
                 fd_store,
                 &notifications_path,
@@ -84,10 +87,10 @@ fn start_service_with_filedescriptors(
 
 pub fn start_service(
     srvc: &mut Service,
+    conf: &ServiceConfig,
     name: &str,
     fd_store: &FDStore,
 ) -> Result<(), super::RunCmdError> {
-    start_service_with_filedescriptors(srvc, name, fd_store)?;
-    srvc.runtime_info.up_since = Some(std::time::Instant::now());
+    start_service_with_filedescriptors(srvc, conf, name, fd_store)?;
     Ok(())
 }

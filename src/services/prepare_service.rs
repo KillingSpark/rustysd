@@ -1,5 +1,6 @@
 use super::StdIo;
 use crate::services::Service;
+use crate::units::ServiceConfig;
 use crate::units::StdIoOption;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixDatagram;
@@ -33,6 +34,7 @@ fn open_stdio(setting: &Option<StdIoOption>) -> Result<StdIo, String> {
 
 pub fn prepare_service(
     srvc: &mut Service,
+    conf: &ServiceConfig,
     name: &str,
     notification_socket_path: &std::path::PathBuf,
 ) -> Result<(), String> {
@@ -67,10 +69,10 @@ pub fn prepare_service(
     }
 
     if srvc.stdout.is_none() {
-        srvc.stdout = Some(open_stdio(&srvc.service_config.exec_config.stdout_path)?);
+        srvc.stdout = Some(open_stdio(&conf.exec_config.stdout_path)?);
     }
     if srvc.stderr.is_none() {
-        srvc.stderr = Some(open_stdio(&srvc.service_config.exec_config.stderr_path)?);
+        srvc.stderr = Some(open_stdio(&conf.exec_config.stderr_path)?);
     }
 
     srvc.notifications_path = Some(notify_socket_env_var);

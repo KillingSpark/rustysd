@@ -3,8 +3,8 @@ use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use crate::units::*;
 
+use std::fmt;
 use std::sync::RwLock;
-use std::{fmt, path::PathBuf};
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum UnitIdKind {
@@ -121,6 +121,7 @@ pub struct SocketSpecific {
 }
 pub struct TargetSpecific {}
 
+#[derive(Default)]
 pub struct CommonState {
     pub up_since: Option<std::time::Instant>,
     pub restart_count: u64,
@@ -184,6 +185,7 @@ impl Unit {
                 state
                     .sock
                     .open_all(
+                        &specific.conf,
                         self.id.name.clone(),
                         self.id.clone(),
                         &mut *run_info.fd_store.write().unwrap(),
@@ -199,6 +201,7 @@ impl Unit {
                 match state
                     .srvc
                     .start(
+                        &specific.conf,
                         self.id.clone(),
                         &self.id.name,
                         run_info,
@@ -230,6 +233,7 @@ impl Unit {
                 state
                     .sock
                     .close_all(
+                        &specific.conf,
                         self.id.name.clone(),
                         &mut *run_info.fd_store.write().unwrap(),
                     )
@@ -243,7 +247,7 @@ impl Unit {
                 let state = &mut *specific.state.write().unwrap();
                 state
                     .srvc
-                    .kill(self.id.clone(), &self.id.name, run_info)
+                    .kill(&specific.conf, self.id.clone(), &self.id.name, run_info)
                     .map_err(|e| UnitOperationError {
                         unit_name: self.id.name.clone(),
                         unit_id: self.id.clone(),
@@ -321,7 +325,6 @@ pub fn collect_names_needed(new_unit: &units::Unit, names_needed: &mut Vec<Strin
 
 #[derive(Debug, Clone)]
 pub struct UnitConfig {
-    pub filepath: PathBuf,
     pub description: String,
 }
 
@@ -422,22 +425,6 @@ impl Dependencies {
     }
 }
 
-impl UnitConfig {
-    pub fn name(&self) -> String {
-        let name = self
-            .filepath
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_owned();
-
-        //let split: Vec<_> = name.split('.').collect();
-        //split[0..split.len() - 1].join(".")
-        name
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct SingleSocketConfig {
     pub kind: SocketKind,
@@ -446,12 +433,22 @@ pub struct SingleSocketConfig {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExecConfig {
-    pub user: Option<String>,
-    pub group: Option<String>,
+    pub user: nix::unistd::Uid,
+    pub group: nix::unistd::Gid,
+    pub supplementary_groups: Vec<nix::unistd::Gid>,
     pub stdout_path: Option<StdIoOption>,
     pub stderr_path: Option<StdIoOption>,
-    pub supplementary_groups: Vec<String>,
 }
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PlatformSpecificServiceFields {
+    pub cgroup_path: std::path::PathBuf,
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PlatformSpecificServiceFields {}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ServiceConfig {
@@ -470,6 +467,8 @@ pub struct ServiceConfig {
 
     pub exec_config: ExecConfig,
 
+    pub platform_specific: PlatformSpecificServiceFields,
+
     pub dbus_name: Option<String>,
 
     pub sockets: Vec<String>,
@@ -480,5 +479,5 @@ pub struct SocketConfig {
     pub filedesc_name: String,
     pub services: Vec<String>,
 
-    pub exec_section: ExecConfig,
+    pub exec_config: ExecConfig,
 }

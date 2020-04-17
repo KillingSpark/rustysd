@@ -11,19 +11,20 @@ pub use unit_parser::*;
 use std::path::PathBuf;
 
 pub struct ParsedCommonConfig {
-    unit: ParsedUnitSection,
-    install: ParsedInstallSection,
+    pub unit: ParsedUnitSection,
+    pub install: ParsedInstallSection,
+    pub name: String,
 }
 pub struct ParsedServiceConfig {
-    common: ParsedCommonConfig,
-    srvc: ParsedServiceSection,
+    pub common: ParsedCommonConfig,
+    pub srvc: ParsedServiceSection,
 }
 pub struct ParsedSocketConfig {
-    common: ParsedCommonConfig,
-    sock: ParsedSocketSection,
+    pub common: ParsedCommonConfig,
+    pub sock: ParsedSocketSection,
 }
 pub struct ParsedTargetConfig {
-    common: ParsedCommonConfig,
+    pub common: ParsedCommonConfig,
 }
 
 #[derive(Default)]

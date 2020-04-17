@@ -53,9 +53,10 @@ fn shutdown_unit(shutdown_id: &UnitId, run_info: &RuntimeInfo) {
     match &unit.specific {
         Specific::Service(specific) => {
             let mut_state = &mut *specific.state.write().unwrap();
-            let kill_res = mut_state
-                .srvc
-                .kill(unit.id.clone(), &unit.id.name, run_info);
+            let kill_res =
+                mut_state
+                    .srvc
+                    .kill(&specific.conf, unit.id.clone(), &unit.id.name, run_info);
             match kill_res {
                 Ok(()) => {
                     trace!("Killed service unit: {}", unit.id.name);
@@ -99,6 +100,7 @@ fn shutdown_unit(shutdown_id: &UnitId, run_info: &RuntimeInfo) {
             let mut_state = &mut *specific.state.write().unwrap();
             trace!("Close socket unit: {}", unit.id.name);
             match mut_state.sock.close_all(
+                &specific.conf,
                 unit.id.name.clone(),
                 &mut *run_info.fd_store.write().unwrap(),
             ) {

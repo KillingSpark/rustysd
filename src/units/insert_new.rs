@@ -1,5 +1,6 @@
 use crate::units;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fs;
 use std::path::PathBuf;
 
@@ -27,10 +28,7 @@ fn find_new_unit_path(unit_dirs: &[PathBuf], find_name: &str) -> Result<Option<P
 }
 
 /// Loads a unit with a given name. It searches all pathes recursively until it finds a file with a matching name
-pub fn load_new_unit(
-    unit_dirs: &[PathBuf],
-    find_name: &str,
-) -> Result<units::Unit, String> {
+pub fn load_new_unit(unit_dirs: &[PathBuf], find_name: &str) -> Result<units::Unit, String> {
     if let Some(unit_path) = find_new_unit_path(unit_dirs, find_name)? {
         let content = fs::read_to_string(&unit_path).map_err(|e| {
             format!(
@@ -44,29 +42,17 @@ pub fn load_new_unit(
         let parsed = units::parse_file(&content)
             .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path.clone())))?;
         let unit = if find_name.ends_with(".service") {
-            let new_id = units::UnitId {
-                kind: units::UnitIdKind::Service,
-                name: unit_path.file_name().unwrap().to_str().unwrap().to_owned(),
-            };
-            units::parse_service(parsed, &unit_path, new_id)
+            units::parse_service(parsed, &unit_path)
                 .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
-                .into()
+                .try_into()?
         } else if find_name.ends_with(".socket") {
-            let new_id = units::UnitId {
-                kind: units::UnitIdKind::Socket,
-                name: unit_path.file_name().unwrap().to_str().unwrap().to_owned(),
-            };
-            units::parse_socket(parsed, &unit_path, new_id)
+            units::parse_socket(parsed, &unit_path)
                 .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
-                .into()
+                .try_into()?
         } else if find_name.ends_with(".target") {
-            let new_id = units::UnitId {
-                kind: units::UnitIdKind::Target,
-                name: unit_path.file_name().unwrap().to_str().unwrap().to_owned(),
-            };
-            units::parse_target(parsed, &unit_path, new_id)
+            units::parse_target(parsed, &unit_path)
                 .map_err(|e| format!("{}", units::ParsingError::new(e, unit_path)))?
-                .into()
+                .try_into()?
         } else {
             return Err(format!(
                 "File suffix not recognized for file {:?}",
