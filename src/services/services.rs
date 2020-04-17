@@ -194,16 +194,16 @@ impl Service {
 
             super::prepare_service::prepare_service(self, name, &notification_socket_path)
                 .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
-            self.run_prestart(id, name, run_info.clone())
-                .map_err(
-                    |prestart_err| match self.run_poststop(id, name, run_info.clone()) {
+            self.run_prestart(id.clone(), name, run_info.clone())
+                .map_err(|prestart_err| {
+                    match self.run_poststop(id.clone(), name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(prestart_err),
                         Err(poststop_err) => ServiceErrorReason::PrestartAndPoststopFailed(
                             prestart_err,
                             poststop_err,
                         ),
-                    },
-                )?;
+                    }
+                })?;
             {
                 let mut pid_table_locked = run_info.pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
@@ -214,30 +214,30 @@ impl Service {
                 if let Some(new_pid) = self.pid {
                     pid_table_locked.insert(
                         new_pid,
-                        PidEntry::Service(id, self.service_config.srcv_type),
+                        PidEntry::Service(id.clone(), self.service_config.srcv_type),
                     );
                     crate::platform::notify_event_fds(&eventfds);
                 }
             }
 
             super::fork_parent::wait_for_service(self, name, run_info).map_err(|start_err| {
-                match self.run_poststop(id, name, run_info.clone()) {
+                match self.run_poststop(id.clone(), name, run_info.clone()) {
                     Ok(_) => ServiceErrorReason::StartFailed(start_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
                     }
                 }
             })?;
-            self.run_poststart(id, name, run_info.clone())
-                .map_err(
-                    |poststart_err| match self.run_poststop(id, name, run_info.clone()) {
+            self.run_poststart(id.clone(), name, run_info.clone())
+                .map_err(|poststart_err| {
+                    match self.run_poststop(id.clone(), name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(poststart_err),
                         Err(poststop_err) => ServiceErrorReason::PoststartAndPoststopFailed(
                             poststart_err,
                             poststop_err,
                         ),
-                    },
-                )?;
+                    }
+                })?;
             Ok(StartResult::Started)
         } else {
             trace!(
@@ -287,14 +287,14 @@ impl Service {
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), ServiceErrorReason> {
-        self.stop(id, name, run_info)
+        self.stop(id.clone(), name, run_info)
             .map_err(|stop_err| {
                 trace!(
                     "Stop process failed with: {:?} for service: {}. Running poststop commands",
                     stop_err,
                     name
                 );
-                match self.run_poststop(id, name, run_info) {
+                match self.run_poststop(id.clone(), name, run_info) {
                     Ok(_) => ServiceErrorReason::StopFailed(stop_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
@@ -306,7 +306,7 @@ impl Service {
                     "Stop processes for service: {} ran succesfully. Running poststop commands",
                     name
                 );
-                self.run_poststop(id, name, run_info)
+                self.run_poststop(id.clone(), name, run_info)
                     .map_err(|e| ServiceErrorReason::PoststopFailed(e))
             })
     }
@@ -389,7 +389,7 @@ impl Service {
             if let Ok(child) = &res {
                 pid_table_locked.insert(
                     nix::unistd::Pid::from_raw(child.id() as i32),
-                    PidEntry::Helper(id, name.to_string()),
+                    PidEntry::Helper(id.clone(), name.to_string()),
                 );
             }
             res
@@ -480,7 +480,7 @@ impl Service {
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         for cmd in cmds {
-            self.run_cmd(cmd, id, name, timeout, run_info.clone())?;
+            self.run_cmd(cmd, id.clone(), name, timeout, run_info.clone())?;
         }
         Ok(())
     }

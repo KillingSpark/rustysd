@@ -171,29 +171,29 @@ impl Unit {
         allow_ignore: bool,
     ) -> Result<UnitStatus, UnitOperationError> {
         // TODO change status here!
-        match self.specific {
+        match &self.specific {
             Specific::Target(_) => trace!("Reached target {}", self.id.name),
             Specific::Socket(specific) => {
-                let state = &mut *specific.state.read().unwrap();
+                let state = &mut *specific.state.write().unwrap();
                 state
                     .sock
                     .open_all(
-                        self.id.name,
-                        self.id,
+                        self.id.name.clone(),
+                        self.id.clone(),
                         &mut *run_info.fd_store.write().unwrap(),
                     )
                     .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name,
-                        unit_id: self.id,
+                        unit_name: self.id.name.clone(),
+                        unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
                     })?;
             }
             Specific::Service(specific) => {
-                let state = &mut *specific.state.read().unwrap();
+                let state = &mut *specific.state.write().unwrap();
                 match state
                     .srvc
                     .start(
-                        self.id,
+                        self.id.clone(),
                         &self.id.name,
                         run_info,
                         notification_socket_path,
@@ -201,8 +201,8 @@ impl Unit {
                         allow_ignore,
                     )
                     .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name,
-                        unit_id: self.id,
+                        unit_name: self.id.name.clone(),
+                        unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::ServiceStartError(e),
                     })? {
                     crate::services::StartResult::Started => return Ok(UnitStatus::Started),
@@ -217,27 +217,30 @@ impl Unit {
     pub fn deactivate(&mut self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
         // TODO change status here!
         trace!("Deactivate unit: {}", self.id.name);
-        match self.specific {
+        match &self.specific {
             Specific::Target(_) => { /* nothing to do */ }
             Specific::Socket(specific) => {
-                let state = &mut *specific.state.read().unwrap();
+                let state = &mut *specific.state.write().unwrap();
                 state
                     .sock
-                    .close_all(self.id.name, &mut *run_info.fd_store.write().unwrap())
+                    .close_all(
+                        self.id.name.clone(),
+                        &mut *run_info.fd_store.write().unwrap(),
+                    )
                     .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name,
-                        unit_id: self.id,
+                        unit_name: self.id.name.clone(),
+                        unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::SocketCloseError(e),
                     })?;
             }
             Specific::Service(specific) => {
-                let state = &mut *specific.state.read().unwrap();
+                let state = &mut *specific.state.write().unwrap();
                 state
                     .srvc
-                    .kill(self.id, &self.id.name, run_info)
+                    .kill(self.id.clone(), &self.id.name, run_info)
                     .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name,
-                        unit_id: self.id,
+                        unit_name: self.id.name.clone(),
+                        unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::ServiceStopError(e),
                     })?;
             }

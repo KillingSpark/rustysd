@@ -13,7 +13,7 @@ pub fn sanity_check_dependencies(
     let mut root_ids = Vec::new();
     for unit in unit_table.values() {
         if unit.common.dependencies.after.len() == 0 {
-            root_ids.push(unit.id);
+            root_ids.push(unit.id.clone());
         }
     }
     // check whether there are cycles in the startup sequence
@@ -43,7 +43,7 @@ pub fn sanity_check_dependencies(
                 })
                 .nth(0);
             if let Some(id) = root_id {
-                *id
+                id.clone()
             } else {
                 // make sensible error-message
                 circles.push(not_finished_ids.keys().cloned().collect());
@@ -91,13 +91,13 @@ fn search_backedge(
         }
         let circle_ids = visited_ids[circle_start_idx..].to_vec();
         for circleid in &circle_ids {
-            finished_ids.insert(*circleid, ());
+            finished_ids.insert(circleid.clone(), ());
             not_finished_ids.remove(circleid);
         }
 
         return Err(SanityCheckError::CirclesFound(vec![circle_ids]));
     }
-    visited_ids.push(*id);
+    visited_ids.push(id.clone());
 
     let unit = unit_table.get(id).unwrap();
     for next_id in &unit.common.dependencies.before {
@@ -113,7 +113,7 @@ fn search_backedge(
         }
     }
     visited_ids.pop();
-    finished_ids.insert(*id, ());
+    finished_ids.insert(id.clone(), ());
     not_finished_ids.remove(id);
 
     Ok(())

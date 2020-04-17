@@ -5,17 +5,21 @@ pub fn remove_unit_with_dependencies(
     remove_id: UnitId,
     run_info: &mut RuntimeInfo,
 ) -> Result<(), String> {
-    check_deactivated_recursive(remove_id, run_info)?;
+    check_deactivated_recursive(remove_id.clone(), run_info)?;
 
     let mut depending_by_name_ids = Vec::new();
     {
-        find_all_depending(remove_id, &run_info.unit_table, &mut depending_by_name_ids);
+        find_all_depending(
+            remove_id.clone(),
+            &run_info.unit_table,
+            &mut depending_by_name_ids,
+        );
     }
     for id in depending_by_name_ids {
         check_deactivated_recursive(id, run_info)?;
     }
 
-    remove_with_depending_units(remove_id, &mut run_info.unit_table);
+    remove_with_depending_units(remove_id.clone(), &mut run_info.unit_table);
 
     Ok(())
 }
@@ -59,7 +63,7 @@ fn find_all_depending(rm_id: UnitId, unit_table: &UnitTable, ids: &mut Vec<UnitI
         return;
     }
 
-    let rm_name = rm_id.name;
+    let rm_name = rm_id.name.clone();
 
     let mut names = Vec::new();
     let mut new_ids = Vec::new();
@@ -68,7 +72,7 @@ fn find_all_depending(rm_id: UnitId, unit_table: &UnitTable, ids: &mut Vec<UnitI
             names.clear();
             collect_names_needed(unit, &mut names);
             if names.contains(&rm_name) {
-                new_ids.push(*id);
+                new_ids.push(id.clone());
             }
         }
     }
@@ -86,8 +90,8 @@ fn remove_with_depending_units(rm_id: UnitId, unit_table: &mut UnitTable) {
     // follow the units install section and check if the units have this unit in their Install-/Unit-config.
     // If so, remove them too
 
-    let rm_name = rm_id.name;
-    remove_single_unit(rm_id, unit_table);
+    let rm_name = rm_id.name.clone();
+    remove_single_unit(rm_id.clone(), unit_table);
     // first remove all depending units
     let mut names = Vec::new();
     let mut next_ids = Vec::new();
@@ -96,7 +100,7 @@ fn remove_with_depending_units(rm_id: UnitId, unit_table: &mut UnitTable) {
             names.clear();
             collect_names_needed(unit, &mut names);
             if names.contains(&rm_name) {
-                next_ids.push(*id);
+                next_ids.push(id.clone());
             }
         }
     }

@@ -1,8 +1,8 @@
 use crate::units::*;
 
-fn get_next_service_to_shutdown(unit_table_locked: &UnitTable) -> Option<UnitId> {
-    for (_, unit) in unit_table_locked.iter() {
-        let status = unit.common.status;
+fn get_next_service_to_shutdown(unit_table: &UnitTable) -> Option<UnitId> {
+    for (_, unit) in unit_table.iter() {
+        let status = &unit.common.status;
         {
             let status_locked = status.read().unwrap();
             if !(*status_locked == UnitStatus::Started
@@ -20,7 +20,8 @@ fn get_next_service_to_shutdown(unit_table_locked: &UnitTable) -> Option<UnitId>
             .iter()
             .cloned()
             .filter(|next_id| {
-                let status = unit.common.status;
+                let unit = unit_table.get(next_id).unwrap();
+                let status = &unit.common.status;
                 let status_locked = status.read().unwrap();
                 match *status_locked {
                     UnitStatus::Stopped | UnitStatus::StoppedFinal(_) => false,
@@ -30,7 +31,7 @@ fn get_next_service_to_shutdown(unit_table_locked: &UnitTable) -> Option<UnitId>
             .collect::<Vec<_>>();
         if kill_before.is_empty() {
             trace!("Chose unit: {}", unit.id.name);
-            return Some(unit.id);
+            return Some(unit.id.clone());
         } else {
             trace!(
                 "Dont kill service {} yet. These Units depend on it: {:?}",
@@ -42,16 +43,19 @@ fn get_next_service_to_shutdown(unit_table_locked: &UnitTable) -> Option<UnitId>
     None
 }
 
-fn shutdown_unit(unit: &mut Unit, run_info: &RuntimeInfo) {
+fn shutdown_unit(shutdown_id: &UnitId, run_info: &RuntimeInfo) {
+    let unit = run_info.unit_table.get(shutdown_id).unwrap();
     {
         trace!("Set unit status: {}", unit.id.name);
         let mut status_locked = unit.common.status.write().unwrap();
         *status_locked = UnitStatus::Stopping;
     }
-    match &mut unit.specific {
+    match &unit.specific {
         Specific::Service(specific) => {
             let mut_state = &mut *specific.state.write().unwrap();
-            let kill_res = mut_state.srvc.kill(unit.id, &unit.id.name, run_info);
+            let kill_res = mut_state
+                .srvc
+                .kill(unit.id.clone(), &unit.id.name, run_info);
             match kill_res {
                 Ok(()) => {
                     trace!("Killed service unit: {}", unit.id.name);
@@ -94,10 +98,10 @@ fn shutdown_unit(unit: &mut Unit, run_info: &RuntimeInfo) {
         Specific::Socket(specific) => {
             let mut_state = &mut *specific.state.write().unwrap();
             trace!("Close socket unit: {}", unit.id.name);
-            match mut_state
-                .sock
-                .close_all(unit.id.name, &mut *run_info.fd_store.write().unwrap())
-            {
+            match mut_state.sock.close_all(
+                unit.id.name.clone(),
+                &mut *run_info.fd_store.write().unwrap(),
+            ) {
                 Err(e) => error!("Error while closing sockets: {}", e),
                 Ok(()) => {}
             }
@@ -118,7 +122,7 @@ fn shutdown_unit(unit: &mut Unit, run_info: &RuntimeInfo) {
 pub fn shutdown_sequence(run_info: ArcMutRuntimeInfo) {
     std::thread::spawn(move || {
         trace!("Shutting down");
-        let run_info_lock = match run_info.write() {
+        let mut run_info_lock = match run_info.write() {
             Ok(r) => r,
             Err(e) => e.into_inner(),
         };
@@ -133,8 +137,7 @@ pub fn shutdown_sequence(run_info: ArcMutRuntimeInfo) {
                     break;
                 }
             };
-            let unit = run_info_locked.unit_table.get_mut(&id).unwrap();
-            shutdown_unit(unit, run_info_locked);
+            shutdown_unit(&id, run_info_locked);
         }
         trace!("Killed all units");
 

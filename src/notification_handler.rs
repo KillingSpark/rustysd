@@ -56,7 +56,7 @@ pub fn handle_all_streams(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table.get(id) {
-                            if let Specific::Service(srvc) = &mut srvc_unit.specific {
+                            if let Specific::Service(srvc) = &srvc_unit.specific {
                                 let mut_state = &mut *srvc.state.write().unwrap();
                                 if let Some(socket) = &mut_state.srvc.notifications {
                                     let old_flags =
@@ -158,7 +158,7 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
                             nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
                                 .unwrap();
 
-                            if let Specific::Service(srvc) = &mut srvc_unit.specific {
+                            if let Specific::Service(srvc) = &srvc_unit.specific {
                                 let mut_state = &mut *srvc.state.write().unwrap();
                                 mut_state.srvc.stdout_buffer.extend(&buf[..bytes]);
                                 mut_state.srvc.log_stdout_lines(&name, &status).unwrap();
@@ -225,7 +225,7 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
                             nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
                                 .unwrap();
 
-                            if let Specific::Service(srvc) = &mut srvc_unit.specific {
+                            if let Specific::Service(srvc) = &srvc_unit.specific {
                                 let mut_state = &mut *srvc.state.write().unwrap();
                                 mut_state.srvc.stderr_buffer.extend(&buf[..bytes]);
                                 mut_state.srvc.log_stderr_lines(&name, &status).unwrap();

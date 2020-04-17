@@ -304,7 +304,7 @@ impl Socket {
                 nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
             )
             .unwrap();
-            fds.push((id, self.name.clone(), as_raw_fd));
+            fds.push((id.clone(), self.name.clone(), as_raw_fd));
             //need to stop the listener to drop which would close the filedescriptor
         }
         trace!(

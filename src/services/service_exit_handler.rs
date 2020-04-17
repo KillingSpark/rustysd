@@ -110,7 +110,7 @@ pub fn service_exit_handler(
 
     // kill oneshot service processes. There should be none but just in case...
     {
-        if let Specific::Service(srvc) = &mut unit.specific {
+        if let Specific::Service(srvc) = &unit.specific {
             if srvc.conf.srcv_type == ServiceType::OneShot {
                 let mut_state = &mut *srvc.state.write().unwrap();
                 mut_state.srvc.kill_all_remaining_processes(&unit.id.name);
@@ -121,8 +121,8 @@ pub fn service_exit_handler(
 
     trace!("Check if we want to restart the unit");
     let (name, sockets, restart_unit) = {
-        let name = unit.id.name;
-        if let Specific::Service(srvc) = &mut unit.specific {
+        let name = &unit.id.name;
+        if let Specific::Service(srvc) = &unit.specific {
             trace!(
                 "Service with id: {:?}, name: {} pid: {} exited with: {:?}",
                 srvc_id,
@@ -156,7 +156,7 @@ pub fn service_exit_handler(
             // tell socket activation to listen to these sockets again
             for unit in run_info.unit_table.values() {
                 if sockets.contains(&unit.id.name) {
-                    if let Specific::Socket(sock) = &mut unit.specific {
+                    if let Specific::Socket(sock) = &unit.specific {
                         let mut_state = &mut *sock.state.write().unwrap();
                         mut_state.sock.activated = false;
                     }

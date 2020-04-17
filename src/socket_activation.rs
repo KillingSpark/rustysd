@@ -14,7 +14,7 @@ pub fn start_socketactivation_thread(
         match wait_result {
             Ok(ids) => {
                 let run_info = run_info.read().unwrap();
-                let unit_table = run_info.unit_table;
+                let unit_table = &run_info.unit_table;
                 for socket_id in ids {
                     {
                         let mut srvc_unit_id = None;
@@ -41,7 +41,7 @@ pub fn start_socketactivation_thread(
                                 );
                                 let sock_unit = unit_table.get(&socket_id).unwrap();
                                 if let crate::units::Specific::Socket(specific) =
-                                    &mut sock_unit.specific
+                                    &sock_unit.specific
                                 {
                                     let mut_state = &mut *specific.state.write().unwrap();
                                     mut_state.sock.activated = true;
@@ -57,7 +57,7 @@ pub fn start_socketactivation_thread(
                                     Ok(_) => {
                                         let sock_unit = unit_table.get(&socket_id).unwrap();
                                         if let crate::units::Specific::Socket(specific) =
-                                            &mut sock_unit.specific
+                                            &sock_unit.specific
                                         {
                                             let mut_state = &mut *specific.state.write().unwrap();
                                             mut_state.sock.activated = true;
@@ -120,7 +120,7 @@ pub fn wait_for_socket(
             } else {
                 for (fd, id) in &fd_to_sock_id {
                     if fdset.contains(*fd) {
-                        activated_ids.push(*id);
+                        activated_ids.push(id.clone());
                     }
                 }
             }
