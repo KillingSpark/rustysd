@@ -210,6 +210,7 @@ impl Unit {
         Ok(UnitStatus::Started)
     }
     pub fn deactivate(&mut self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
+        // TODO change status here!
         trace!("Deactivate unit: {}", self.id.name);
         match self.specific {
             Specific::Target(_) => { /* nothing to do */ }
