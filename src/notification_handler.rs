@@ -137,29 +137,29 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table.get(id) {
                             let name = srvc_unit.id.name.clone();
-                            let status = srvc_unit.common.status.read().unwrap();
-
-                            let old_flags =
-                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
-                            let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
-                            let mut new_flags = old_flags.clone();
-                            new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
-                                .unwrap();
-
-                            ////
-                            let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
-                                Ok(b) => b,
-                                Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
-                                Err(e) => panic!("{}", e),
-                            };
-                            ////
-
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
-                                .unwrap();
-
                             if let Specific::Service(srvc) = &srvc_unit.specific {
                                 let mut_state = &mut *srvc.state.write().unwrap();
+                                let status = srvc_unit.common.status.read().unwrap();
+
+                                let old_flags =
+                                    nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
+                                let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
+                                let mut new_flags = old_flags.clone();
+                                new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
+                                    .unwrap();
+
+                                ////
+                                let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
+                                    Ok(b) => b,
+                                    Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                    Err(e) => panic!("{}", e),
+                                };
+                                ////
+
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
+                                    .unwrap();
+
                                 mut_state.srvc.stdout_buffer.extend(&buf[..bytes]);
                                 mut_state.srvc.log_stdout_lines(&name, &status).unwrap();
                             }
@@ -205,28 +205,28 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
                     if fdset.contains(*fd) {
                         if let Some(srvc_unit) = unit_table.get(id) {
                             let name = srvc_unit.id.name.clone();
-                            let status = srvc_unit.common.status.read().unwrap();
-
-                            let old_flags =
-                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
-                            let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
-                            let mut new_flags = old_flags.clone();
-                            new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
-                                .unwrap();
-
-                            ////
-                            let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
-                                Ok(b) => b,
-                                Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
-                                Err(e) => panic!("{}", e),
-                            };
-                            ////
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
-                                .unwrap();
-
                             if let Specific::Service(srvc) = &srvc_unit.specific {
                                 let mut_state = &mut *srvc.state.write().unwrap();
+                                let status = srvc_unit.common.status.read().unwrap();
+
+                                let old_flags =
+                                    nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
+                                let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
+                                let mut new_flags = old_flags.clone();
+                                new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
+                                    .unwrap();
+
+                                ////
+                                let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
+                                    Ok(b) => b,
+                                    Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                    Err(e) => panic!("{}", e),
+                                };
+                                ////
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
+                                    .unwrap();
+
                                 mut_state.srvc.stderr_buffer.extend(&buf[..bytes]);
                                 mut_state.srvc.log_stderr_lines(&name, &status).unwrap();
                             }

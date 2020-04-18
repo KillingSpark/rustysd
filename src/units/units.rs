@@ -339,9 +339,6 @@ impl Unit {
                     })?;
                 {
                     let mut status = self.common.status.write().unwrap();
-                    if status.is_stopped() {
-                        return Ok(());
-                    }
                     *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
                 }
             }
@@ -363,10 +360,9 @@ impl Unit {
                         reason: UnitOperationErrorReason::ServiceStopError(e),
                     })?;
                 {
+                    trace!("Deactivation successful. set status");
                     let mut status = self.common.status.write().unwrap();
-                    if status.is_stopped() {
-                        return Ok(());
-                    }
+                    trace!("Deactivation successful. Did set status");
                     *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
                 }
             }
