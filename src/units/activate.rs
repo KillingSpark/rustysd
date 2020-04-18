@@ -125,6 +125,7 @@ fn activate_units_recursive(
     }
 }
 
+#[derive(Debug)]
 pub enum StartResult {
     Started(Vec<UnitId>),
     WaitForDependencies,
@@ -139,10 +140,6 @@ pub fn activate_unit(
 ) -> std::result::Result<StartResult, UnitOperationError> {
     trace!("Activate id: {:?}", id_to_start);
 
-    // 1) First lock the unit itself
-    // 1.5) Check if this unit should be started right now
-    // 2) Then lock the needed other units (only for sockets of services right now)
-    // With that we always maintain a consistent order between locks so deadlocks shouldnt occur
     let unit = match run_info.unit_table.get(&id_to_start) {
         Some(unit) => unit,
         None => {
@@ -167,12 +164,10 @@ pub fn activate_unit(
         .iter()
         .fold(Vec::new(), |mut acc, elem| {
             let required = unit.common.dependencies.requires.contains(elem);
-
             let elem_unit = run_info.unit_table.get(elem).unwrap();
             let status_locked = elem_unit.common.status.read().unwrap();
             let ready = if required {
-                *status_locked == UnitStatus::Started
-                    || *status_locked == UnitStatus::StartedWaitingForSocket
+                status_locked.is_started()
             } else {
                 *status_locked != UnitStatus::NeverStarted
             };
@@ -191,15 +186,15 @@ pub fn activate_unit(
         return Ok(StartResult::WaitForDependencies);
     }
 
-    // Check if the unit is currently starting. Update the status to starting if not
+    // Check if the unit is currently starting
     {
         // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
         // TODO make this relation less weird. Maybe add a separate code path for socket activation
         let status_locked = unit.common.status.read().unwrap();
         let wait_for_socket_act =
-            *status_locked == UnitStatus::StartedWaitingForSocket && allow_ignore;
+            *status_locked == UnitStatus::Started(StatusStarted::WaitingForSocket) && allow_ignore;
         let needs_intial_run =
-            *status_locked == UnitStatus::NeverStarted || *status_locked == UnitStatus::Stopped;
+            *status_locked == UnitStatus::NeverStarted || status_locked.is_stopped();
         if wait_for_socket_act && !needs_intial_run {
             trace!(
                 "Don't activate Unit: {:?}. Has status: {:?}",
@@ -218,7 +213,6 @@ pub fn activate_unit(
         allow_ignore,
     )
     .map(|_| StartResult::Started(next_services_ids))
-    // drop all the locks "at once". Ordering of dropping should be irrelevant?
 }
 
 pub fn activate_units(

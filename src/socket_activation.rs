@@ -34,7 +34,11 @@ pub fn start_socketactivation_thread(
                                 status_locked.clone()
                             };
 
-                            if srvc_status != crate::units::UnitStatus::StartedWaitingForSocket {
+                            if srvc_status
+                                != crate::units::UnitStatus::Started(
+                                    StatusStarted::WaitingForSocket,
+                                )
+                            {
                                 trace!(
                                     "Ignore socket activation. Service has status: {:?}",
                                     srvc_status
@@ -48,13 +52,23 @@ pub fn start_socketactivation_thread(
                                 }
                             } else {
                                 match crate::units::activate_unit(
-                                    srvc_unit_id,
+                                    srvc_unit_id.clone(),
                                     &*run_info,
                                     note_sock_path.clone(),
                                     eventfds.clone(),
                                     false,
                                 ) {
-                                    Ok(_) => {
+                                    Ok(result) => {
+                                        trace!(
+                                            "New status after socket activation ({:?}): {:?}", result,
+                                            *unit_table
+                                                .get(&srvc_unit_id)
+                                                .unwrap()
+                                                .common
+                                                .status
+                                                .read()
+                                                .unwrap()
+                                        );
                                         let sock_unit = unit_table.get(&socket_id).unwrap();
                                         if let crate::units::Specific::Socket(specific) =
                                             &sock_unit.specific

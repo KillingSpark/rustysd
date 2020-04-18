@@ -37,12 +37,10 @@ Things that likely will change:
                 Units in this state might be eligible for an automatic restart)
             1. Expected (Either this unit was stopped directly or a required unit was stopped)
         1. There might have occured an error while starting
-            1. Clean
             1. PreStartError
             1. StartError
             1. PostStartError
         1. There might have occured an error while stopping
-            1. Clean
             1. StopError
             1. PostStopError
 

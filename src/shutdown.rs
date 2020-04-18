@@ -5,10 +5,7 @@ fn get_next_service_to_shutdown(unit_table: &UnitTable) -> Option<UnitId> {
         let status = &unit.common.status;
         {
             let status_locked = status.read().unwrap();
-            if !(*status_locked == UnitStatus::Started
-                || *status_locked == UnitStatus::Starting
-                || *status_locked == UnitStatus::StartedWaitingForSocket)
-            {
+            if !(*status_locked).is_started() {
                 continue;
             }
         }
@@ -23,10 +20,7 @@ fn get_next_service_to_shutdown(unit_table: &UnitTable) -> Option<UnitId> {
                 let unit = unit_table.get(next_id).unwrap();
                 let status = &unit.common.status;
                 let status_locked = status.read().unwrap();
-                match *status_locked {
-                    UnitStatus::Stopped | UnitStatus::StoppedFinal(_) => false,
-                    _ => true,
-                }
+                status_locked.is_started()
             })
             .collect::<Vec<_>>();
         if kill_before.is_empty() {
@@ -120,15 +114,22 @@ fn shutdown_unit(shutdown_id: &UnitId, run_info: &RuntimeInfo) {
     }
 }
 
+static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 // TODO maybe this should be available everywhere for situations where normally a panic would occur?
 pub fn shutdown_sequence(run_info: ArcMutRuntimeInfo) {
+    if SHUTTING_DOWN.compare_and_swap(false, true, std::sync::atomic::Ordering::SeqCst) {
+        // is alerady shutting down. Exit the process.
+        println!("Got a second termination signal. Exiting potentially dirty");
+        std::process::exit(0);
+    }
+
     std::thread::spawn(move || {
         trace!("Shutting down");
-        let mut run_info_lock = match run_info.write() {
+        let run_info_lock = match run_info.read() {
             Ok(r) => r,
             Err(e) => e.into_inner(),
         };
-        let run_info_locked = &mut *run_info_lock;
+        let run_info_locked = &*run_info_lock;
 
         trace!("Kill all units");
         loop {
