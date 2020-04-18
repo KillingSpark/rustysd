@@ -110,7 +110,7 @@ fn shutdown_unit(shutdown_id: &UnitId, run_info: &RuntimeInfo) {
     {
         trace!("Set unit status: {}", unit.id.name);
         let mut status_locked = unit.common.status.write().unwrap();
-        *status_locked = UnitStatus::StoppedFinal("Rustysd shutdown".into());
+        *status_locked = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
     }
 }
 

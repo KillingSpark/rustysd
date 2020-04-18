@@ -145,8 +145,8 @@ pub fn service_exit_handler(
     // check that the status is "Started". If thats not the case this service got killed by something else (control interface for example) so dont interfere
     {
         let status_locked = &*unit.common.status.read().unwrap();
-        if !status_locked.is_started() {
-            trace!("Exit handler ignores exit of service {}. Its status is not 'Started', it is: {:?}", name, *status_locked);
+        if !(status_locked.is_started() || *status_locked == UnitStatus::Starting) {
+            trace!("Exit handler ignores exit of service {}. Its status is not 'Started'/'Starting', it is: {:?}", name, *status_locked);
             return Ok(());
         }
     }

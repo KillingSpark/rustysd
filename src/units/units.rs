@@ -72,7 +72,6 @@ pub enum UnitStatus {
     Started(StatusStarted),
     Stopping,
     Stopped(StatusStopped, Vec<StopError>),
-    StoppedFinal(String),
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -310,9 +309,22 @@ impl Unit {
         // TODO change status here!
         trace!("Deactivate unit: {}", self.id.name);
         match &self.specific {
-            Specific::Target(_) => { /* nothing to do */ }
+            Specific::Target(_) => {
+                let mut status = self.common.status.write().unwrap();
+                if status.is_stopped() {
+                    return Ok(());
+                }
+                *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+            }
             Specific::Socket(specific) => {
                 let state = &mut *specific.state.write().unwrap();
+                {
+                    let mut status = self.common.status.write().unwrap();
+                    if status.is_stopped() {
+                        return Ok(());
+                    }
+                    *status = UnitStatus::Stopping;
+                }
                 state
                     .sock
                     .close_all(
@@ -325,9 +337,23 @@ impl Unit {
                         unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::SocketCloseError(e),
                     })?;
+                {
+                    let mut status = self.common.status.write().unwrap();
+                    if status.is_stopped() {
+                        return Ok(());
+                    }
+                    *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+                }
             }
             Specific::Service(specific) => {
                 let state = &mut *specific.state.write().unwrap();
+                {
+                    let mut status = self.common.status.write().unwrap();
+                    if status.is_stopped() {
+                        return Ok(());
+                    }
+                    *status = UnitStatus::Stopping;
+                }
                 state
                     .srvc
                     .kill(&specific.conf, self.id.clone(), &self.id.name, run_info)
@@ -336,6 +362,13 @@ impl Unit {
                         unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::ServiceStopError(e),
                     })?;
+                {
+                    let mut status = self.common.status.write().unwrap();
+                    if status.is_stopped() {
+                        return Ok(());
+                    }
+                    *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+                }
             }
         }
         Ok(())
