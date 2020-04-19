@@ -12,6 +12,7 @@ pub struct UnitOperationError {
     pub unit_id: UnitId,
 }
 
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UnitOperationErrorReason {
     GenericStartError(String),
     GenericStopError(String),

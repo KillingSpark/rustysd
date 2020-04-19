@@ -71,7 +71,7 @@ pub enum UnitStatus {
     Starting,
     Started(StatusStarted),
     Stopping,
-    Stopped(StatusStopped, Vec<StopError>),
+    Stopped(StatusStopped, Vec<UnitOperationErrorReason>),
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -84,15 +84,6 @@ pub enum StatusStarted {
 pub enum StatusStopped {
     StoppedFinal,
     StoppedUnexpected,
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub enum StopError {
-    PreStartError,
-    PostStartError,
-    StartError,
-    StopError,
-    PosStopError,
 }
 
 impl UnitStatus {
@@ -247,7 +238,7 @@ impl Unit {
                         let mut status = self.common.status.write().unwrap();
                         *status = UnitStatus::Stopped(
                             StatusStopped::StoppedUnexpected,
-                            vec![StopError::StartError],
+                            vec![e.reason.clone()],
                         );
                         Err(e)
                     }
@@ -297,7 +288,7 @@ impl Unit {
                         let mut status = self.common.status.write().unwrap();
                         *status = UnitStatus::Stopped(
                             StatusStopped::StoppedUnexpected,
-                            vec![StopError::StartError],
+                            vec![e.reason.clone()],
                         );
                         Err(e)
                     }

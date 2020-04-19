@@ -349,7 +349,7 @@ pub fn execute_command(
                 x
             };
 
-            crate::units::deactivate_unit_recursive(id, true, run_info)
+            crate::units::deactivate_unit_recursive(id, run_info)
                 .map_err(|e| format!("{}", e))?;
         }
         Command::Status(unit_name) => {

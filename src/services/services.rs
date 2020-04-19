@@ -54,9 +54,8 @@ pub struct Service {
     pub stderr_buffer: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum RunCmdError {
-    BadQuoting(String),
     Timeout(String, String),
     SpawnError(String, String),
     WaitError(String, String),
@@ -67,7 +66,6 @@ pub enum RunCmdError {
 impl std::fmt::Display for RunCmdError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
-            RunCmdError::BadQuoting(cmd) => format!("{} does have invalid quotes", cmd),
             RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
             RunCmdError::SpawnError(cmd, err) => format!("{} failed to spawn with: {:?}", cmd, err),
             RunCmdError::WaitError(cmd, err) => {
@@ -85,6 +83,7 @@ pub enum StartResult {
     WaitingForSocket,
 }
 
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ServiceErrorReason {
     PrestartFailed(RunCmdError),
     PoststartFailed(RunCmdError),
