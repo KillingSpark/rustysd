@@ -52,7 +52,10 @@ pub fn reactivate_unit(
 ) -> std::result::Result<(), UnitOperationError> {
     trace!("Reactivation of unit: {:?}. Deactivate", id_to_restart);
     deactivate_unit(id_to_restart.clone(), run_info.clone())?;
-    trace!("Reactivation of unit: {:?}. Deactivation ran. Activate again", id_to_restart);
+    trace!(
+        "Reactivation of unit: {:?}. Deactivation ran. Activate again",
+        id_to_restart
+    );
     crate::units::activate_unit(
         id_to_restart.clone(),
         run_info,

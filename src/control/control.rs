@@ -349,8 +349,7 @@ pub fn execute_command(
                 x
             };
 
-            crate::units::deactivate_unit_recursive(id, run_info)
-                .map_err(|e| format!("{}", e))?;
+            crate::units::deactivate_unit_recursive(id, run_info).map_err(|e| format!("{}", e))?;
         }
         Command::Status(unit_name) => {
             let run_info = &*run_info.read().unwrap();

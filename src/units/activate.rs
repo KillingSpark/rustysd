@@ -224,7 +224,7 @@ pub fn activate_units(
     // collect all 'root' units. These are units that do not have any 'after' relations to other units.
     // These can be started and the the tree can be traversed and other units can be started as soon as
     // all other units they depend on are started. This works because the units form an DAG if one only
-    // uses the 'after' relations.  
+    // uses the 'after' relations.
     let mut root_units = Vec::new();
 
     for (id, unit) in &run_info.read().unwrap().unit_table {

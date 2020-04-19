@@ -60,7 +60,8 @@ pub fn start_socketactivation_thread(
                                 ) {
                                     Ok(result) => {
                                         trace!(
-                                            "New status after socket activation ({:?}): {:?}", result,
+                                            "New status after socket activation ({:?}): {:?}",
+                                            result,
                                             *unit_table
                                                 .get(&srvc_unit_id)
                                                 .unwrap()
