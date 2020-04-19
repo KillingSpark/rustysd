@@ -3,116 +3,24 @@ use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use crate::units::*;
 
-use std::fmt;
 use std::sync::RwLock;
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
-pub enum UnitIdKind {
-    Target,
-    Socket,
-    Service,
-}
-
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct UnitId {
-    pub kind: UnitIdKind,
-    pub name: String,
-}
-impl UnitId {
-    pub fn name_without_suffix(&self) -> String {
-        let split: Vec<_> = self.name.split('.').collect();
-        split[0..split.len() - 1].join(".")
-    }
-}
-
-impl fmt::Debug for UnitId {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.write_str(format!("{}", self.name).as_str())
-    }
-}
-
-impl fmt::Display for UnitId {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.write_str(format!("{:?}", self).as_str())
-    }
-}
-
-impl std::cmp::PartialOrd for UnitId {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.name.partial_cmp(&other.name)
-    }
-}
-
-impl std::cmp::Ord for UnitId {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.name.cmp(&other.name)
-    }
-}
-
-impl PartialEq<str> for UnitId {
-    fn eq(&self, other: &str) -> bool {
-        self.name.eq(other)
-    }
-}
-impl PartialEq<String> for UnitId {
-    fn eq(&self, other: &String) -> bool {
-        self.name.eq(other)
-    }
-}
-impl PartialEq<dyn AsRef<str>> for UnitId {
-    fn eq(&self, other: &dyn AsRef<str>) -> bool {
-        self.name.eq(other.as_ref())
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub enum UnitStatus {
-    NeverStarted,
-    Starting,
-    Started(StatusStarted),
-    Stopping,
-    Stopped(StatusStopped, Vec<UnitOperationErrorReason>),
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub enum StatusStarted {
-    Running,
-    WaitingForSocket,
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub enum StatusStopped {
-    StoppedFinal,
-    StoppedUnexpected,
-}
-
-impl UnitStatus {
-    pub fn is_stopped(&self) -> bool {
-        match self {
-            UnitStatus::Stopped(_, _) => true,
-            _ => false,
-        }
-    }
-    pub fn is_started(&self) -> bool {
-        match self {
-            UnitStatus::Started(_) => true,
-            _ => false,
-        }
-    }
-}
-
+/// A units has a common part that all units share, like dependencies and a description. The specific part containbs mutable state and
+/// the unit-type specific configs
 pub struct Unit {
     pub id: UnitId,
     pub common: Common,
     pub specific: Specific,
 }
 
+/// Common attributes of units
 pub struct Common {
     pub unit: UnitConfig,
     pub dependencies: Dependencies,
     pub status: RwLock<UnitStatus>,
 }
 
+/// Different unit-types have different configs and state
 pub enum Specific {
     Service(ServiceSpecific),
     Socket(SocketSpecific),
@@ -134,13 +42,22 @@ pub struct SocketSpecific {
     pub conf: SocketConfig,
     pub state: RwLock<SocketState>,
 }
+
+impl SocketSpecific {
+    pub fn belongs_to_service(&self, service: &str) -> bool {
+        self.conf.services.iter().any(|id| id.eq(service))
+    }
+}
+
 pub struct TargetSpecific {}
 
 #[derive(Default)]
+/// All units have some common mutable state
 pub struct CommonState {
     pub up_since: Option<std::time::Instant>,
     pub restart_count: u64,
 }
+
 pub struct ServiceState {
     pub common: CommonState,
     pub srvc: Service,
@@ -185,6 +102,15 @@ impl Unit {
         self.common.dependencies.dedup();
     }
 
+    /// This activates the unit and manages the state transitions. It reports back the new unit status or any
+    /// errors encountered while starting the unit. Note that these errors are also recorded in the units status.
+    ///
+    /// This always happens in this order:
+    /// 1. Lock unit mutable state
+    /// 1. Update status to 'Starting'
+    /// 1. Do unit specific activation
+    /// 1. Update status depending on the results
+    /// 1. return
     pub fn activate(
         &self,
         run_info: &RuntimeInfo,
@@ -192,7 +118,6 @@ impl Unit {
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<UnitStatus, UnitOperationError> {
-        // TODO change status here!
         match &self.specific {
             Specific::Target(_) => {
                 {
@@ -296,6 +221,16 @@ impl Unit {
             }
         }
     }
+
+    /// This dectivates the unit and manages the state transitions. It reports back any
+    /// errors encountered while stopping the unit.
+    ///
+    /// This always happens in this order:
+    /// 1. Lock unit mutable state
+    /// 1. Update status to 'Stopping'
+    /// 1. Do unit specific deactivation
+    /// 1. Update status depending on the results
+    /// 1. return
     pub fn deactivate(&self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
         // TODO change status here!
         trace!("Deactivate unit: {}", self.id.name);
@@ -316,7 +251,7 @@ impl Unit {
                     }
                     *status = UnitStatus::Stopping;
                 }
-                state
+                let close_result = state
                     .sock
                     .close_all(
                         &specific.conf,
@@ -327,10 +262,19 @@ impl Unit {
                         unit_name: self.id.name.clone(),
                         unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::SocketCloseError(e),
-                    })?;
-                {
-                    let mut status = self.common.status.write().unwrap();
-                    *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+                    });
+                match close_result {
+                    Ok(_) => {
+                        let mut status = self.common.status.write().unwrap();
+                        *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+                    }
+                    Err(e) => {
+                        let mut status = self.common.status.write().unwrap();
+                        *status = UnitStatus::Stopped(
+                            StatusStopped::StoppedFinal,
+                            vec![e.reason.clone()],
+                        );
+                    }
                 }
             }
             Specific::Service(specific) => {
@@ -342,87 +286,90 @@ impl Unit {
                     }
                     *status = UnitStatus::Stopping;
                 }
-                state
+                let kill_result = state
                     .srvc
                     .kill(&specific.conf, self.id.clone(), &self.id.name, run_info)
                     .map_err(|e| UnitOperationError {
                         unit_name: self.id.name.clone(),
                         unit_id: self.id.clone(),
                         reason: UnitOperationErrorReason::ServiceStopError(e),
-                    })?;
-                {
-                    trace!("Deactivation successful. set status");
-                    let mut status = self.common.status.write().unwrap();
-                    trace!("Deactivation successful. Did set status");
-                    *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+                    });
+                match kill_result {
+                    Ok(_) => {
+                        let mut status = self.common.status.write().unwrap();
+                        *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+                    }
+                    Err(e) => {
+                        let mut status = self.common.status.write().unwrap();
+                        *status = UnitStatus::Stopped(
+                            StatusStopped::StoppedFinal,
+                            vec![e.reason.clone()],
+                        );
+                    }
                 }
             }
         }
         Ok(())
     }
-}
 
-pub fn collect_names_needed(new_unit: &units::Unit, names_needed: &mut Vec<String>) {
-    names_needed.extend(
-        new_unit
-            .common
-            .dependencies
-            .after
-            .iter()
-            .cloned()
-            .map(|id| id.name),
-    );
-    names_needed.extend(
-        new_unit
-            .common
-            .dependencies
-            .before
-            .iter()
-            .cloned()
-            .map(|id| id.name),
-    );
-    names_needed.extend(
-        new_unit
-            .common
-            .dependencies
-            .wanted_by
-            .iter()
-            .cloned()
-            .map(|id| id.name),
-    );
-    names_needed.extend(
-        new_unit
-            .common
-            .dependencies
-            .wants
-            .iter()
-            .cloned()
-            .map(|id| id.name),
-    );
-    names_needed.extend(
-        new_unit
-            .common
-            .dependencies
-            .required_by
-            .iter()
-            .cloned()
-            .map(|id| id.name),
-    );
-    names_needed.extend(
-        new_unit
-            .common
-            .dependencies
-            .requires
-            .iter()
-            .cloned()
-            .map(|id| id.name),
-    );
-
-    if let Specific::Socket(sock) = &new_unit.specific {
-        names_needed.extend(sock.conf.services.iter().cloned());
-    }
-    if let Specific::Service(srvc) = &new_unit.specific {
-        names_needed.extend(srvc.conf.sockets.iter().cloned());
+    /// FIXME this should operate on the original parsed config to only collect names
+    /// that this unit refers to. This is used for adding/removing units from the set.
+    /// Currently this severly over reports dependencies!
+    pub fn collect_names_needed(&self, names_needed: &mut Vec<String>) {
+        names_needed.extend(
+            self.common
+                .dependencies
+                .after
+                .iter()
+                .cloned()
+                .map(|id| id.name),
+        );
+        names_needed.extend(
+            self.common
+                .dependencies
+                .before
+                .iter()
+                .cloned()
+                .map(|id| id.name),
+        );
+        names_needed.extend(
+            self.common
+                .dependencies
+                .wanted_by
+                .iter()
+                .cloned()
+                .map(|id| id.name),
+        );
+        names_needed.extend(
+            self.common
+                .dependencies
+                .wants
+                .iter()
+                .cloned()
+                .map(|id| id.name),
+        );
+        names_needed.extend(
+            self.common
+                .dependencies
+                .required_by
+                .iter()
+                .cloned()
+                .map(|id| id.name),
+        );
+        names_needed.extend(
+            self.common
+                .dependencies
+                .requires
+                .iter()
+                .cloned()
+                .map(|id| id.name),
+        );
+        if let Specific::Socket(sock) = &self.specific {
+            names_needed.extend(sock.conf.services.iter().cloned());
+        }
+        if let Specific::Service(srvc) = &self.specific {
+            names_needed.extend(srvc.conf.sockets.iter().cloned());
+        }
     }
 }
 
@@ -433,8 +380,8 @@ pub struct UnitConfig {
 
 #[derive(Debug, Clone)]
 /// These vecs are meant like this:
-/// Install::after: this unit should start after these units have been started
-/// Install::before: this unit should start before these units have been started
+/// Dependencies::after: this unit should start after these units have been started
+/// Dependencies::before: this unit should start before these units have been started
 /// ....
 pub struct Dependencies {
     pub wants: Vec<UnitId>,
@@ -528,12 +475,14 @@ impl Dependencies {
     }
 }
 
+/// Describes a single socket that should be opened. One Socket unit may contain multiple of these
 #[derive(Clone, Debug)]
 pub struct SingleSocketConfig {
     pub kind: SocketKind,
     pub specialized: SpecializedSocketConfig,
 }
 
+/// All settings from the Exec section of a unit
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExecConfig {
     pub user: nix::unistd::Uid,
@@ -554,6 +503,7 @@ pub struct PlatformSpecificServiceFields {
 pub struct PlatformSpecificServiceFields {}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+/// The immutable config of a service unit
 pub struct ServiceConfig {
     pub restart: ServiceRestart,
     pub accept: bool,
@@ -567,16 +517,13 @@ pub struct ServiceConfig {
     pub starttimeout: Option<Timeout>,
     pub stoptimeout: Option<Timeout>,
     pub generaltimeout: Option<Timeout>,
-
     pub exec_config: ExecConfig,
-
     pub platform_specific: PlatformSpecificServiceFields,
-
     pub dbus_name: Option<String>,
-
     pub sockets: Vec<String>,
 }
 
+/// The immutable config of a socket unit
 pub struct SocketConfig {
     pub sockets: Vec<SingleSocketConfig>,
     pub filedesc_name: String,

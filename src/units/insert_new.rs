@@ -74,7 +74,7 @@ fn check_all_names_exist(
 ) -> Result<(), String> {
     let mut names_needed = Vec::new();
     for new_unit in new_units.values() {
-        crate::units::collect_names_needed(new_unit, &mut names_needed);
+        new_unit.collect_names_needed(&mut names_needed);
     }
     let mut names_needed: std::collections::HashMap<_, _> =
         names_needed.iter().map(|name| (name, ())).collect();
@@ -106,11 +106,7 @@ fn check_all_names_exist(
     Ok(())
 }
 
-/// Activates a new unit by
-/// 1. (not yet but will be) checking the units referenced by this new unit
-/// 1. inserting it into the unit_table of run_info
-/// 1. activate the unit
-/// 1. removing the unit again if the activation fails
+/// Inserts new units but first checks that the units referenced by the new units do exist
 pub fn insert_new_units(
     new_units: HashMap<units::UnitId, units::Unit>,
     run_info: &mut units::RuntimeInfo,

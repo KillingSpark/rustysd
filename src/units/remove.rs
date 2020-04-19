@@ -70,7 +70,7 @@ fn find_all_depending(rm_id: UnitId, unit_table: &UnitTable, ids: &mut Vec<UnitI
     for (id, unit) in unit_table.iter() {
         if *id != rm_id {
             names.clear();
-            collect_names_needed(unit, &mut names);
+            unit.collect_names_needed(&mut names);
             if names.contains(&rm_name) {
                 new_ids.push(id.clone());
             }
@@ -98,7 +98,7 @@ fn remove_with_depending_units(rm_id: UnitId, unit_table: &mut UnitTable) {
     for (id, unit) in unit_table.iter() {
         if *id != rm_id {
             names.clear();
-            collect_names_needed(unit, &mut names);
+            unit.collect_names_needed(&mut names);
             if names.contains(&rm_name) {
                 next_ids.push(id.clone());
             }

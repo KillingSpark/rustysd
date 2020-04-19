@@ -4,12 +4,11 @@ use std::collections::HashMap;
 type SocketTable = HashMap<UnitId, Unit>;
 type ServiceTable = HashMap<UnitId, Unit>;
 
-#[allow(dead_code)]
+/// Takes a set of units and prunes those that are not needed to reach the specified target unit.
 pub fn prune_units(
     target_unit_name: &str,
     unit_table: &mut HashMap<UnitId, Unit>,
 ) -> Result<(), String> {
-    let mut ids_to_keep = Vec::new();
     let startunit = unit_table.values().fold(None, |mut result, unit| {
         if unit.id.name == target_unit_name {
             result = Some(unit.id.clone());
@@ -21,9 +20,13 @@ pub fn prune_units(
     } else {
         return Err(format!("Target unit {} not found", target_unit_name));
     };
+    // This vec will record the unit ids that will be kept
+    let mut ids_to_keep = Vec::new();
 
+    // walk the tree along the wants/requires/before/... relations and record which ids are needed
     find_needed_units_recursive(startunit_id, unit_table, &mut ids_to_keep);
 
+    // Remove all units that have been deemed unnecessary
     let mut ids_to_remove = Vec::new();
     for id in unit_table.keys() {
         if !ids_to_keep.contains(id) {
@@ -36,6 +39,8 @@ pub fn prune_units(
     }
 
     add_implicit_before_after(unit_table);
+
+    // Cleanup all removed IDs
     for unit in unit_table.values_mut() {
         unit.common.dependencies.before = unit
             .common
@@ -218,15 +223,22 @@ pub fn fill_dependencies(units: &mut HashMap<UnitId, Unit>) {
 fn add_sock_srvc_relations(
     srvc_id: UnitId,
     srvc_install: &mut Dependencies,
+    srvc_conf: &mut ServiceConfig,
     sock_id: UnitId,
     sock_install: &mut Dependencies,
+    sock_conf: &mut SocketConfig,
 ) {
     srvc_install.after.push(sock_id.clone());
     srvc_install.requires.push(sock_id.clone());
     sock_install.before.push(srvc_id.clone());
     sock_install.required_by.push(srvc_id.clone());
+
+    srvc_conf.sockets.push(sock_id.name.clone());
+    sock_conf.services.push(sock_id.name.clone());
 }
 
+/// This takes a set of services and sockets and matches them both by their name and their
+/// respective explicit settings. It adds appropriate before/after and requires/required_by relations.
 pub fn apply_sockets_to_services(
     service_table: &mut ServiceTable,
     socket_table: &mut SocketTable,
@@ -249,13 +261,13 @@ pub fn apply_sockets_to_services(
                             srvc_unit.id.name
                         );
 
-                        srvc.conf.sockets.push(sock_unit.id.name.clone());
-                        sock.conf.services.push(srvc_unit.id.name.clone());
                         add_sock_srvc_relations(
                             srvc_unit.id.clone(),
                             &mut srvc_unit.common.dependencies,
+                            &mut srvc.conf,
                             sock_unit.id.clone(),
                             &mut sock_unit.common.dependencies,
+                            &mut sock.conf,
                         );
                         counter += 1;
                     }
@@ -276,8 +288,10 @@ pub fn apply_sockets_to_services(
                         add_sock_srvc_relations(
                             srvc_unit.id.clone(),
                             &mut srvc_unit.common.dependencies,
+                            &mut srvc.conf,
                             sock_unit.id.clone(),
                             &mut sock_unit.common.dependencies,
+                            &mut sock.conf,
                         );
                         counter += 1;
                     }

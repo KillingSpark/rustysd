@@ -7,6 +7,8 @@ pub enum SanityCheckError {
     CirclesFound(Vec<Vec<UnitId>>),
 }
 
+/// Currently only checks that the units form a DAG so the recursive startup sequence does not hang itself.
+/// There might be more to be checked but this is probably the most essential one.
 pub fn sanity_check_dependencies(
     unit_table: &HashMap<UnitId, Unit>,
 ) -> Result<(), SanityCheckError> {

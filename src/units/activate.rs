@@ -187,7 +187,7 @@ pub fn activate_unit(
         return Ok(StartResult::WaitForDependencies);
     }
 
-    // Check if the unit is currently starting
+    // Check if the unit is needs to be activated
     {
         // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
         // TODO make this relation less weird. Maybe add a separate code path for socket activation
@@ -221,6 +221,10 @@ pub fn activate_units(
     notification_socket_path: std::path::PathBuf,
     eventfds: Vec<EventFd>,
 ) {
+    // collect all 'root' units. These are units that do not have any 'after' relations to other units.
+    // These can be started and the the tree can be traversed and other units can be started as soon as
+    // all other units they depend on are started. This works because the units form an DAG if one only
+    // uses the 'after' relations.  
     let mut root_units = Vec::new();
 
     for (id, unit) in &run_info.read().unwrap().unit_table {
@@ -230,7 +234,7 @@ pub fn activate_units(
         }
     }
 
-    // TODO make configurable or at least make guess about amount fo threads
+    // TODO make configurable or at least make guess about amount of threads
     let tpool = ThreadPool::new(6);
     let eventfds_arc = Arc::new(eventfds);
     let errors = Arc::new(Mutex::new(Vec::new()));
