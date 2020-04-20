@@ -1,20 +1,23 @@
 use crate::units::*;
 use serde_json::Value;
 
-pub fn open_all_sockets(run_info: ArcRuntimeInfo, conf: &crate::config::Config) {
+pub fn open_all_sockets(run_info: ArcMutRuntimeInfo, conf: &crate::config::Config) {
     // TODO make configurable
-    let control_sock_path = conf.notification_sockets_dir.join("control.socket");
+    let control_sock_path = {
+        run_info
+            .read()
+            .unwrap()
+            .config
+            .notification_sockets_dir
+            .join("control.socket")
+    };
     if control_sock_path.exists() {
         std::fs::remove_file(&control_sock_path).unwrap();
     }
     use std::os::unix::net::UnixListener;
     std::fs::create_dir_all(&conf.notification_sockets_dir).unwrap();
     let unixsock = UnixListener::bind(&control_sock_path).unwrap();
-    accept_control_connections_unix_socket(
-        run_info.clone(),
-        conf.notification_sockets_dir.clone(),
-        unixsock,
-    );
+    accept_control_connections_unix_socket(run_info.clone(), unixsock);
     //let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
     //accept_control_connections_tcp(
     //    run_info.clone(),
@@ -184,18 +187,19 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
 
 pub fn format_socket(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+    map.insert("Name".into(), Value::String(socket_unit.id.name.clone()));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
 
-    if let UnitSpecialized::Socket(sock) = &socket_unit.specialized {
+    if let Specific::Socket(sock) = &socket_unit.specific {
         map.insert(
             "FileDescriptorname".into(),
-            Value::String(sock.name.clone()),
+            Value::String(socket_unit.id.name.clone()),
         );
         map.insert(
             "FileDescriptors".into(),
             Value::Array(
-                sock.sockets
+                sock.conf
+                    .sockets
                     .iter()
                     .map(|sock_conf| Value::String(format!("{:?}", sock_conf.specialized)))
                     .collect(),
@@ -208,26 +212,27 @@ pub fn format_socket(socket_unit: &Unit, status: UnitStatus) -> Value {
 
 pub fn format_target(socket_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(socket_unit.conf.name()));
+    map.insert("Name".into(), Value::String(socket_unit.id.name.clone()));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
     Value::Object(map)
 }
 
 pub fn format_service(srvc_unit: &Unit, status: UnitStatus) -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("Name".into(), Value::String(srvc_unit.conf.name()));
+    map.insert("Name".into(), Value::String(srvc_unit.id.name.clone()));
     map.insert("Status".into(), Value::String(format!("{:?}", status)));
-    if let UnitSpecialized::Service(srvc) = &srvc_unit.specialized {
+    if let Specific::Service(srvc) = &srvc_unit.specific {
         map.insert(
             "Sockets".into(),
             Value::Array(
-                srvc.socket_names
+                srvc.conf
+                    .sockets
                     .iter()
                     .map(|x| Value::String(x.clone()))
                     .collect(),
             ),
         );
-        if let Some(instant) = srvc.runtime_info.up_since {
+        if let Some(instant) = srvc.state.read().unwrap().common.up_since {
             map.insert(
                 "UpSince".into(),
                 Value::String(format!("{:?}", instant.elapsed())),
@@ -235,46 +240,45 @@ pub fn format_service(srvc_unit: &Unit, status: UnitStatus) -> Value {
         }
         map.insert(
             "Restarted".into(),
-            Value::String(format!("{:?}", srvc.runtime_info.restarted)),
+            Value::String(format!(
+                "{:?}",
+                srvc.state.read().unwrap().common.restart_count
+            )),
         );
     }
     Value::Object(map)
 }
 
-use std::sync::{Arc, Mutex};
-fn find_units_with_name(unit_name: &str, unit_table_locked: &UnitTable) -> Vec<Arc<Mutex<Unit>>> {
+fn find_units_with_name<'a>(unit_name: &str, unit_table: &'a UnitTable) -> Vec<&'a Unit> {
     trace!("Find unit for name: {}", unit_name);
-    unit_table_locked
+    unit_table
         .values()
         .filter(|unit| {
-            let name = unit.lock().unwrap().conf.name();
+            let name = unit.id.name.clone();
             name.starts_with(&unit_name)
         })
-        .cloned()
         .collect()
 }
 
 // TODO make this some kind of regex pattern matching
-fn find_units_with_pattern(
+fn find_units_with_pattern<'a>(
     name_pattern: &str,
-    unit_table_locked: &UnitTable,
-) -> Vec<Arc<Mutex<Unit>>> {
+    unit_table_locked: &'a UnitTable,
+) -> Vec<&'a Unit> {
     trace!("Find units matching pattern: {}", name_pattern);
     let units: Vec<_> = unit_table_locked
         .values()
         .filter(|unit| {
-            let name = unit.lock().unwrap().conf.name();
+            let name = unit.id.name.clone();
             name.starts_with(&name_pattern)
         })
-        .cloned()
         .collect();
     units
 }
 
 pub fn execute_command(
     cmd: Command,
-    run_info: ArcRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
+    run_info: ArcMutRuntimeInfo,
 ) -> Result<serde_json::Value, String> {
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
@@ -282,13 +286,12 @@ pub fn execute_command(
             crate::shutdown::shutdown_sequence(run_info);
         }
         Command::Restart(unit_name) => {
+            let run_info = &*run_info.read().unwrap();
             let id = {
-                let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
+                let unit_table = &run_info.unit_table;
+                let units = find_units_with_name(&unit_name, unit_table);
                 if units.len() > 1 {
-                    let names: Vec<_> = units
-                        .iter()
-                        .map(|unit| unit.lock().unwrap().conf.name())
-                        .collect();
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
                         unit_name, names
@@ -297,26 +300,19 @@ pub fn execute_command(
                 if units.len() == 0 {
                     return Err(format!("No unit found with name: {}", unit_name));
                 }
-                let x = units[0].lock().unwrap().id;
+                let x = units[0].id.clone();
                 x
             };
 
-            crate::units::reactivate_unit(
-                id,
-                run_info,
-                notification_socket_path,
-                std::sync::Arc::new(Vec::new()),
-            )
-            .map_err(|e| format!("{}", e))?;
+            crate::units::reactivate_unit(id, run_info, std::sync::Arc::new(Vec::new()))
+                .map_err(|e| format!("{}", e))?;
         }
         Command::Remove(unit_name) => {
+            let run_info = &mut *run_info.write().unwrap();
             let id = {
-                let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
+                let units = find_units_with_name(&unit_name, &run_info.unit_table);
                 if units.len() > 1 {
-                    let names: Vec<_> = units
-                        .iter()
-                        .map(|unit| unit.lock().unwrap().conf.name())
-                        .collect();
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
                         unit_name, names
@@ -325,21 +321,19 @@ pub fn execute_command(
                 if units.len() == 0 {
                     return Err(format!("No unit found with name: {}", unit_name));
                 }
-                let x = units[0].lock().unwrap().id;
+                let x = units[0].id.clone();
                 x
             };
 
-            crate::units::remove_unit_with_dependencies(id, &run_info)
+            crate::units::remove_unit_with_dependencies(id, run_info)
                 .map_err(|e| format!("{}", e))?;
         }
         Command::Stop(unit_name) => {
+            let run_info = &*run_info.read().unwrap();
             let id = {
-                let units = find_units_with_name(&unit_name, &*run_info.unit_table.read().unwrap());
+                let units = find_units_with_name(&unit_name, &run_info.unit_table);
                 if units.len() > 1 {
-                    let names: Vec<_> = units
-                        .iter()
-                        .map(|unit| unit.lock().unwrap().conf.name())
-                        .collect();
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
                     return Err(format!(
                         "More than one unit found with name: {}: {:?}",
                         unit_name, names
@@ -348,47 +342,36 @@ pub fn execute_command(
                 if units.len() == 0 {
                     return Err(format!("No unit found with name: {}", unit_name));
                 }
-                let x = units[0].lock().unwrap().id;
+                let x = units[0].id.clone();
                 x
             };
 
-            crate::units::deactivate_unit_recursive(id, true, run_info)
-                .map_err(|e| format!("{}", e))?;
+            crate::units::deactivate_unit_recursive(id, run_info).map_err(|e| format!("{}", e))?;
         }
         Command::Status(unit_name) => {
+            let run_info = &*run_info.read().unwrap();
+            let unit_table = &run_info.unit_table;
             match unit_name {
                 Some(name) => {
                     //list specific
-                    let unit_table_locked = &*run_info.unit_table.read().unwrap();
-                    let units = find_units_with_pattern(&name, unit_table_locked);
+                    let units = find_units_with_pattern(&name, unit_table);
                     for unit in units {
-                        let unit_locked = unit.lock().unwrap();
-                        let status = {
-                            run_info
-                                .status_table
-                                .read()
-                                .unwrap()
-                                .get(&unit_locked.id)
-                                .unwrap()
-                                .lock()
-                                .unwrap()
-                                .clone()
-                        };
+                        let status = { unit.common.status.read().unwrap().clone() };
                         if name.ends_with(".service") {
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
-                                .push(format_service(&unit_locked, status));
+                                .push(format_service(&unit, status));
                         } else if name.ends_with(".socket") {
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
-                                .push(format_socket(&unit_locked, status));
+                                .push(format_socket(&unit, status));
                         } else if name.ends_with(".target") {
                             result_vec
                                 .as_array_mut()
                                 .unwrap()
-                                .push(format_target(&unit_locked, status));
+                                .push(format_target(&unit, status));
                         } else {
                             return Err("Name suffix not recognized".into());
                         }
@@ -396,26 +379,14 @@ pub fn execute_command(
                 }
                 None => {
                     //list all
-                    let unit_table_locked = run_info.unit_table.read().unwrap();
-                    let strings: Vec<_> = unit_table_locked
+                    let strings: Vec<_> = unit_table
                         .iter()
                         .map(|(_id, unit)| {
-                            let unit_locked = &unit.lock().unwrap();
-                            let status = {
-                                run_info
-                                    .status_table
-                                    .read()
-                                    .unwrap()
-                                    .get(&unit_locked.id)
-                                    .unwrap()
-                                    .lock()
-                                    .unwrap()
-                                    .clone()
-                            };
-                            match unit_locked.specialized {
-                                UnitSpecialized::Socket(_) => format_socket(&unit_locked, status),
-                                UnitSpecialized::Service(_) => format_service(&unit_locked, status),
-                                UnitSpecialized::Target => format_target(&unit_locked, status),
+                            let status = { unit.common.status.read().unwrap().clone() };
+                            match unit.specific {
+                                Specific::Socket(_) => format_socket(&unit, status),
+                                Specific::Service(_) => format_service(&unit, status),
+                                Specific::Target(_) => format_target(&unit, status),
                             }
                         })
                         .collect();
@@ -426,68 +397,53 @@ pub fn execute_command(
             }
         }
         Command::ListUnits(kind) => {
-            let unit_table_locked = run_info.unit_table.read().unwrap();
-            for (id, unit) in unit_table_locked.iter() {
+            let run_info = &*run_info.read().unwrap();
+            let unit_table = &run_info.unit_table;
+            for (id, unit) in unit_table.iter() {
                 let include = if let Some(kind) = kind {
-                    id.0 == kind
+                    id.kind == kind
                 } else {
                     true
                 };
                 if include {
-                    let unit_locked = unit.lock().unwrap();
                     result_vec
                         .as_array_mut()
                         .unwrap()
-                        .push(Value::String(unit_locked.conf.name()));
+                        .push(Value::String(unit.id.name.clone()));
                 }
             }
         }
         Command::LoadNew(names) => {
+            let run_info = &mut *run_info.write().unwrap();
             let mut map = std::collections::HashMap::new();
             for name in &names {
-                let this_id = {
-                    let last_id = &mut *run_info.last_id.lock().unwrap();
-                    *last_id = *last_id + 1;
-                    *last_id
-                };
-                let unit = load_new_unit(&run_info.config.unit_dirs, &name, this_id)?;
-                map.insert(unit.id, unit);
+                let unit = load_new_unit(&run_info.config.unit_dirs, &name)?;
+                map.insert(unit.id.clone(), unit);
             }
             insert_new_units(map, run_info)?;
         }
         Command::LoadAllNew => {
-            let mut this_id = {
-                let last_id = &mut *run_info.last_id.lock().unwrap();
-                *last_id = *last_id + 1;
-                *last_id
-            };
+            let run_info = &mut *run_info.write().unwrap();
+            let unit_table = &run_info.unit_table;
             // get all units there are
-            let units = load_all_units(
-                &run_info.config.unit_dirs,
-                &mut this_id,
-                &run_info.config.target_unit,
-            )
-            .map_err(|e| format!("Error while loading unit definitons: {:?}", e))?;
+            let units = load_all_units(&run_info.config.unit_dirs, &run_info.config.target_unit)
+                .map_err(|e| format!("Error while loading unit definitons: {:?}", e))?;
 
             // collect all names
-            // TODO there should probably be a global id -> name mapping so we dont always need to lock a unit just to get the name
-            let existing_names = {
-                let unit_table_locked = &*run_info.unit_table.read().unwrap();
-                unit_table_locked
-                    .values()
-                    .map(|unit| unit.lock().unwrap().conf.name())
-                    .collect::<Vec<_>>()
-            };
+            let existing_names = unit_table
+                .values()
+                .map(|unit| unit.id.name.clone())
+                .collect::<Vec<_>>();
 
             // filter out existing units
             let mut ignored_units_names = Vec::new();
             let mut new_units_names = Vec::new();
             let mut new_units = std::collections::HashMap::new();
             for (id, unit) in units {
-                if existing_names.contains(&unit.conf.name()) {
-                    ignored_units_names.push(Value::String(unit.conf.name()));
+                if existing_names.contains(&unit.id.name) {
+                    ignored_units_names.push(Value::String(unit.id.name.clone()));
                 } else {
-                    new_units_names.push(Value::String(unit.conf.name()));
+                    new_units_names.push(Value::String(unit.id.name.clone()));
                     new_units.insert(id, unit);
                 }
             }
@@ -513,8 +469,7 @@ use std::io::Read;
 use std::io::Write;
 pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     mut source: Box<T>,
-    run_info: ArcRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
+    run_info: ArcMutRuntimeInfo,
 ) {
     std::thread::spawn(move || loop {
         match super::jsonrpc2::get_next_call(source.as_mut()) {
@@ -564,11 +519,7 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
                             }
                             Ok(cmd) => {
                                 trace!("Execute command: {:?}", cmd);
-                                let msg = match execute_command(
-                                    cmd,
-                                    run_info.clone(),
-                                    notification_socket_path.clone(),
-                                ) {
+                                let msg = match execute_command(cmd, run_info.clone()) {
                                     Err(e) => {
                                         let err = super::jsonrpc2::make_error(
                                             super::jsonrpc2::SERVER_ERROR,
@@ -593,23 +544,18 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
 }
 
 pub fn accept_control_connections_unix_socket(
-    run_info: ArcRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
+    run_info: ArcMutRuntimeInfo,
     source: std::os::unix::net::UnixListener,
 ) {
     std::thread::spawn(move || loop {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(stream, run_info.clone(), notification_socket_path.clone())
+        listen_on_commands(stream, run_info.clone())
     });
 }
 
-pub fn accept_control_connections_tcp(
-    run_info: ArcRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
-    source: std::net::TcpListener,
-) {
+pub fn accept_control_connections_tcp(run_info: ArcMutRuntimeInfo, source: std::net::TcpListener) {
     std::thread::spawn(move || loop {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(stream, run_info.clone(), notification_socket_path.clone())
+        listen_on_commands(stream, run_info.clone())
     });
 }

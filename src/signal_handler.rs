@@ -5,12 +5,7 @@ use crate::services;
 use crate::units::*;
 use signal_hook::iterator::Signals;
 
-pub fn handle_signals(
-    signals: Signals,
-    run_info: ArcRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
-    eventfds: Vec<EventFd>,
-) {
+pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo, eventfds: Vec<EventFd>) {
     loop {
         // Pick up new signals
         for signal in signals.forever() {
@@ -19,7 +14,6 @@ pub fn handle_signals(
                     std::iter::from_fn(get_next_exited_child)
                         .take_while(Result::is_ok)
                         .for_each(|val| {
-                            let note_sock_path = notification_socket_path.clone();
                             let eventfds_clone = eventfds.clone();
                             let run_info_clone = run_info.clone();
                             match val {
@@ -27,7 +21,6 @@ pub fn handle_signals(
                                     pid,
                                     code,
                                     run_info_clone,
-                                    note_sock_path,
                                     eventfds_clone,
                                 ),
                                 Err(e) => {

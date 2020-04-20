@@ -1,5 +1,6 @@
 use crate::units::*;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -33,7 +34,6 @@ impl std::convert::From<ParsingError> for LoadingError {
 
 pub fn load_all_units(
     paths: &[PathBuf],
-    base_id: &mut u64,
     target_unit: &str,
 ) -> Result<HashMap<UnitId, Unit>, LoadingError> {
     let mut service_unit_table = HashMap::new();
@@ -45,7 +45,6 @@ pub fn load_all_units(
             &mut socket_unit_table,
             &mut target_unit_table,
             path,
-            base_id,
         )?;
     }
 
@@ -53,6 +52,9 @@ pub fn load_all_units(
     unit_table.extend(service_unit_table);
     unit_table.extend(socket_unit_table);
     unit_table.extend(target_unit_table);
+
+    trace!("Units found: {}", unit_table.len());
+
     fill_dependencies(&mut unit_table);
 
     prune_units(target_unit, &mut unit_table).unwrap();
@@ -62,7 +64,7 @@ pub fn load_all_units(
     let mut socket_unit_table = HashMap::new();
     let mut target_unit_table = HashMap::new();
     for (id, unit) in unit_table {
-        match id.0 {
+        match id.kind {
             UnitIdKind::Service => {
                 service_unit_table.insert(id, unit);
             }
@@ -96,24 +98,7 @@ fn cleanup_removed_ids(
 ) {
     for unit in units.values_mut() {
         for id in removed_ids {
-            while let Some(idx) = unit.install.after.iter().position(|el| *el == *id) {
-                unit.install.after.remove(idx);
-            }
-            while let Some(idx) = unit.install.before.iter().position(|el| *el == *id) {
-                unit.install.before.remove(idx);
-            }
-            while let Some(idx) = unit.install.wants.iter().position(|el| *el == *id) {
-                unit.install.wants.remove(idx);
-            }
-            while let Some(idx) = unit.install.requires.iter().position(|el| *el == *id) {
-                unit.install.requires.remove(idx);
-            }
-            while let Some(idx) = unit.install.wanted_by.iter().position(|el| *el == *id) {
-                unit.install.wanted_by.remove(idx);
-            }
-            while let Some(idx) = unit.install.required_by.iter().position(|el| *el == *id) {
-                unit.install.required_by.remove(idx);
-            }
+            unit.common.dependencies.remove_id(id);
         }
     }
 }
@@ -121,13 +106,13 @@ fn cleanup_removed_ids(
 fn prune_unused_sockets(sockets: &mut std::collections::HashMap<UnitId, Unit>) -> Vec<UnitId> {
     let mut ids_to_remove = Vec::new();
     for unit in sockets.values() {
-        if let UnitSpecialized::Socket(sock) = &unit.specialized {
-            if sock.services.is_empty() {
+        if let Specific::Socket(sock) = &unit.specific {
+            if sock.conf.services.is_empty() {
                 trace!(
                     "Prune socket {} because it was not added to any service",
-                    unit.conf.name()
+                    unit.id.name
                 );
-                ids_to_remove.push(unit.id);
+                ids_to_remove.push(unit.id.clone());
             }
         }
     }
@@ -142,13 +127,12 @@ fn parse_all_units(
     sockets: &mut std::collections::HashMap<UnitId, Unit>,
     targets: &mut std::collections::HashMap<UnitId, Unit>,
     path: &PathBuf,
-    last_id: &mut u64,
 ) -> Result<(), ParsingError> {
     let files = get_file_list(path)
         .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?;
     for entry in files {
         if entry.path().is_dir() {
-            parse_all_units(services, sockets, targets, path, last_id)?;
+            parse_all_units(services, sockets, targets, path)?;
         } else {
             let raw = std::fs::read_to_string(&entry.path()).map_err(|e| {
                 ParsingError::new(ParsingErrorReason::from(Box::new(e)), path.clone())
@@ -158,35 +142,32 @@ fn parse_all_units(
                 .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?;
 
             if entry.path().to_str().unwrap().ends_with(".service") {
-                *last_id += 1;
-                trace!("ID {}: {:?}", last_id, entry.path());
-                let new_id = UnitId(UnitIdKind::Service, *last_id);
-                services.insert(
-                    new_id,
-                    parse_service(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
-                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
-                    })?,
-                );
+                trace!("Service found: {:?}", entry.path());
+                let unit: Unit = parse_service(parsed_file, &entry.path())
+                    .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                    .try_into()
+                    .map_err(|err| {
+                        ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                    })?;
+                services.insert(unit.id.clone(), unit);
             } else if entry.path().to_str().unwrap().ends_with(".socket") {
-                *last_id += 1;
-                trace!("ID {}: {:?}", last_id, entry.path());
-                let new_id = UnitId(UnitIdKind::Socket, *last_id);
-                sockets.insert(
-                    new_id,
-                    parse_socket(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
-                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
-                    })?,
-                );
+                trace!("Socket found: {:?}", entry.path());
+                let unit: Unit = parse_socket(parsed_file, &entry.path())
+                    .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                    .try_into()
+                    .map_err(|err| {
+                        ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                    })?;
+                sockets.insert(unit.id.clone(), unit);
             } else if entry.path().to_str().unwrap().ends_with(".target") {
-                *last_id += 1;
-                trace!("ID {}: {:?}", last_id, entry.path());
-                let new_id = UnitId(UnitIdKind::Target, *last_id);
-                targets.insert(
-                    new_id,
-                    parse_target(parsed_file, &entry.path(), new_id.clone()).map_err(|e| {
-                        ParsingError::new(ParsingErrorReason::from(e), path.clone())
-                    })?,
-                );
+                trace!("Target found: {:?}", entry.path());
+                let unit: Unit = parse_target(parsed_file, &entry.path())
+                    .map_err(|e| ParsingError::new(ParsingErrorReason::from(e), path.clone()))?
+                    .try_into()
+                    .map_err(|err| {
+                        ParsingError::new(ParsingErrorReason::Generic(err), path.clone())
+                    })?;
+                targets.insert(unit.id.clone(), unit);
             }
         }
     }

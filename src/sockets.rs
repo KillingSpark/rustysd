@@ -266,36 +266,33 @@ impl UdpSocketConfig {
 
 #[derive(Clone, Debug)]
 pub struct Socket {
-    pub name: String,
-    pub exec_config: ExecConfig,
-    pub sockets: Vec<SocketConfig>,
-    pub services: Vec<String>,
     pub activated: bool,
 }
 
 impl Socket {
-    pub fn build_name_list(&self) -> String {
+    pub fn build_name_list(&self, conf: SocketConfig) -> String {
         let mut name_list = String::with_capacity(
-            self.name.as_bytes().len() * self.sockets.len() + self.sockets.len(),
+            conf.filedesc_name.as_bytes().len() * conf.sockets.len() + conf.sockets.len(),
         );
-        name_list.push_str(&self.name);
-        for _ in 0..self.sockets.len() - 1 {
+        name_list.push_str(&conf.filedesc_name);
+        for _ in 0..conf.sockets.len() - 1 {
             name_list.push(':');
-            name_list.push_str(&self.name);
+            name_list.push_str(&conf.filedesc_name);
         }
         name_list
     }
 
     pub fn open_all(
         &mut self,
+        conf: &SocketConfig,
         name: String,
         id: UnitId,
         fd_store: &mut FDStore,
     ) -> std::io::Result<()> {
         let mut fds = Vec::new();
-        for idx in 0..self.sockets.len() {
-            let conf = &mut self.sockets[idx];
-            let as_raw_fd = conf.specialized.open().unwrap();
+        for idx in 0..conf.sockets.len() {
+            let single_conf = &conf.sockets[idx];
+            let as_raw_fd = single_conf.specialized.open().unwrap();
             // close these fd's on exec. They must not show up in child processes
             // the ńeeded fd's will be duped which unsets the flag again
             let new_fd = as_raw_fd.as_raw_fd();
@@ -304,7 +301,7 @@ impl Socket {
                 nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
             )
             .unwrap();
-            fds.push((id, self.name.clone(), as_raw_fd));
+            fds.push((id.clone(), conf.filedesc_name.clone(), as_raw_fd));
             //need to stop the listener to drop which would close the filedescriptor
         }
         trace!(
@@ -317,10 +314,15 @@ impl Socket {
         Ok(())
     }
 
-    pub fn close_all(&mut self, name: String, fd_store: &mut FDStore) -> Result<(), String> {
+    pub fn close_all(
+        &mut self,
+        conf: &SocketConfig,
+        name: String,
+        fd_store: &mut FDStore,
+    ) -> Result<(), String> {
         if let Some(fds) = fd_store.remove_global(&name) {
             for idx in 0..fds.len() {
-                self.sockets[idx]
+                conf.sockets[idx]
                     .specialized
                     .close(fds[idx].2.as_raw_fd())?;
             }

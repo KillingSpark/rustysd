@@ -7,19 +7,21 @@ pub enum SanityCheckError {
     CirclesFound(Vec<Vec<UnitId>>),
 }
 
+/// Currently only checks that the units form a DAG so the recursive startup sequence does not hang itself.
+/// There might be more to be checked but this is probably the most essential one.
 pub fn sanity_check_dependencies(
     unit_table: &HashMap<UnitId, Unit>,
 ) -> Result<(), SanityCheckError> {
     let mut root_ids = Vec::new();
     for unit in unit_table.values() {
-        if unit.install.after.len() == 0 {
-            root_ids.push(unit.id);
+        if unit.common.dependencies.after.len() == 0 {
+            root_ids.push(unit.id.clone());
         }
     }
     // check whether there are cycles in the startup sequence
     let mut finished_ids = HashMap::new();
     let mut not_finished_ids: HashMap<_, _> =
-        unit_table.keys().copied().map(|id| (id, ())).collect();
+        unit_table.keys().cloned().map(|id| (id, ())).collect();
     let mut circles = Vec::new();
 
     loop {
@@ -32,7 +34,7 @@ pub fn sanity_check_dependencies(
                 .keys()
                 .filter(|id| {
                     let unit = unit_table.get(id).unwrap();
-                    let in_degree = unit.install.after.iter().fold(0, |acc, id| {
+                    let in_degree = unit.common.dependencies.after.iter().fold(0, |acc, id| {
                         if finished_ids.contains_key(id) {
                             acc
                         } else {
@@ -43,10 +45,10 @@ pub fn sanity_check_dependencies(
                 })
                 .nth(0);
             if let Some(id) = root_id {
-                *id
+                id.clone()
             } else {
                 // make sensible error-message
-                circles.push(not_finished_ids.keys().copied().collect());
+                circles.push(not_finished_ids.keys().cloned().collect());
                 break;
             }
         };
@@ -91,16 +93,16 @@ fn search_backedge(
         }
         let circle_ids = visited_ids[circle_start_idx..].to_vec();
         for circleid in &circle_ids {
-            finished_ids.insert(*circleid, ());
+            finished_ids.insert(circleid.clone(), ());
             not_finished_ids.remove(circleid);
         }
 
         return Err(SanityCheckError::CirclesFound(vec![circle_ids]));
     }
-    visited_ids.push(*id);
+    visited_ids.push(id.clone());
 
     let unit = unit_table.get(id).unwrap();
-    for next_id in &unit.install.before {
+    for next_id in &unit.common.dependencies.before {
         let res = search_backedge(
             next_id,
             unit_table,
@@ -113,7 +115,7 @@ fn search_backedge(
         }
     }
     visited_ids.pop();
-    finished_ids.insert(*id, ());
+    finished_ids.insert(id.clone(), ());
     not_finished_ids.remove(id);
 
     Ok(())

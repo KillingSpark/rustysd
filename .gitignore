@@ -3,3 +3,4 @@
 logs/*
 test_c_service/test_service
 .idea/
+oneshot_output

@@ -108,15 +108,11 @@ fn pid1_specific_setup() {
 #[cfg(not(target_os = "linux"))]
 fn pid1_specific_setup() {}
 
-fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> Arc<units::RuntimeInfo> {
+fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> units::ArcMutRuntimeInfo {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let mut first_id = 0;
-    let unit_table =
-        units::load_all_units(&conf.unit_dirs, &mut first_id, &conf.target_unit).unwrap();
+    let unit_table = units::load_all_units(&conf.unit_dirs, &conf.target_unit).unwrap();
     trace!("Finished loading units");
-    first_id = first_id + 1;
-
     if let Err(e) = units::sanity_check_dependencies(&unit_table) {
         match e {
             units::SanityCheckError::CirclesFound(circles) => {
@@ -143,60 +139,44 @@ fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> Arc<units::Runti
         unrecoverable_error("Started as dry-run".into());
     }
 
-    // wrap units into mutexes
-    let unit_table: std::collections::HashMap<_, _> = unit_table
-        .into_iter()
-        .map(|(id, unit)| (id, Arc::new(Mutex::new(unit))))
-        .collect();
-    let unit_table = Arc::new(RwLock::new(unit_table));
+    let pid_table = Mutex::new(std::collections::HashMap::new());
 
-    // init the status map
-    let mut status_table = std::collections::HashMap::new();
-    for id in unit_table.read().unwrap().keys() {
-        status_table.insert(*id, Arc::new(Mutex::new(units::UnitStatus::NeverStarted)));
-    }
-    let status_table = Arc::new(RwLock::new(status_table));
-
-    let pid_table = Arc::new(Mutex::new(std::collections::HashMap::new()));
-
-    let run_info = Arc::new(units::RuntimeInfo {
-        unit_table: unit_table.clone(),
-        pid_table: pid_table.clone(),
-        fd_store: Arc::new(std::sync::RwLock::new(rustysd::fd_store::FDStore::default())),
-        status_table: status_table.clone(),
-
-        last_id: Arc::new(Mutex::new(first_id)),
+    let run_info = Arc::new(RwLock::new(units::RuntimeInfo {
+        unit_table: unit_table,
+        pid_table: pid_table,
+        fd_store: std::sync::RwLock::new(rustysd::fd_store::FDStore::default()),
         config: conf.clone(),
-    });
+    }));
 
     run_info
 }
 
-fn start_notification_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
+fn start_notification_handler_thread(
+    run_info: units::ArcMutRuntimeInfo,
+    eventfd: platform::EventFd,
+) {
     std::thread::spawn(move || {
-        notification_handler::handle_all_streams(eventfd, run_info.unit_table.clone());
+        notification_handler::handle_all_streams(eventfd, run_info.clone());
     });
 }
-fn start_stdout_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
+fn start_stdout_handler_thread(run_info: units::ArcMutRuntimeInfo, eventfd: platform::EventFd) {
     std::thread::spawn(move || {
         notification_handler::handle_all_std_out(eventfd, run_info.clone());
     });
 }
-fn start_stderr_handler_thread(run_info: units::ArcRuntimeInfo, eventfd: platform::EventFd) {
+fn start_stderr_handler_thread(run_info: units::ArcMutRuntimeInfo, eventfd: platform::EventFd) {
     std::thread::spawn(move || {
         notification_handler::handle_all_std_err(eventfd, run_info.clone());
     });
 }
 fn start_signal_handler_thread(
     signals: Signals,
-    run_info: units::ArcRuntimeInfo,
-    conf: &config::Config,
+    run_info: units::ArcMutRuntimeInfo,
     eventfds: Vec<platform::EventFd>,
 ) -> std::thread::JoinHandle<()> {
-    let note_conf_dir = conf.notification_sockets_dir.clone();
     let handle = std::thread::spawn(move || {
         // listen on signals from the child processes
-        signal_handler::handle_signals(signals, run_info, note_conf_dir, eventfds);
+        signal_handler::handle_signals(signals, run_info, eventfds);
     });
     handle
 }
@@ -306,7 +286,7 @@ fn main() {
         }
     };
     // listen to signals
-    let handle = start_signal_handler_thread(signals, run_info.clone(), &conf, eventfds.clone());
+    let handle = start_signal_handler_thread(signals, run_info.clone(), eventfds.clone());
 
     // listen on user commands like listunits/kill/restart...
     control::open_all_sockets(run_info.clone(), &conf);
@@ -317,17 +297,12 @@ fn main() {
 
     socket_activation::start_socketactivation_thread(
         run_info.clone(),
-        conf.notification_sockets_dir.clone(),
         sock_act_eventfd,
         Arc::new(eventfds.clone()),
     );
 
     // parallel startup of all services
-    units::activate_units(
-        run_info.clone(),
-        conf.notification_sockets_dir.clone(),
-        eventfds.clone(),
-    );
+    units::activate_units(run_info.clone(), eventfds.clone());
 
     handle.join().unwrap();
 }

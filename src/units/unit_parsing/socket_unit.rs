@@ -5,24 +5,21 @@ use std::path::PathBuf;
 pub fn parse_socket(
     parsed_file: ParsedFile,
     path: &PathBuf,
-    chosen_id: UnitId,
-) -> Result<Unit, ParsingErrorReason> {
-    let mut socket_configs = None;
+) -> Result<ParsedSocketConfig, ParsingErrorReason> {
+    let mut socket_config = None;
     let mut install_config = None;
     let mut unit_config = None;
-    let mut exec_config = None;
 
-    for (name, mut section) in parsed_file {
+    for (name, section) in parsed_file {
         match name.as_str() {
             "[Socket]" => {
-                exec_config = Some(super::parse_exec_section(&mut section)?);
-                socket_configs = match parse_socket_section(section) {
+                socket_config = match parse_socket_section(section) {
                     Ok(conf) => Some(conf),
                     Err(e) => return Err(e),
                 };
             }
             "[Unit]" => {
-                unit_config = Some(parse_unit_section(section, path)?);
+                unit_config = Some(parse_unit_section(section)?);
             }
             "[Install]" => {
                 install_config = Some(parse_install_section(section)?);
@@ -32,37 +29,18 @@ pub fn parse_socket(
         }
     }
 
-    let (sock_name, services, sock_configs) = match socket_configs {
-        Some(triple) => triple,
+    let socket_config = match socket_config {
+        Some(conf) => conf,
         None => return Err(ParsingErrorReason::SectionNotFound("Socket".to_owned())),
     };
 
-    let conf = match unit_config {
-        Some(conf) => conf,
-        None => return Err(ParsingErrorReason::SectionNotFound("Unit".to_owned())),
-    };
-
-    let exec_config = exec_config.unwrap();
-
-    Ok(Unit {
-        conf,
-        id: chosen_id,
-        install: Install {
-            install_config: install_config,
-            wants: Vec::new(),
-            wanted_by: Vec::new(),
-            requires: Vec::new(),
-            required_by: Vec::new(),
-            before: Vec::new(),
-            after: Vec::new(),
+    Ok(ParsedSocketConfig {
+        common: ParsedCommonConfig {
+            name: path.file_name().unwrap().to_str().unwrap().to_owned(),
+            unit: unit_config.unwrap_or_else(Default::default),
+            install: install_config.unwrap_or_else(Default::default),
         },
-        specialized: UnitSpecialized::Socket(Socket {
-            activated: false,
-            name: sock_name,
-            sockets: sock_configs,
-            services,
-            exec_config,
-        }),
+        sock: socket_config,
     })
 }
 
@@ -86,13 +64,15 @@ fn parse_unix_addr(addr: &str) -> Result<String, ()> {
 
 fn parse_socket_section(
     mut section: ParsedSection,
-) -> Result<(String, Vec<String>, Vec<SocketConfig>), ParsingErrorReason> {
+) -> Result<ParsedSocketSection, ParsingErrorReason> {
     let fdname = section.remove("FILEDESCRIPTORNAME");
     let services = section.remove("SERVICE");
     let streams = section.remove("LISTENSTREAM");
     let datagrams = section.remove("LISTENDATAGRAM");
     let seqpacks = section.remove("LISTENSEQUENTIALPACKET");
     let fifos = section.remove("LISTENFIFO");
+
+    let exec_config = super::parse_exec_section(&mut section)?;
 
     if !section.is_empty() {
         return Err(ParsingErrorReason::UnusedSetting(
@@ -114,8 +94,6 @@ fn parse_socket_section(
             }
         }
     };
-
-    let fdname = fdname.unwrap_or("unknown".into());
 
     let services = services
         .map(|vec| super::map_tupels_to_second(vec))
@@ -203,8 +181,13 @@ fn parse_socket_section(
             }
         };
 
-        socket_configs.push(SocketConfig { kind, specialized });
+        socket_configs.push(ParsedSingleSocketConfig { kind, specialized });
     }
 
-    Ok((fdname, services, socket_configs))
+    Ok(ParsedSocketSection {
+        filedesc_name: fdname,
+        services,
+        sockets: socket_configs,
+        exec_section: exec_config,
+    })
 }

@@ -1,6 +1,7 @@
 use crate::fd_store::FDStore;
 use crate::platform::setenv;
 use crate::services::Service;
+use crate::units::ServiceConfig;
 use std::os::unix::io::RawFd;
 
 fn close_all_unneeded_fds(_srvc: &mut Service, _fd_store: &FDStore) {
@@ -131,10 +132,10 @@ fn dup_fds(name: &str, sockets: Vec<RawFd>) -> Result<(), String> {
     Ok(())
 }
 
-fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CString>) {
-    let cmd = std::ffi::CString::new(srvc.service_config.exec.cmd.as_str()).unwrap();
+fn prepare_exec_args(conf: &ServiceConfig) -> (std::ffi::CString, Vec<std::ffi::CString>) {
+    let cmd = std::ffi::CString::new(conf.exec.cmd.as_str()).unwrap();
 
-    let exec_name = std::path::PathBuf::from(&srvc.service_config.exec.cmd);
+    let exec_name = std::path::PathBuf::from(&conf.exec.cmd);
     let exec_name = exec_name.file_name().unwrap();
     let exec_name: Vec<u8> = exec_name.to_str().unwrap().bytes().collect();
     let exec_name = std::ffi::CString::new(exec_name).unwrap();
@@ -142,7 +143,7 @@ fn prepare_exec_args(srvc: &Service) -> (std::ffi::CString, Vec<std::ffi::CStrin
     let mut args = Vec::new();
     args.push(exec_name);
 
-    for word in &srvc.service_config.exec.args {
+    for word in &conf.exec.args {
         args.push(std::ffi::CString::new(word.as_str()).unwrap());
     }
 
@@ -156,6 +157,7 @@ fn move_into_new_process_group() {
 
 pub fn after_fork_child(
     srvc: &mut Service,
+    conf: &ServiceConfig,
     name: &str,
     fd_store: &FDStore,
     notify_socket_env_var: &str,
@@ -183,7 +185,7 @@ pub fn after_fork_child(
     let mut fds = Vec::new();
     let mut names = Vec::new();
 
-    for socket in &srvc.socket_names {
+    for socket in &conf.sockets {
         let sock_fds = fd_store
             .get_global(socket)
             .unwrap()
@@ -208,10 +210,14 @@ pub fn after_fork_child(
     }
 
     setup_env_vars(names, notify_socket_env_var);
-    let (cmd, args) = prepare_exec_args(srvc);
+    let (cmd, args) = prepare_exec_args(conf);
 
     if nix::unistd::getuid().is_root() {
-        match crate::platform::drop_privileges(srvc.gid, &srvc.supp_gids, srvc.uid) {
+        match crate::platform::drop_privileges(
+            conf.exec_config.group,
+            &conf.exec_config.supplementary_groups,
+            conf.exec_config.user,
+        ) {
             Ok(()) => { /* Happy */ }
             Err(e) => {
                 eprintln!(

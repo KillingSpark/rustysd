@@ -7,22 +7,6 @@ use std::os::unix::io::RawFd;
 use std::os::unix::net::UnixDatagram;
 use std::process::{Command, Stdio};
 
-#[derive(Debug)]
-pub struct ServiceRuntimeInfo {
-    pub restarted: u64,
-    pub up_since: Option<std::time::Instant>,
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Debug)]
-pub struct PlatformSpecificServiceFields {
-    pub cgroup_path: std::path::PathBuf,
-}
-
-#[cfg(not(target_os = "linux"))]
-#[derive(Debug)]
-pub struct PlatformSpecificServiceFields {}
-
 /// This looks like std::process::Stdio but it can be some more stuff like journal or kmsg so I explicitly
 /// made a new enum here
 #[derive(Debug)]
@@ -54,15 +38,10 @@ impl StdIo {
 #[derive(Debug)]
 pub struct Service {
     pub pid: Option<nix::unistd::Pid>,
-    pub service_config: ServiceConfig,
-
-    pub socket_names: Vec<String>,
-
     pub status_msgs: Vec<String>,
 
     pub process_group: Option<nix::unistd::Pid>,
 
-    pub runtime_info: ServiceRuntimeInfo,
     pub signaled_ready: bool,
 
     pub notifications: Option<UnixDatagram>,
@@ -73,16 +52,10 @@ pub struct Service {
     pub notifications_buffer: String,
     pub stdout_buffer: Vec<u8>,
     pub stderr_buffer: Vec<u8>,
-    pub uid: nix::unistd::Uid,
-    pub gid: nix::unistd::Gid,
-    pub supp_gids: Vec<nix::unistd::Gid>,
-
-    pub platform_specific: PlatformSpecificServiceFields,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum RunCmdError {
-    BadQuoting(String),
     Timeout(String, String),
     SpawnError(String, String),
     WaitError(String, String),
@@ -93,7 +66,6 @@ pub enum RunCmdError {
 impl std::fmt::Display for RunCmdError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
-            RunCmdError::BadQuoting(cmd) => format!("{} does have invalid quotes", cmd),
             RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
             RunCmdError::SpawnError(cmd, err) => format!("{} failed to spawn with: {:?}", cmd, err),
             RunCmdError::WaitError(cmd, err) => {
@@ -111,6 +83,7 @@ pub enum StartResult {
     WaitingForSocket,
 }
 
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ServiceErrorReason {
     PrestartFailed(RunCmdError),
     PoststartFailed(RunCmdError),
@@ -171,12 +144,12 @@ impl std::fmt::Display for ServiceErrorReason {
 impl Service {
     pub fn start(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
-        notification_socket_path: std::path::PathBuf,
+        run_info: &RuntimeInfo,
         eventfds: &[EventFd],
-        allow_ignore: bool,
+        source: ActivationSource,
     ) -> Result<StartResult, ServiceErrorReason> {
         if let Some(pid) = self.pid {
             return Err(ServiceErrorReason::AlreadyHasPID(pid));
@@ -184,60 +157,67 @@ impl Service {
         if let Some(pgid) = self.process_group {
             return Err(ServiceErrorReason::AlreadyHasPID(pgid));
         }
-        if self.service_config.accept {
+        if conf.accept {
             return Err(ServiceErrorReason::Generic(
                 "Inetd style activation is not supported".into(),
             ));
         }
-        if !allow_ignore || self.socket_names.is_empty() {
+        if source.is_socket_activation() || conf.sockets.is_empty() {
             trace!("Start service {}", name);
 
-            super::prepare_service::prepare_service(self, name, &notification_socket_path)
-                .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
-            self.run_prestart(id, name, run_info.clone())
-                .map_err(
-                    |prestart_err| match self.run_poststop(id, name, run_info.clone()) {
+            super::prepare_service::prepare_service(
+                self,
+                conf,
+                name,
+                &run_info.config.notification_sockets_dir,
+            )
+            .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
+            self.run_prestart(conf, id.clone(), name, run_info.clone())
+                .map_err(|prestart_err| {
+                    match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(prestart_err),
                         Err(poststop_err) => ServiceErrorReason::PrestartAndPoststopFailed(
                             prestart_err,
                             poststop_err,
                         ),
-                    },
-                )?;
+                    }
+                })?;
             {
                 let mut pid_table_locked = run_info.pid_table.lock().unwrap();
                 // This mainly just forks the process. The waiting (if necessary) is done below
                 // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
-                start_service(self, name.clone(), &*run_info.fd_store.read().unwrap())
-                    .map_err(|e| ServiceErrorReason::StartFailed(e))?;
+                start_service(
+                    self,
+                    conf,
+                    name.clone(),
+                    &*run_info.fd_store.read().unwrap(),
+                )
+                .map_err(|e| ServiceErrorReason::StartFailed(e))?;
                 if let Some(new_pid) = self.pid {
-                    pid_table_locked.insert(
-                        new_pid,
-                        PidEntry::Service(id, self.service_config.srcv_type),
-                    );
+                    pid_table_locked.insert(new_pid, PidEntry::Service(id.clone(), conf.srcv_type));
                     crate::platform::notify_event_fds(&eventfds);
                 }
             }
 
-            super::fork_parent::wait_for_service(self, name, run_info.pid_table.clone()).map_err(
-                |start_err| match self.run_poststop(id, name, run_info.clone()) {
+            super::fork_parent::wait_for_service(self, conf, name, run_info).map_err(
+                |start_err| match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
                     Ok(_) => ServiceErrorReason::StartFailed(start_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
                     }
                 },
             )?;
-            self.run_poststart(id, name, run_info.clone())
-                .map_err(
-                    |poststart_err| match self.run_poststop(id, name, run_info.clone()) {
+            self.run_poststart(conf, id.clone(), name, run_info.clone())
+                .map_err(|poststart_err| {
+                    match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(poststart_err),
                         Err(poststop_err) => ServiceErrorReason::PoststartAndPoststopFailed(
                             poststart_err,
                             poststop_err,
                         ),
-                    },
-                )?;
+                    }
+                })?;
             Ok(StartResult::Started)
         } else {
             trace!(
@@ -270,36 +250,35 @@ impl Service {
 
     fn stop(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        let stop_res = self.run_stop_cmd(id, name, run_info.clone());
-
-        if self.service_config.srcv_type != ServiceType::OneShot {
+        let stop_res = self.run_stop_cmd(conf, id, name, run_info.clone());
+        if conf.srcv_type != ServiceType::OneShot {
             // already happened when the oneshot process exited in the exit handler
             self.kill_all_remaining_processes(name);
         }
-
         self.pid = None;
         self.process_group = None;
         stop_res
     }
-
     pub fn kill(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), ServiceErrorReason> {
-        self.stop(id, name, run_info.clone())
+        self.stop(conf, id.clone(), name, run_info)
             .map_err(|stop_err| {
                 trace!(
                     "Stop process failed with: {:?} for service: {}. Running poststop commands",
                     stop_err,
                     name
                 );
-                match self.run_poststop(id, name, run_info.clone()) {
+                match self.run_poststop(conf, id.clone(), name, run_info) {
                     Ok(_) => ServiceErrorReason::StopFailed(stop_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StopAndPoststopFailed(stop_err, poststop_err)
@@ -311,45 +290,45 @@ impl Service {
                     "Stop processes for service: {} ran succesfully. Running poststop commands",
                     name
                 );
-                self.run_poststop(id, name, run_info.clone())
+                self.run_poststop(conf, id.clone(), name, run_info)
                     .map_err(|e| ServiceErrorReason::PoststopFailed(e))
             })
     }
 
-    pub fn get_start_timeout(&self) -> Option<std::time::Duration> {
-        if let Some(timeout) = &self.service_config.starttimeout {
+    pub fn get_start_timeout(&self, conf: &ServiceConfig) -> Option<std::time::Duration> {
+        if let Some(timeout) = &conf.starttimeout {
             match timeout {
                 Timeout::Duration(dur) => Some(*dur),
                 Timeout::Infinity => None,
             }
         } else {
-            if let Some(timeout) = &self.service_config.generaltimeout {
+            if let Some(timeout) = &conf.generaltimeout {
                 match timeout {
                     Timeout::Duration(dur) => Some(*dur),
                     Timeout::Infinity => None,
                 }
             } else {
-                // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                None
+                // TODO is 1 sec ok?
+                Some(std::time::Duration::from_millis(1000))
             }
         }
     }
 
-    fn get_stop_timeout(&self) -> Option<std::time::Duration> {
-        if let Some(timeout) = &self.service_config.stoptimeout {
+    fn get_stop_timeout(&self, conf: &ServiceConfig) -> Option<std::time::Duration> {
+        if let Some(timeout) = &conf.stoptimeout {
             match timeout {
                 Timeout::Duration(dur) => Some(*dur),
                 Timeout::Infinity => None,
             }
         } else {
-            if let Some(timeout) = &self.service_config.generaltimeout {
+            if let Some(timeout) = &conf.generaltimeout {
                 match timeout {
                     Timeout::Duration(dur) => Some(*dur),
                     Timeout::Infinity => None,
                 }
             } else {
-                // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                None
+                // TODO is 1 sec ok?
+                Some(std::time::Duration::from_millis(1000))
             }
         }
     }
@@ -360,7 +339,7 @@ impl Service {
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         let mut cmd = Command::new(&cmdline.cmd);
         for part in &cmdline.args {
@@ -394,7 +373,7 @@ impl Service {
             if let Ok(child) = &res {
                 pid_table_locked.insert(
                     nix::unistd::Pid::from_raw(child.id() as i32),
-                    PidEntry::Helper(id, name.to_string()),
+                    PidEntry::Helper(id.clone(), name.to_string()),
                 );
             }
             res
@@ -403,9 +382,7 @@ impl Service {
             Ok(mut child) => {
                 trace!("Wait for {:?} for service: {}", cmdline, name);
                 let wait_result: Result<(), RunCmdError> = match wait_for_helper_child(
-                    &mut child,
-                    run_info.pid_table.clone(),
-                    timeout,
+                    &mut child, run_info, timeout,
                 ) {
                     WaitResult::InTime(Err(e)) => {
                         return Err(RunCmdError::WaitError(
@@ -447,20 +424,20 @@ impl Service {
                     }
                 };
                 {
-                    let status_table_locked = run_info.status_table.read().unwrap();
-                    let status = status_table_locked.get(&id).unwrap().lock().unwrap();
+                    let unit = run_info.unit_table.get(&id).unwrap();
+                    let status = &*unit.common.status.read().unwrap();
                     use std::io::Read;
                     if let Some(stream) = &mut child.stderr {
                         let mut buf = Vec::new();
                         let _bytes = stream.read_to_end(&mut buf).unwrap();
                         self.stderr_buffer.extend(buf);
-                        self.log_stderr_lines(name, &status).unwrap();
+                        self.log_stderr_lines(name, status).unwrap();
                     }
                     if let Some(stream) = &mut child.stdout {
                         let mut buf = Vec::new();
                         let _bytes = stream.read_to_end(&mut buf).unwrap();
                         self.stdout_buffer.extend(buf);
-                        self.log_stdout_lines(name, &status).unwrap();
+                        self.log_stdout_lines(name, status).unwrap();
                     }
                 }
 
@@ -484,65 +461,68 @@ impl Service {
         id: UnitId,
         name: &str,
         timeout: Option<std::time::Duration>,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         for cmd in cmds {
-            self.run_cmd(cmd, id, name, timeout, run_info.clone())?;
+            self.run_cmd(cmd, id.clone(), name, timeout, run_info.clone())?;
         }
         Ok(())
     }
 
     fn run_stop_cmd(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.stop.is_empty() {
+        if conf.stop.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_stop_timeout();
-        let cmds = self.service_config.stop.clone();
+        let timeout = self.get_stop_timeout(conf);
+        let cmds = conf.stop.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
     fn run_prestart(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.startpre.is_empty() {
+        if conf.startpre.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_start_timeout();
-        let cmds = self.service_config.startpre.clone();
+        let timeout = self.get_start_timeout(conf);
+        let cmds = conf.startpre.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
     fn run_poststart(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.startpost.is_empty() {
+        if conf.startpost.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_start_timeout();
-        let cmds = self.service_config.startpost.clone();
+        let timeout = self.get_start_timeout(conf);
+        let cmds = conf.startpost.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
-
     fn run_poststop(
         &mut self,
+        conf: &ServiceConfig,
         id: UnitId,
         name: &str,
-        run_info: ArcRuntimeInfo,
+        run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if self.service_config.startpost.is_empty() {
+        if conf.startpost.is_empty() {
             return Ok(());
         }
-        let timeout = self.get_start_timeout();
-        let cmds = self.service_config.stoppost.clone();
+        let timeout = self.get_start_timeout(conf);
+        let cmds = conf.stoppost.clone();
         self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
     }
 
@@ -614,7 +594,7 @@ enum WaitResult {
 /// that has not been ported to rust
 fn wait_for_helper_child(
     child: &mut std::process::Child,
-    pid_table: ArcMutPidTable,
+    run_info: &RuntimeInfo,
     time_out: Option<std::time::Duration>,
 ) -> WaitResult {
     let pid = nix::unistd::Pid::from_raw(child.id() as i32);
@@ -627,7 +607,7 @@ fn wait_for_helper_child(
             }
         }
         {
-            let mut pid_table_locked = pid_table.lock().unwrap();
+            let mut pid_table_locked = run_info.pid_table.lock().unwrap();
             match pid_table_locked.get(&pid) {
                 Some(entry) => {
                     match entry {

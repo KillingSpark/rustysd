@@ -9,27 +9,27 @@ use crate::services::StdIo;
 use crate::units::*;
 use std::{collections::HashMap, os::unix::io::AsRawFd};
 
-fn collect_from_srvc<F>(unit_table: ArcMutUnitTable, f: F) -> HashMap<i32, UnitId>
+fn collect_from_srvc<F>(run_info: ArcMutRuntimeInfo, f: F) -> HashMap<i32, UnitId>
 where
     F: Fn(&mut HashMap<i32, UnitId>, &Service, UnitId),
 {
+    let run_info_locked = run_info.read().unwrap();
+    let unit_table = &run_info_locked.unit_table;
     unit_table
-        .read()
-        .unwrap()
         .iter()
         .fold(HashMap::new(), |mut map, (id, srvc_unit)| {
-            let srvc_unit_locked = srvc_unit.lock().unwrap();
-            if let UnitSpecialized::Service(srvc) = &srvc_unit_locked.specialized {
-                f(&mut map, &srvc, id.clone());
+            if let Specific::Service(srvc) = &srvc_unit.specific {
+                let state = &*srvc.state.read().unwrap();
+                f(&mut map, &state.srvc, id.clone());
             }
             map
         })
 }
 
-pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
+pub fn handle_all_streams(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id = collect_from_srvc(unit_table.clone(), |map, srvc, id| {
+        let fd_to_srvc_id = collect_from_srvc(run_info.clone(), |map, srvc, id| {
             if let Some(socket) = &srvc.notifications {
                 map.insert(socket.as_raw_fd(), id);
             }
@@ -42,6 +42,9 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
         fdset.insert(eventfd.read_end());
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
+
+        let run_info_locked = run_info.read().unwrap();
+        let unit_table = &run_info_locked.unit_table;
         match result {
             Ok(_) => {
                 if fdset.contains(eventfd.read_end()) {
@@ -50,15 +53,12 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
-                let unit_table_locked = &*unit_table.read().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
-                        if let Some(srvc_unit) = unit_table_locked.get(id) {
-                            let srvc_unit_locked = &mut *srvc_unit.lock().unwrap();
-                            if let UnitSpecialized::Service(srvc) =
-                                &mut srvc_unit_locked.specialized
-                            {
-                                if let Some(socket) = &srvc.notifications {
+                        if let Some(srvc_unit) = unit_table.get(id) {
+                            if let Specific::Service(srvc) = &srvc_unit.specific {
+                                let mut_state = &mut *srvc.state.write().unwrap();
+                                if let Some(socket) = &mut_state.srvc.notifications {
                                     let old_flags =
                                         nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL)
                                             .unwrap();
@@ -88,10 +88,10 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
                                     .unwrap();
                                     let note_str =
                                         String::from_utf8(buf[..bytes].to_vec()).unwrap();
-                                    srvc.notifications_buffer.push_str(&note_str);
+                                    mut_state.srvc.notifications_buffer.push_str(&note_str);
                                     crate::notification_handler::handle_notifications_from_buffer(
-                                        srvc,
-                                        &srvc_unit_locked.conf.name(),
+                                        &mut mut_state.srvc,
+                                        &srvc_unit.id.name,
                                     );
                                 }
                             }
@@ -106,10 +106,10 @@ pub fn handle_all_streams(eventfd: EventFd, unit_table: ArcMutUnitTable) {
     }
 }
 
-pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
+pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
+        let fd_to_srvc_id = collect_from_srvc(run_info.clone(), |map, srvc, id| {
             if let Some(StdIo::Piped(r, _w)) = &srvc.stdout {
                 map.insert(*r, id);
             }
@@ -122,6 +122,9 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
         fdset.insert(eventfd.read_end());
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
+
+        let run_info_locked = run_info.read().unwrap();
+        let unit_table = &run_info_locked.unit_table;
         match result {
             Ok(_) => {
                 if fdset.contains(eventfd.read_end()) {
@@ -130,43 +133,35 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
-                let unit_table_locked = &*run_info.unit_table.read().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
-                        if let Some(srvc_unit) = unit_table_locked.get(id) {
-                            let mut srvc_unit_locked = srvc_unit.lock().unwrap();
-                            let name = srvc_unit_locked.conf.name();
-                            let status_table_locked = run_info.status_table.read().unwrap();
-                            let status = status_table_locked
-                                .get(&srvc_unit_locked.id)
-                                .unwrap()
-                                .lock()
-                                .unwrap();
+                        if let Some(srvc_unit) = unit_table.get(id) {
+                            let name = srvc_unit.id.name.clone();
+                            if let Specific::Service(srvc) = &srvc_unit.specific {
+                                let mut_state = &mut *srvc.state.write().unwrap();
+                                let status = srvc_unit.common.status.read().unwrap();
 
-                            let old_flags =
-                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
-                            let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
-                            let mut new_flags = old_flags.clone();
-                            new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
-                                .unwrap();
+                                let old_flags =
+                                    nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
+                                let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
+                                let mut new_flags = old_flags.clone();
+                                new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
+                                    .unwrap();
 
-                            ////
-                            let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
-                                Ok(b) => b,
-                                Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
-                                Err(e) => panic!("{}", e),
-                            };
-                            ////
+                                ////
+                                let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
+                                    Ok(b) => b,
+                                    Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                    Err(e) => panic!("{}", e),
+                                };
+                                ////
 
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
-                                .unwrap();
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
+                                    .unwrap();
 
-                            if let UnitSpecialized::Service(srvc) =
-                                &mut srvc_unit_locked.specialized
-                            {
-                                srvc.stdout_buffer.extend(&buf[..bytes]);
-                                srvc.log_stdout_lines(&name, &status).unwrap();
+                                mut_state.srvc.stdout_buffer.extend(&buf[..bytes]);
+                                mut_state.srvc.log_stdout_lines(&name, &status).unwrap();
                             }
                         }
                     }
@@ -179,10 +174,10 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcRuntimeInfo) {
     }
 }
 
-pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
+pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
     loop {
         // need to collect all again. There might be a newly started service
-        let fd_to_srvc_id = collect_from_srvc(run_info.unit_table.clone(), |map, srvc, id| {
+        let fd_to_srvc_id = collect_from_srvc(run_info.clone(), |map, srvc, id| {
             if let Some(StdIo::Piped(r, _w)) = &srvc.stderr {
                 map.insert(*r, id);
             }
@@ -195,6 +190,9 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
         fdset.insert(eventfd.read_end());
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
+        let run_info_locked = run_info.read().unwrap();
+        let unit_table = &run_info_locked.unit_table;
+
         match result {
             Ok(_) => {
                 if fdset.contains(eventfd.read_end()) {
@@ -203,42 +201,34 @@ pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcRuntimeInfo) {
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
-                let unit_table_locked = &*run_info.unit_table.read().unwrap();
                 for (fd, id) in &fd_to_srvc_id {
                     if fdset.contains(*fd) {
-                        if let Some(srvc_unit) = unit_table_locked.get(id) {
-                            let mut srvc_unit_locked = srvc_unit.lock().unwrap();
-                            let name = srvc_unit_locked.conf.name();
-                            let status_table_locked = run_info.status_table.read().unwrap();
-                            let status = status_table_locked
-                                .get(&srvc_unit_locked.id)
-                                .unwrap()
-                                .lock()
-                                .unwrap();
+                        if let Some(srvc_unit) = unit_table.get(id) {
+                            let name = srvc_unit.id.name.clone();
+                            if let Specific::Service(srvc) = &srvc_unit.specific {
+                                let mut_state = &mut *srvc.state.write().unwrap();
+                                let status = srvc_unit.common.status.read().unwrap();
 
-                            let old_flags =
-                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
-                            let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
-                            let mut new_flags = old_flags.clone();
-                            new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
-                                .unwrap();
+                                let old_flags =
+                                    nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_GETFL).unwrap();
+                                let old_flags = nix::fcntl::OFlag::from_bits(old_flags).unwrap();
+                                let mut new_flags = old_flags.clone();
+                                new_flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(new_flags))
+                                    .unwrap();
 
-                            ////
-                            let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
-                                Ok(b) => b,
-                                Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
-                                Err(e) => panic!("{}", e),
-                            };
-                            ////
-                            nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
-                                .unwrap();
+                                ////
+                                let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
+                                    Ok(b) => b,
+                                    Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                    Err(e) => panic!("{}", e),
+                                };
+                                ////
+                                nix::fcntl::fcntl(*fd, nix::fcntl::FcntlArg::F_SETFL(old_flags))
+                                    .unwrap();
 
-                            if let UnitSpecialized::Service(srvc) =
-                                &mut srvc_unit_locked.specialized
-                            {
-                                srvc.stderr_buffer.extend(&buf[..bytes]);
-                                srvc.log_stderr_lines(&name, &status).unwrap();
+                                mut_state.srvc.stderr_buffer.extend(&buf[..bytes]);
+                                mut_state.srvc.log_stderr_lines(&name, &status).unwrap();
                             }
                         }
                     }

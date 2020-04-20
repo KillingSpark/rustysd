@@ -23,7 +23,7 @@ impl FDStore {
             .values()
             .fold(Vec::new(), |mut acc, fds| {
                 for (id, _, fd) in fds {
-                    acc.push((fd.as_raw_fd(), *id));
+                    acc.push((fd.as_raw_fd(), id.clone()));
                 }
                 acc
             })
