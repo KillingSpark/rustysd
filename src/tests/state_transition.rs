@@ -70,8 +70,12 @@ fn successful(run_info: crate::units::ArcMutRuntimeInfo) {
     let run_info_locked = run_info.read().unwrap();
     let unit = run_info_locked.unit_table.get(&unit_id).unwrap();
 
-    unit.activate(&*run_info.read().unwrap(), &[], false)
-        .unwrap();
+    unit.activate(
+        &*run_info.read().unwrap(),
+        &[],
+        crate::units::ActivationSource::Regular,
+    )
+    .unwrap();
     let status = unit.common.status.read().unwrap();
 
     assert_eq!(
@@ -131,7 +135,11 @@ fn failing_startexec(run_info: crate::units::ArcMutRuntimeInfo) {
     let unit = run_info_locked.unit_table.get(&unit_id).unwrap();
 
     assert!(unit
-        .activate(&*run_info.read().unwrap(), &[], false)
+        .activate(
+            &*run_info.read().unwrap(),
+            &[],
+            crate::units::ActivationSource::Regular
+        )
         .is_err());
     let status = unit.common.status.read().unwrap();
 

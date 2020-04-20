@@ -149,7 +149,7 @@ impl Service {
         name: &str,
         run_info: &RuntimeInfo,
         eventfds: &[EventFd],
-        allow_ignore: bool,
+        source: ActivationSource,
     ) -> Result<StartResult, ServiceErrorReason> {
         if let Some(pid) = self.pid {
             return Err(ServiceErrorReason::AlreadyHasPID(pid));
@@ -162,7 +162,7 @@ impl Service {
                 "Inetd style activation is not supported".into(),
             ));
         }
-        if !allow_ignore || conf.sockets.is_empty() {
+        if source.is_socket_activation() || conf.sockets.is_empty() {
             trace!("Start service {}", name);
 
             super::prepare_service::prepare_service(

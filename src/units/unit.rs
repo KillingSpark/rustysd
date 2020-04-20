@@ -115,7 +115,7 @@ impl Unit {
         &self,
         run_info: &RuntimeInfo,
         eventfds: &[EventFd],
-        allow_ignore: bool,
+        source: ActivationSource,
     ) -> Result<UnitStatus, UnitOperationError> {
         match &self.specific {
             Specific::Target(_) => {
@@ -172,8 +172,18 @@ impl Unit {
                 let state = &mut *specific.state.write().unwrap();
                 {
                     let mut status = self.common.status.write().unwrap();
-                    if status.is_started() && allow_ignore {
-                        return Ok(status.clone());
+                    match *status {
+                        UnitStatus::Started(StatusStarted::WaitingForSocket) => {
+                            if source.is_socket_activation() {
+                                /* need activation */
+                            } else {
+                                return Ok(status.clone());
+                            }
+                        }
+                        UnitStatus::Started(StatusStarted::Running) => {
+                            return Ok(status.clone());
+                        }
+                        _ => { /* need activation */ }
                     }
                     *status = UnitStatus::Starting;
                 }
@@ -185,7 +195,7 @@ impl Unit {
                         &self.id.name,
                         run_info,
                         eventfds,
-                        allow_ignore,
+                        source,
                     )
                     .map_err(|e| UnitOperationError {
                         unit_name: self.id.name.clone(),

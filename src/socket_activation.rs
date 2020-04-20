@@ -16,72 +16,70 @@ pub fn start_socketactivation_thread(
                 let unit_table = &run_info.unit_table;
                 for socket_id in ids {
                     {
-                        let mut srvc_unit_id = None;
+                        // search the service this socket belongs to.
+                        // Note that this differs from systemd behaviour where one socket may belong to multiple services
+                        let mut srvc_unit = None;
                         for unit in unit_table.values() {
                             if let crate::units::Specific::Service(specific) = &unit.specific {
                                 if specific.has_socket(&socket_id.name) {
-                                    srvc_unit_id = Some(unit.id.clone());
+                                    srvc_unit = Some(unit);
                                     trace!("Start service {} by socket activation", unit.id.name);
+                                    break;
                                 }
                             }
                         }
 
-                        if let Some(srvc_unit_id) = srvc_unit_id {
-                            let srvc_unit = unit_table.get(&srvc_unit_id).unwrap();
+                        // mark socket as activated, removing it from the set of
+                        // fds rustysd is actively listening on
+                        let sock_unit = unit_table.get(&socket_id).unwrap();
+                        if let Specific::Socket(specific) = &sock_unit.specific {
+                            let mut_state = &mut *specific.state.write().unwrap();
+                            mut_state.sock.activated = true;
+                        }
+                        if srvc_unit.is_none() {
+                            error!(
+                                "Socket unit {:?} activated, but the service could not be found",
+                                socket_id
+                            );
+                        }
+                        if let Some(srvc_unit) = srvc_unit {
                             let srvc_status = {
                                 let status_locked = &*srvc_unit.common.status.read().unwrap();
                                 status_locked.clone()
                             };
 
-                            if srvc_status
-                                != crate::units::UnitStatus::Started(
-                                    StatusStarted::WaitingForSocket,
-                                )
-                            {
+                            if srvc_status != UnitStatus::Started(StatusStarted::WaitingForSocket) {
+                                // This should not happen too often because the sockets of a service
+                                // should only be listened on if the service is currently waiting on socket activation
                                 trace!(
                                     "Ignore socket activation. Service has status: {:?}",
                                     srvc_status
                                 );
-                                let sock_unit = unit_table.get(&socket_id).unwrap();
-                                if let crate::units::Specific::Socket(specific) =
-                                    &sock_unit.specific
-                                {
-                                    let mut_state = &mut *specific.state.write().unwrap();
-                                    mut_state.sock.activated = true;
-                                }
                             } else {
+                                // the service unit gets activated
                                 match crate::units::activate_unit(
-                                    srvc_unit_id.clone(),
+                                    srvc_unit.id.clone(),
                                     &*run_info,
                                     eventfds.clone(),
-                                    false,
+                                    ActivationSource::SocketActivation,
                                 ) {
-                                    Ok(result) => {
+                                    Ok(_) => {
                                         trace!(
-                                            "New status after socket activation ({:?}): {:?}",
-                                            result,
+                                            "New status after socket activation: {:?}",
                                             *unit_table
-                                                .get(&srvc_unit_id)
+                                                .get(&srvc_unit.id)
                                                 .unwrap()
                                                 .common
                                                 .status
                                                 .read()
                                                 .unwrap()
                                         );
-                                        let sock_unit = unit_table.get(&socket_id).unwrap();
-                                        if let crate::units::Specific::Socket(specific) =
-                                            &sock_unit.specific
-                                        {
-                                            let mut_state = &mut *specific.state.write().unwrap();
-                                            mut_state.sock.activated = true;
-                                        }
                                     }
                                     Err(e) => {
                                         format!(
                                                 "Error while starting service from socket activation: {}",
                                                 e
                                             );
-                                        break;
                                     }
                                 }
                             }

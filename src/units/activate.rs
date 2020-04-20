@@ -91,7 +91,12 @@ fn activate_units_recursive(
             let eventfds_copy2 = eventfds_copy.clone();
             let errors_copy2 = errors_copy.clone();
 
-            match activate_unit(id, &*run_info_copy.read().unwrap(), eventfds_copy, true) {
+            match activate_unit(
+                id,
+                &*run_info_copy.read().unwrap(),
+                eventfds_copy,
+                ActivationSource::Regular,
+            ) {
                 Ok(StartResult::Started(next_services_ids)) => {
                     let next_services_job = move || {
                         activate_units_recursive(
@@ -123,11 +128,26 @@ pub enum StartResult {
     WaitForDependencies,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ActivationSource {
+    Regular,
+    SocketActivation,
+}
+
+impl ActivationSource {
+    pub fn is_socket_activation(&self) -> bool {
+        match self {
+            ActivationSource::SocketActivation => true,
+            _ => false,
+        }
+    }
+}
+
 pub fn activate_unit(
     id_to_start: UnitId,
     run_info: &RuntimeInfo,
     eventfds: Arc<Vec<EventFd>>,
-    allow_ignore: bool,
+    source: ActivationSource,
 ) -> std::result::Result<StartResult, UnitOperationError> {
     trace!("Activate id: {:?}", id_to_start);
 
@@ -182,8 +202,9 @@ pub fn activate_unit(
         // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
         // TODO make this relation less weird. Maybe add a separate code path for socket activation
         let status_locked = unit.common.status.read().unwrap();
-        let wait_for_socket_act =
-            *status_locked == UnitStatus::Started(StatusStarted::WaitingForSocket) && allow_ignore;
+        let wait_for_socket_act = *status_locked
+            == UnitStatus::Started(StatusStarted::WaitingForSocket)
+            && !source.is_socket_activation();
         let needs_intial_run =
             *status_locked == UnitStatus::NeverStarted || status_locked.is_stopped();
         if wait_for_socket_act && !needs_intial_run {
@@ -197,7 +218,7 @@ pub fn activate_unit(
     }
     let next_services_ids = unit.common.dependencies.before.clone();
 
-    unit.activate(run_info.clone(), &eventfds, allow_ignore)
+    unit.activate(run_info.clone(), &eventfds, source)
         .map(|_| StartResult::Started(next_services_ids))
 }
 
