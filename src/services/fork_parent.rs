@@ -55,6 +55,7 @@ pub fn wait_for_service(
                     Ok(bytes) => bytes,
                     Err(e) => match e.kind() {
                         std::io::ErrorKind::WouldBlock => 0,
+                        std::io::ErrorKind::Interrupted => 0,
                         _ => panic!("{}", e),
                     },
                 };

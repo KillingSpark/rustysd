@@ -3,18 +3,21 @@ use serde_json::Value;
 
 pub fn open_all_sockets(run_info: ArcMutRuntimeInfo, conf: &crate::config::Config) {
     // TODO make configurable
-    let control_sock_path = conf.notification_sockets_dir.join("control.socket");
+    let control_sock_path = {
+        run_info
+            .read()
+            .unwrap()
+            .config
+            .notification_sockets_dir
+            .join("control.socket")
+    };
     if control_sock_path.exists() {
         std::fs::remove_file(&control_sock_path).unwrap();
     }
     use std::os::unix::net::UnixListener;
     std::fs::create_dir_all(&conf.notification_sockets_dir).unwrap();
     let unixsock = UnixListener::bind(&control_sock_path).unwrap();
-    accept_control_connections_unix_socket(
-        run_info.clone(),
-        conf.notification_sockets_dir.clone(),
-        unixsock,
-    );
+    accept_control_connections_unix_socket(run_info.clone(), unixsock);
     //let tcpsock = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
     //accept_control_connections_tcp(
     //    run_info.clone(),
@@ -276,7 +279,6 @@ fn find_units_with_pattern<'a>(
 pub fn execute_command(
     cmd: Command,
     run_info: ArcMutRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
 ) -> Result<serde_json::Value, String> {
     let mut result_vec = Value::Array(Vec::new());
     match cmd {
@@ -302,13 +304,8 @@ pub fn execute_command(
                 x
             };
 
-            crate::units::reactivate_unit(
-                id,
-                run_info,
-                notification_socket_path,
-                std::sync::Arc::new(Vec::new()),
-            )
-            .map_err(|e| format!("{}", e))?;
+            crate::units::reactivate_unit(id, run_info, std::sync::Arc::new(Vec::new()))
+                .map_err(|e| format!("{}", e))?;
         }
         Command::Remove(unit_name) => {
             let run_info = &mut *run_info.write().unwrap();
@@ -473,7 +470,6 @@ use std::io::Write;
 pub fn listen_on_commands<T: 'static + Read + Write + Send>(
     mut source: Box<T>,
     run_info: ArcMutRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
 ) {
     std::thread::spawn(move || loop {
         match super::jsonrpc2::get_next_call(source.as_mut()) {
@@ -523,11 +519,7 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
                             }
                             Ok(cmd) => {
                                 trace!("Execute command: {:?}", cmd);
-                                let msg = match execute_command(
-                                    cmd,
-                                    run_info.clone(),
-                                    notification_socket_path.clone(),
-                                ) {
+                                let msg = match execute_command(cmd, run_info.clone()) {
                                     Err(e) => {
                                         let err = super::jsonrpc2::make_error(
                                             super::jsonrpc2::SERVER_ERROR,
@@ -553,22 +545,17 @@ pub fn listen_on_commands<T: 'static + Read + Write + Send>(
 
 pub fn accept_control_connections_unix_socket(
     run_info: ArcMutRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
     source: std::os::unix::net::UnixListener,
 ) {
     std::thread::spawn(move || loop {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(stream, run_info.clone(), notification_socket_path.clone())
+        listen_on_commands(stream, run_info.clone())
     });
 }
 
-pub fn accept_control_connections_tcp(
-    run_info: ArcMutRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
-    source: std::net::TcpListener,
-) {
+pub fn accept_control_connections_tcp(run_info: ArcMutRuntimeInfo, source: std::net::TcpListener) {
     std::thread::spawn(move || loop {
         let stream = Box::new(source.accept().unwrap().0);
-        listen_on_commands(stream, run_info.clone(), notification_socket_path.clone())
+        listen_on_commands(stream, run_info.clone())
     });
 }

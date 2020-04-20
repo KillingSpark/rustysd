@@ -148,7 +148,6 @@ impl Service {
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
-        notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<StartResult, ServiceErrorReason> {
@@ -166,8 +165,13 @@ impl Service {
         if !allow_ignore || conf.sockets.is_empty() {
             trace!("Start service {}", name);
 
-            super::prepare_service::prepare_service(self, conf, name, &notification_socket_path)
-                .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
+            super::prepare_service::prepare_service(
+                self,
+                conf,
+                name,
+                &run_info.config.notification_sockets_dir,
+            )
+            .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
             self.run_prestart(conf, id.clone(), name, run_info.clone())
                 .map_err(|prestart_err| {
                     match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
@@ -304,8 +308,8 @@ impl Service {
                     Timeout::Infinity => None,
                 }
             } else {
-                // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                None
+                // TODO is 1 sec ok?
+                Some(std::time::Duration::from_millis(1000))
             }
         }
     }
@@ -323,8 +327,8 @@ impl Service {
                     Timeout::Infinity => None,
                 }
             } else {
-                // TODO add default timeout if neither starttimeout nor generaltimeout was set
-                None
+                // TODO is 1 sec ok?
+                Some(std::time::Duration::from_millis(1000))
             }
         }
     }

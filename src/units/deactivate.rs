@@ -47,7 +47,6 @@ pub fn deactivate_units(
 pub fn reactivate_unit(
     id_to_restart: UnitId,
     run_info: &RuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
 ) -> std::result::Result<(), UnitOperationError> {
     trace!("Reactivation of unit: {:?}. Deactivate", id_to_restart);
@@ -59,7 +58,6 @@ pub fn reactivate_unit(
     crate::units::activate_unit(
         id_to_restart.clone(),
         run_info,
-        notification_socket_path,
         eventfds,
         true,
     )

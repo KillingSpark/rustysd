@@ -6,6 +6,7 @@ use crate::services::ServiceErrorReason;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct UnitOperationError {
     pub reason: UnitOperationErrorReason,
     pub unit_name: String,
@@ -76,37 +77,27 @@ fn activate_units_recursive(
     ids_to_start: Vec<UnitId>,
     run_info: ArcMutRuntimeInfo,
     tpool: ThreadPool,
-    notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
     errors: Arc<Mutex<Vec<UnitOperationError>>>,
 ) {
     for id in ids_to_start {
         let run_info_copy = run_info.clone();
         let tpool_copy = tpool.clone();
-        let note_sock_copy = notification_socket_path.clone();
         let eventfds_copy = eventfds.clone();
         let errors_copy = errors.clone();
         tpool.execute(move || {
             let run_info_copy2 = run_info_copy.clone();
             let tpool_copy2 = tpool_copy.clone();
-            let note_sock_copy2 = note_sock_copy.clone();
             let eventfds_copy2 = eventfds_copy.clone();
             let errors_copy2 = errors_copy.clone();
 
-            match activate_unit(
-                id,
-                &*run_info_copy.read().unwrap(),
-                note_sock_copy,
-                eventfds_copy,
-                true,
-            ) {
+            match activate_unit(id, &*run_info_copy.read().unwrap(), eventfds_copy, true) {
                 Ok(StartResult::Started(next_services_ids)) => {
                     let next_services_job = move || {
                         activate_units_recursive(
                             next_services_ids,
                             run_info_copy2,
                             tpool_copy2,
-                            note_sock_copy2,
                             eventfds_copy2,
                             errors_copy2,
                         );
@@ -135,7 +126,6 @@ pub enum StartResult {
 pub fn activate_unit(
     id_to_start: UnitId,
     run_info: &RuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
     eventfds: Arc<Vec<EventFd>>,
     allow_ignore: bool,
 ) -> std::result::Result<StartResult, UnitOperationError> {
@@ -207,20 +197,11 @@ pub fn activate_unit(
     }
     let next_services_ids = unit.common.dependencies.before.clone();
 
-    unit.activate(
-        run_info.clone(),
-        notification_socket_path.clone(),
-        &eventfds,
-        allow_ignore,
-    )
-    .map(|_| StartResult::Started(next_services_ids))
+    unit.activate(run_info.clone(), &eventfds, allow_ignore)
+        .map(|_| StartResult::Started(next_services_ids))
 }
 
-pub fn activate_units(
-    run_info: ArcMutRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
-    eventfds: Vec<EventFd>,
-) {
+pub fn activate_units(run_info: ArcMutRuntimeInfo, eventfds: Vec<EventFd>) {
     // collect all 'root' units. These are units that do not have any 'after' relations to other units.
     // These can be started and the the tree can be traversed and other units can be started as soon as
     // all other units they depend on are started. This works because the units form an DAG if one only
@@ -242,7 +223,6 @@ pub fn activate_units(
         root_units,
         run_info,
         tpool.clone(),
-        notification_socket_path,
         eventfds_arc,
         errors.clone(),
     );

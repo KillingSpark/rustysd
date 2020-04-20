@@ -7,17 +7,10 @@ pub fn service_exit_handler_new_thread(
     pid: nix::unistd::Pid,
     code: ChildTermination,
     run_info: ArcMutRuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
     eventfds: Vec<EventFd>,
 ) {
     std::thread::spawn(move || {
-        if let Err(e) = service_exit_handler(
-            pid,
-            code,
-            &*run_info.read().unwrap(),
-            notification_socket_path,
-            &eventfds,
-        ) {
+        if let Err(e) = service_exit_handler(pid, code, &*run_info.read().unwrap(), &eventfds) {
             error!("{}", e);
         }
     });
@@ -27,7 +20,6 @@ pub fn service_exit_handler(
     pid: nix::unistd::Pid,
     code: ChildTermination,
     run_info: &RuntimeInfo,
-    notification_socket_path: std::path::PathBuf,
     eventfds: &[EventFd],
 ) -> Result<(), String> {
     trace!("Exit handler with pid: {}", pid);
@@ -164,13 +156,8 @@ pub fn service_exit_handler(
             }
         }
         trace!("Restart service {} after it died", name);
-        crate::units::reactivate_unit(
-            srvc_id,
-            run_info,
-            notification_socket_path,
-            Arc::new(eventfds.to_vec()),
-        )
-        .map_err(|e| format!("{}", e))?;
+        crate::units::reactivate_unit(srvc_id, run_info, Arc::new(eventfds.to_vec()))
+            .map_err(|e| format!("{}", e))?;
     } else {
         trace!(
             "Recursively killing all services requiring service {}",

@@ -172,13 +172,11 @@ fn start_stderr_handler_thread(run_info: units::ArcMutRuntimeInfo, eventfd: plat
 fn start_signal_handler_thread(
     signals: Signals,
     run_info: units::ArcMutRuntimeInfo,
-    conf: &config::Config,
     eventfds: Vec<platform::EventFd>,
 ) -> std::thread::JoinHandle<()> {
-    let note_conf_dir = conf.notification_sockets_dir.clone();
     let handle = std::thread::spawn(move || {
         // listen on signals from the child processes
-        signal_handler::handle_signals(signals, run_info, note_conf_dir, eventfds);
+        signal_handler::handle_signals(signals, run_info, eventfds);
     });
     handle
 }
@@ -288,7 +286,7 @@ fn main() {
         }
     };
     // listen to signals
-    let handle = start_signal_handler_thread(signals, run_info.clone(), &conf, eventfds.clone());
+    let handle = start_signal_handler_thread(signals, run_info.clone(), eventfds.clone());
 
     // listen on user commands like listunits/kill/restart...
     control::open_all_sockets(run_info.clone(), &conf);
@@ -299,17 +297,12 @@ fn main() {
 
     socket_activation::start_socketactivation_thread(
         run_info.clone(),
-        conf.notification_sockets_dir.clone(),
         sock_act_eventfd,
         Arc::new(eventfds.clone()),
     );
 
     // parallel startup of all services
-    units::activate_units(
-        run_info.clone(),
-        conf.notification_sockets_dir.clone(),
-        eventfds.clone(),
-    );
+    units::activate_units(run_info.clone(), eventfds.clone());
 
     handle.join().unwrap();
 }

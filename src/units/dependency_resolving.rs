@@ -233,7 +233,7 @@ fn add_sock_srvc_relations(
     sock_install.before.push(srvc_id.clone());
     sock_install.required_by.push(srvc_id.clone());
 
-    srvc_conf.sockets.push(sock_id.name.clone());
+    srvc_conf.sockets.push(srvc_id.name.clone());
     sock_conf.services.push(sock_id.name.clone());
 }
 
@@ -256,7 +256,7 @@ pub fn apply_sockets_to_services(
                         && !srvc.has_socket(&sock_unit.id.name)
                     {
                         trace!(
-                            "add socket: {} to service: {}",
+                            "add socket: {} to service: {} because their names match",
                             sock_unit.id.name,
                             srvc_unit.id.name
                         );
@@ -280,7 +280,7 @@ pub fn apply_sockets_to_services(
                             && !srvc.conf.sockets.contains(&sock_unit.id.name))
                     {
                         trace!(
-                            "add socket: {} to service: {}",
+                            "add socket: {} to service: {} because one mentions the other",
                             sock_unit.id.name,
                             srvc_unit.id.name
                         );

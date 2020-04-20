@@ -114,7 +114,6 @@ impl Unit {
     pub fn activate(
         &self,
         run_info: &RuntimeInfo,
-        notification_socket_path: std::path::PathBuf,
         eventfds: &[EventFd],
         allow_ignore: bool,
     ) -> Result<UnitStatus, UnitOperationError> {
@@ -185,7 +184,6 @@ impl Unit {
                         self.id.clone(),
                         &self.id.name,
                         run_info,
-                        notification_socket_path,
                         eventfds,
                         allow_ignore,
                     )
