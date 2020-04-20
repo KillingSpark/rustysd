@@ -233,8 +233,8 @@ fn add_sock_srvc_relations(
     sock_install.before.push(srvc_id.clone());
     sock_install.required_by.push(srvc_id.clone());
 
-    srvc_conf.sockets.push(srvc_id.name.clone());
-    sock_conf.services.push(sock_id.name.clone());
+    srvc_conf.sockets.push(sock_id.name.clone());
+    sock_conf.services.push(srvc_id.name.clone());
 }
 
 /// This takes a set of services and sockets and matches them both by their name and their
@@ -312,6 +312,13 @@ pub fn apply_sockets_to_services(
     for srvc_unit in service_table.values_mut() {
         if let Specific::Service(srvc) = &mut srvc_unit.specific {
             srvc.conf.sockets.sort();
+            srvc.conf.sockets.dedup();
+        }
+    }
+    for sock_unit in socket_table.values_mut() {
+        if let Specific::Socket(sock) = &mut sock_unit.specific {
+            sock.conf.services.sort();
+            sock.conf.services.dedup();
         }
     }
 
