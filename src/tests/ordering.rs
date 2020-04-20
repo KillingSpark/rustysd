@@ -1,5 +1,3 @@
-
-
 #[test]
 fn test_unit_ordering() {
     let target1_str = format!(

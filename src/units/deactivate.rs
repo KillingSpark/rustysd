@@ -55,11 +55,5 @@ pub fn reactivate_unit(
         "Reactivation of unit: {:?}. Deactivation ran. Activate again",
         id_to_restart
     );
-    crate::units::activate_unit(
-        id_to_restart.clone(),
-        run_info,
-        eventfds,
-        true,
-    )
-    .map(|_| ())
+    crate::units::activate_unit(id_to_restart.clone(), run_info, eventfds, true).map(|_| ())
 }
