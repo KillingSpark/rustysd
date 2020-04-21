@@ -12,6 +12,7 @@ fn test_service_state_transitions() {
         fd_store: std::sync::RwLock::new(crate::fd_store::FDStore::default()),
         pid_table: std::sync::Mutex::new(crate::units::PidTable::default()),
         unit_table: crate::units::UnitTable::default(),
+        eventfds: vec![],
     }));
 
     let signals = signal_hook::iterator::Signals::new(&[signal_hook::SIGCHLD]).unwrap();
@@ -19,7 +20,7 @@ fn test_service_state_transitions() {
     let run_info_clone = run_info.clone();
     let _handle = std::thread::spawn(move || {
         // listen on signals from the child processes
-        crate::signal_handler::handle_signals(signals, run_info_clone, vec![]);
+        crate::signal_handler::handle_signals(signals, run_info_clone);
     });
 
     // TODO this can probably done better with a setup function. Need to look into the test framework more.
@@ -72,7 +73,6 @@ fn successful(run_info: crate::units::ArcMutRuntimeInfo) {
 
     unit.activate(
         &*run_info.read().unwrap(),
-        &[],
         crate::units::ActivationSource::Regular,
     )
     .unwrap();
@@ -137,7 +137,6 @@ fn failing_startexec(run_info: crate::units::ArcMutRuntimeInfo) {
     assert!(unit
         .activate(
             &*run_info.read().unwrap(),
-            &[],
             crate::units::ActivationSource::Regular
         )
         .is_err());

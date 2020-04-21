@@ -1,6 +1,4 @@
-use crate::platform::EventFd;
 use crate::units::*;
-use std::sync::Arc;
 
 pub fn deactivate_unit_recursive(
     id_to_kill: UnitId,
@@ -47,7 +45,6 @@ pub fn deactivate_units(
 pub fn reactivate_unit(
     id_to_restart: UnitId,
     run_info: &RuntimeInfo,
-    eventfds: Arc<Vec<EventFd>>,
 ) -> std::result::Result<(), UnitOperationError> {
     trace!("Reactivation of unit: {:?}. Deactivate", id_to_restart);
     deactivate_unit(id_to_restart.clone(), run_info.clone())?;
@@ -55,11 +52,6 @@ pub fn reactivate_unit(
         "Reactivation of unit: {:?}. Deactivation ran. Activate again",
         id_to_restart
     );
-    crate::units::activate_unit(
-        id_to_restart.clone(),
-        run_info,
-        eventfds,
-        ActivationSource::Regular,
-    )
-    .map(|_| ())
+    crate::units::activate_unit(id_to_restart.clone(), run_info, ActivationSource::Regular)
+        .map(|_| ())
 }

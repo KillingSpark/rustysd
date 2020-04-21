@@ -108,7 +108,11 @@ fn pid1_specific_setup() {
 #[cfg(not(target_os = "linux"))]
 fn pid1_specific_setup() {}
 
-fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> units::ArcMutRuntimeInfo {
+fn prepare_runtimeinfo(
+    conf: &config::Config,
+    eventfds: Vec<crate::platform::EventFd>,
+    dry_run: bool,
+) -> units::ArcMutRuntimeInfo {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let unit_table = units::load_all_units(&conf.unit_dirs, &conf.target_unit).unwrap();
@@ -146,6 +150,7 @@ fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> units::ArcMutRun
         pid_table: pid_table,
         fd_store: std::sync::RwLock::new(rustysd::fd_store::FDStore::default()),
         config: conf.clone(),
+        eventfds: eventfds,
     }));
 
     run_info
@@ -172,11 +177,10 @@ fn start_stderr_handler_thread(run_info: units::ArcMutRuntimeInfo, eventfd: plat
 fn start_signal_handler_thread(
     signals: Signals,
     run_info: units::ArcMutRuntimeInfo,
-    eventfds: Vec<platform::EventFd>,
 ) -> std::thread::JoinHandle<()> {
     let handle = std::thread::spawn(move || {
         // listen on signals from the child processes
-        signal_handler::handle_signals(signals, run_info, eventfds);
+        signal_handler::handle_signals(signals, run_info);
     });
     handle
 }
@@ -259,8 +263,6 @@ fn main() {
 
     rustysd::platform::become_subreaper(true);
 
-    let run_info = prepare_runtimeinfo(&conf, cli_args.dry_run);
-
     let notification_eventfd = platform::make_event_fd().unwrap();
     let stdout_eventfd = platform::make_event_fd().unwrap();
     let stderr_eventfd = platform::make_event_fd().unwrap();
@@ -271,6 +273,8 @@ fn main() {
         stderr_eventfd,
         sock_act_eventfd,
     ];
+
+    let run_info = prepare_runtimeinfo(&conf, eventfds.clone(), cli_args.dry_run);
 
     let signals = match Signals::new(&[
         signal_hook::SIGCHLD,
@@ -286,7 +290,7 @@ fn main() {
         }
     };
     // listen to signals
-    let handle = start_signal_handler_thread(signals, run_info.clone(), eventfds.clone());
+    let handle = start_signal_handler_thread(signals, run_info.clone());
 
     // listen on user commands like listunits/kill/restart...
     control::open_all_sockets(run_info.clone(), &conf);
@@ -295,14 +299,10 @@ fn main() {
     start_stdout_handler_thread(run_info.clone(), stdout_eventfd);
     start_stderr_handler_thread(run_info.clone(), stderr_eventfd);
 
-    socket_activation::start_socketactivation_thread(
-        run_info.clone(),
-        sock_act_eventfd,
-        Arc::new(eventfds.clone()),
-    );
+    socket_activation::start_socketactivation_thread(run_info.clone(), sock_act_eventfd);
 
     // parallel startup of all services
-    units::activate_units(run_info.clone(), eventfds.clone());
+    units::activate_units(run_info.clone());
 
     handle.join().unwrap();
 }

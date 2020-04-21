@@ -304,8 +304,7 @@ pub fn execute_command(
                 x
             };
 
-            crate::units::reactivate_unit(id, run_info, std::sync::Arc::new(Vec::new()))
-                .map_err(|e| format!("{}", e))?;
+            crate::units::reactivate_unit(id, run_info).map_err(|e| format!("{}", e))?;
         }
         Command::Remove(unit_name) => {
             let run_info = &mut *run_info.write().unwrap();

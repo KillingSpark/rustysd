@@ -6,7 +6,6 @@ use crate::units::*;
 pub fn start_socketactivation_thread(
     run_info: ArcMutRuntimeInfo,
     eventfd: crate::platform::EventFd,
-    eventfds: std::sync::Arc<Vec<crate::platform::EventFd>>,
 ) {
     std::thread::spawn(move || loop {
         let wait_result = wait_for_socket(eventfd, run_info.clone());
@@ -60,7 +59,6 @@ pub fn start_socketactivation_thread(
                                 match crate::units::activate_unit(
                                     srvc_unit.id.clone(),
                                     &*run_info,
-                                    eventfds.clone(),
                                     ActivationSource::SocketActivation,
                                 ) {
                                     Ok(_) => {

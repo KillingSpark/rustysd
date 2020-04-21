@@ -1,16 +1,13 @@
-use crate::platform::EventFd;
 use crate::signal_handler::ChildTermination;
 use crate::units::*;
-use std::sync::Arc;
 
 pub fn service_exit_handler_new_thread(
     pid: nix::unistd::Pid,
     code: ChildTermination,
     run_info: ArcMutRuntimeInfo,
-    eventfds: Vec<EventFd>,
 ) {
     std::thread::spawn(move || {
-        if let Err(e) = service_exit_handler(pid, code, &*run_info.read().unwrap(), &eventfds) {
+        if let Err(e) = service_exit_handler(pid, code, &*run_info.read().unwrap()) {
             error!("{}", e);
         }
     });
@@ -20,7 +17,6 @@ pub fn service_exit_handler(
     pid: nix::unistd::Pid,
     code: ChildTermination,
     run_info: &RuntimeInfo,
-    eventfds: &[EventFd],
 ) -> Result<(), String> {
     trace!("Exit handler with pid: {}", pid);
 
@@ -112,8 +108,8 @@ pub fn service_exit_handler(
     }
 
     trace!("Check if we want to restart the unit");
-    let (name, sockets, restart_unit) = {
-        let name = &unit.id.name;
+    let name = &unit.id.name;
+    let restart_unit = {
         if let Specific::Service(srvc) = &unit.specific {
             trace!(
                 "Service with id: {:?}, name: {} pid: {} exited with: {:?}",
@@ -124,13 +120,12 @@ pub fn service_exit_handler(
             );
 
             if srvc.conf.restart == ServiceRestart::Always {
-                let sockets = srvc.conf.sockets.clone();
-                (name, sockets, true)
+                true
             } else {
-                (name, Vec::new(), false)
+                false
             }
         } else {
-            (name, Vec::new(), false)
+            false
         }
     };
 
@@ -144,20 +139,8 @@ pub fn service_exit_handler(
     }
 
     if restart_unit {
-        {
-            // tell socket activation to listen to these sockets again
-            for unit in run_info.unit_table.values() {
-                if sockets.contains(&unit.id.name) {
-                    if let Specific::Socket(sock) = &unit.specific {
-                        let mut_state = &mut *sock.state.write().unwrap();
-                        mut_state.sock.activated = false;
-                    }
-                }
-            }
-        }
         trace!("Restart service {} after it died", name);
-        crate::units::reactivate_unit(srvc_id, run_info, Arc::new(eventfds.to_vec()))
-            .map_err(|e| format!("{}", e))?;
+        crate::units::reactivate_unit(srvc_id, run_info).map_err(|e| format!("{}", e))?;
     } else {
         trace!(
             "Recursively killing all services requiring service {}",

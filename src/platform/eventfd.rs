@@ -11,7 +11,7 @@ pub use pipe_eventfd::*;
 mod pipe_eventfd {
     use std::os::unix::io::RawFd;
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub struct EventFd(RawFd, RawFd);
     // EventFd(Read,Write)
 

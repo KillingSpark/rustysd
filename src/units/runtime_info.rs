@@ -1,4 +1,5 @@
 use crate::fd_store::FDStore;
+use crate::platform::EventFd;
 use crate::units::*;
 
 use nix::unistd::Pid;
@@ -14,6 +15,7 @@ pub struct RuntimeInfo {
     pub pid_table: Mutex<PidTable>,
     pub fd_store: MutFDStore,
     pub config: crate::config::Config,
+    pub eventfds: Vec<EventFd>,
 }
 
 // This will be passed through to all the different threads as a central state struct

@@ -1,7 +1,6 @@
 //! Activate units (recursively and parallel along the dependency tree)
 
 use super::*;
-use crate::platform::EventFd;
 use crate::services::ServiceErrorReason;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
@@ -77,24 +76,20 @@ fn activate_units_recursive(
     ids_to_start: Vec<UnitId>,
     run_info: ArcMutRuntimeInfo,
     tpool: ThreadPool,
-    eventfds: Arc<Vec<EventFd>>,
     errors: Arc<Mutex<Vec<UnitOperationError>>>,
 ) {
     for id in ids_to_start {
         let run_info_copy = run_info.clone();
         let tpool_copy = tpool.clone();
-        let eventfds_copy = eventfds.clone();
         let errors_copy = errors.clone();
         tpool.execute(move || {
             let run_info_copy2 = run_info_copy.clone();
             let tpool_copy2 = tpool_copy.clone();
-            let eventfds_copy2 = eventfds_copy.clone();
             let errors_copy2 = errors_copy.clone();
 
             match activate_unit(
                 id,
                 &*run_info_copy.read().unwrap(),
-                eventfds_copy,
                 ActivationSource::Regular,
             ) {
                 Ok(StartResult::Started(next_services_ids)) => {
@@ -103,7 +98,6 @@ fn activate_units_recursive(
                             next_services_ids,
                             run_info_copy2,
                             tpool_copy2,
-                            eventfds_copy2,
                             errors_copy2,
                         );
                     };
@@ -146,7 +140,6 @@ impl ActivationSource {
 pub fn activate_unit(
     id_to_start: UnitId,
     run_info: &RuntimeInfo,
-    eventfds: Arc<Vec<EventFd>>,
     source: ActivationSource,
 ) -> std::result::Result<StartResult, UnitOperationError> {
     trace!("Activate id: {:?}", id_to_start);
@@ -218,11 +211,11 @@ pub fn activate_unit(
     }
     let next_services_ids = unit.common.dependencies.before.clone();
 
-    unit.activate(run_info.clone(), &eventfds, source)
+    unit.activate(run_info.clone(), source)
         .map(|_| StartResult::Started(next_services_ids))
 }
 
-pub fn activate_units(run_info: ArcMutRuntimeInfo, eventfds: Vec<EventFd>) {
+pub fn activate_units(run_info: ArcMutRuntimeInfo) {
     // collect all 'root' units. These are units that do not have any 'after' relations to other units.
     // These can be started and the the tree can be traversed and other units can be started as soon as
     // all other units they depend on are started. This works because the units form an DAG if one only
@@ -238,15 +231,8 @@ pub fn activate_units(run_info: ArcMutRuntimeInfo, eventfds: Vec<EventFd>) {
 
     // TODO make configurable or at least make guess about amount of threads
     let tpool = ThreadPool::new(6);
-    let eventfds_arc = Arc::new(eventfds);
     let errors = Arc::new(Mutex::new(Vec::new()));
-    activate_units_recursive(
-        root_units,
-        run_info,
-        tpool.clone(),
-        eventfds_arc,
-        errors.clone(),
-    );
+    activate_units_recursive(root_units, run_info, tpool.clone(), errors.clone());
 
     tpool.join();
     // TODO can we handle errors in a more meaningful way?

@@ -1,11 +1,10 @@
 //! Handle signals send to this process from either the outside or the child processes
 
-use crate::platform::EventFd;
 use crate::services;
 use crate::units::*;
 use signal_hook::iterator::Signals;
 
-pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo, eventfds: Vec<EventFd>) {
+pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo) {
     loop {
         // Pick up new signals
         for signal in signals.forever() {
@@ -14,14 +13,12 @@ pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo, eventfds: V
                     std::iter::from_fn(get_next_exited_child)
                         .take_while(Result::is_ok)
                         .for_each(|val| {
-                            let eventfds_clone = eventfds.clone();
                             let run_info_clone = run_info.clone();
                             match val {
                                 Ok((pid, code)) => services::service_exit_handler_new_thread(
                                     pid,
                                     code,
                                     run_info_clone,
-                                    eventfds_clone,
                                 ),
                                 Err(e) => {
                                     error!("{}", e);

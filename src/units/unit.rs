@@ -1,4 +1,3 @@
-use crate::platform::EventFd;
 use crate::services::Service;
 use crate::sockets::{Socket, SocketKind, SpecializedSocketConfig};
 use crate::units::*;
@@ -114,7 +113,6 @@ impl Unit {
     pub fn activate(
         &self,
         run_info: &RuntimeInfo,
-        eventfds: &[EventFd],
         source: ActivationSource,
     ) -> Result<UnitStatus, UnitOperationError> {
         match &self.specific {
@@ -156,6 +154,7 @@ impl Unit {
                     Ok(_) => {
                         let mut status = self.common.status.write().unwrap();
                         *status = UnitStatus::Started(StatusStarted::Running);
+                        crate::platform::notify_event_fds(&run_info.eventfds);
                         Ok(UnitStatus::Started(StatusStarted::Running))
                     }
                     Err(e) => {
@@ -194,7 +193,7 @@ impl Unit {
                         self.id.clone(),
                         &self.id.name,
                         run_info,
-                        eventfds,
+                        &run_info.eventfds,
                         source,
                     )
                     .map_err(|e| UnitOperationError {
@@ -215,6 +214,16 @@ impl Unit {
                             let mut status = self.common.status.write().unwrap();
                             *status = UnitStatus::Started(StatusStarted::WaitingForSocket);
                         }
+                        // tell socket activation to listen to these sockets again
+                        for unit in run_info.unit_table.values() {
+                            if specific.conf.sockets.contains(&unit.id.name) {
+                                if let Specific::Socket(sock) = &unit.specific {
+                                    let mut_state = &mut *sock.state.write().unwrap();
+                                    mut_state.sock.activated = false;
+                                }
+                            }
+                        }
+                        crate::platform::notify_event_fds(&run_info.eventfds);
                         Ok(UnitStatus::Started(StatusStarted::WaitingForSocket))
                     }
                     Err(e) => {
