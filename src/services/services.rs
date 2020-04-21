@@ -255,14 +255,7 @@ impl Service {
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        let stop_res = self.run_stop_cmd(conf, id, name, run_info.clone());
-        if conf.srcv_type != ServiceType::OneShot {
-            // already happened when the oneshot process exited in the exit handler
-            self.kill_all_remaining_processes(name);
-        }
-        self.pid = None;
-        self.process_group = None;
-        stop_res
+        self.run_stop_cmd(conf, id, name, run_info.clone())
     }
     pub fn kill(
         &mut self,
@@ -523,7 +516,16 @@ impl Service {
         }
         let timeout = self.get_start_timeout(conf);
         let cmds = conf.stoppost.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
+        let res = self.run_all_cmds(&cmds, id, name, timeout, run_info.clone());
+
+        if conf.srcv_type != ServiceType::OneShot {
+            // already happened when the oneshot process exited in the exit handler
+            self.kill_all_remaining_processes(name);
+        }
+        self.pid = None;
+        self.process_group = None;
+
+        res
     }
 
     pub fn log_stdout_lines(&mut self, name: &str, status: &UnitStatus) -> std::io::Result<()> {
