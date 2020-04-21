@@ -304,7 +304,18 @@ pub fn execute_command(
                 x
             };
 
-            crate::units::reactivate_unit(id, run_info).map_err(|e| format!("{}", e))?;
+            match crate::units::reactivate_unit(id, run_info).map_err(|e| format!("{}", e)) {
+                Err(e) => return Err(e),
+                Ok(StartResult::WaitForDependencies(deps)) => {
+                    return Err(format!(
+                        "Cannot start unit. It depends on these to be started first {:?}",
+                        deps
+                    ))
+                }
+                Ok(StartResult::Started(_)) => {
+                    // Happy
+                }
+            };
         }
         Command::Remove(unit_name) => {
             let run_info = &mut *run_info.write().unwrap();

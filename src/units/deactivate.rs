@@ -45,7 +45,7 @@ pub fn deactivate_units(
 pub fn reactivate_unit(
     id_to_restart: UnitId,
     run_info: &RuntimeInfo,
-) -> std::result::Result<(), UnitOperationError> {
+) -> std::result::Result<StartResult, UnitOperationError> {
     trace!("Reactivation of unit: {:?}. Deactivate", id_to_restart);
     deactivate_unit(id_to_restart.clone(), run_info.clone())?;
     trace!(
@@ -53,5 +53,4 @@ pub fn reactivate_unit(
         id_to_restart
     );
     crate::units::activate_unit(id_to_restart.clone(), run_info, ActivationSource::Regular)
-        .map(|_| ())
 }

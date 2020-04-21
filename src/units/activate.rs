@@ -103,7 +103,7 @@ fn activate_units_recursive(
                     };
                     tpool_copy.execute(next_services_job);
                 }
-                Ok(StartResult::WaitForDependencies) => {
+                Ok(StartResult::WaitForDependencies(_)) => {
                     // Thats ok. The unit is waiting for more dependencies and will be
                     // activated again when another dependency has finished starting
                 }
@@ -119,7 +119,7 @@ fn activate_units_recursive(
 #[derive(Debug)]
 pub enum StartResult {
     Started(Vec<UnitId>),
-    WaitForDependencies,
+    WaitForDependencies(Vec<UnitId>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -177,7 +177,7 @@ pub fn activate_unit(
             };
 
             if !ready {
-                acc.push(elem);
+                acc.push(elem.clone());
             }
             acc
         });
@@ -187,28 +187,9 @@ pub fn activate_unit(
             unit.id.name,
             unstarted_deps,
         );
-        return Ok(StartResult::WaitForDependencies);
+        return Ok(StartResult::WaitForDependencies(unstarted_deps));
     }
 
-    // Check if the unit is needs to be activated
-    {
-        // if status is already on Started then allow ignore must be false. This happens when socket activation is happening
-        // TODO make this relation less weird. Maybe add a separate code path for socket activation
-        let status_locked = unit.common.status.read().unwrap();
-        let wait_for_socket_act = *status_locked
-            == UnitStatus::Started(StatusStarted::WaitingForSocket)
-            && !source.is_socket_activation();
-        let needs_intial_run =
-            *status_locked == UnitStatus::NeverStarted || status_locked.is_stopped();
-        if wait_for_socket_act && !needs_intial_run {
-            trace!(
-                "Don't activate Unit: {:?}. Has status: {:?}",
-                unit.id.name,
-                *status_locked
-            );
-            return Ok(StartResult::WaitForDependencies);
-        }
-    }
     let next_services_ids = unit.common.dependencies.before.clone();
 
     unit.activate(run_info.clone(), source)
