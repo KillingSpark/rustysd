@@ -155,6 +155,10 @@ fn tcp_accept(fd: i32) -> std::thread::JoinHandle<()> {
 }
 
 fn main() {
+    if (nix::unistd::getpid().as_raw() / 10) % 10 != 0 {
+        panic!("My service is very bad. It immediately panics at startup.");
+    }
+
     println!(
         "STARTED DEAMON WITH PID: {} AND FDS: {}",
         env::var("LISTEN_PID").unwrap(),
