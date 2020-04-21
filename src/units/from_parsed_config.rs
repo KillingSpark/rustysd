@@ -33,16 +33,24 @@ pub fn unit_from_parsed_service(conf: ParsedServiceConfig) -> Result<Unit, Strin
         cgroup_path: make_cgroup_path(&conf.common.name)?,
     };
 
+    let mut sockets: Vec<UnitId> = Vec::new();
+    for sock in conf.srvc.sockets {
+        sockets.push(sock.as_str().try_into()?);
+    }
+
+    let mut common = make_common_from_parsed(conf.common.unit, conf.common.install)?;
+    common.unit.refs_by_name.extend(sockets.iter().cloned());
+
     Ok(Unit {
         id: UnitId {
             kind: UnitIdKind::Service,
             name: conf.common.name,
         },
-        common: make_common_from_parsed(conf.common.unit, conf.common.install)?,
+        common,
         specific: Specific::Service(ServiceSpecific {
             conf: ServiceConfig {
                 exec_config: conf.srvc.exec_section.try_into()?,
-                sockets: conf.srvc.sockets,
+                sockets: sockets,
                 accept: conf.srvc.accept,
                 dbus_name: conf.srvc.dbus_name,
                 restart: conf.srvc.restart,
@@ -79,17 +87,25 @@ pub fn unit_from_parsed_service(conf: ParsedServiceConfig) -> Result<Unit, Strin
 }
 
 pub fn unit_from_parsed_socket(conf: ParsedSocketConfig) -> Result<Unit, String> {
+    let mut services: Vec<UnitId> = Vec::new();
+    for srvc in conf.sock.services {
+        services.push(srvc.as_str().try_into()?);
+    }
+
+    let mut common = make_common_from_parsed(conf.common.unit, conf.common.install)?;
+    common.unit.refs_by_name.extend(services.iter().cloned());
+
     Ok(Unit {
         id: UnitId {
             kind: UnitIdKind::Socket,
             name: conf.common.name,
         },
-        common: make_common_from_parsed(conf.common.unit, conf.common.install)?,
+        common,
         specific: Specific::Socket(SocketSpecific {
             conf: SocketConfig {
                 exec_config: conf.sock.exec_section.try_into()?,
                 filedesc_name: conf.sock.filedesc_name.unwrap_or("unknown".to_owned()),
-                services: conf.sock.services,
+                services: services,
                 sockets: conf.sock.sockets.into_iter().map(Into::into).collect(),
             },
             state: RwLock::new(SocketState {
@@ -210,10 +226,19 @@ fn make_common_from_parsed(
         before.push(name.as_str().try_into()?);
     }
 
+    let mut refs_by_name = Vec::new();
+    refs_by_name.extend(wants.iter().cloned());
+    refs_by_name.extend(wanted_by.iter().cloned());
+    refs_by_name.extend(requires.iter().cloned());
+    refs_by_name.extend(required_by.iter().cloned());
+    refs_by_name.extend(before.iter().cloned());
+    refs_by_name.extend(after.iter().cloned());
+
     Ok(Common {
         status: RwLock::new(UnitStatus::NeverStarted),
         unit: UnitConfig {
             description: unit.description,
+            refs_by_name,
         },
         dependencies: Dependencies {
             wants,

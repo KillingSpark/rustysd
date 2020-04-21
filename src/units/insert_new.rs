@@ -74,8 +74,9 @@ fn check_all_names_exist(
 ) -> Result<(), String> {
     let mut names_needed = Vec::new();
     for new_unit in new_units.values() {
-        new_unit.collect_names_needed(&mut names_needed);
+        names_needed.extend(new_unit.common.unit.refs_by_name.iter().cloned());
     }
+
     let mut names_needed: std::collections::HashMap<_, _> =
         names_needed.iter().map(|name| (name, ())).collect();
 
@@ -88,13 +89,13 @@ fn check_all_names_exist(
                 return Err(format!("Name {} exists already", new_unit.id.name));
             }
         }
-        if names_needed.contains_key(&unit.id.name) {
-            names_needed.remove(&unit.id.name).unwrap();
+        if names_needed.contains_key(&unit.id) {
+            names_needed.remove(&unit.id).unwrap();
         }
     }
     for unit in new_units.values() {
-        if names_needed.contains_key(&unit.id.name) {
-            names_needed.remove(&unit.id.name).unwrap();
+        if names_needed.contains_key(&unit.id) {
+            names_needed.remove(&unit.id).unwrap();
         }
     }
     if names_needed.len() > 0 {

@@ -63,15 +63,10 @@ fn find_all_depending(rm_id: UnitId, unit_table: &UnitTable, ids: &mut Vec<UnitI
         return;
     }
 
-    let rm_name = rm_id.name.clone();
-
-    let mut names = Vec::new();
     let mut new_ids = Vec::new();
     for (id, unit) in unit_table.iter() {
         if *id != rm_id {
-            names.clear();
-            unit.collect_names_needed(&mut names);
-            if names.contains(&rm_name) {
+            if unit.common.unit.refs_by_name.contains(&rm_id) {
                 new_ids.push(id.clone());
             }
         }
@@ -90,16 +85,12 @@ fn remove_with_depending_units(rm_id: UnitId, unit_table: &mut UnitTable) {
     // follow the units install section and check if the units have this unit in their Install-/Unit-config.
     // If so, remove them too
 
-    let rm_name = rm_id.name.clone();
     remove_single_unit(rm_id.clone(), unit_table);
     // first remove all depending units
-    let mut names = Vec::new();
     let mut next_ids = Vec::new();
     for (id, unit) in unit_table.iter() {
         if *id != rm_id {
-            names.clear();
-            unit.collect_names_needed(&mut names);
-            if names.contains(&rm_name) {
+            if unit.common.unit.refs_by_name.contains(&rm_id) {
                 next_ids.push(id.clone());
             }
         }

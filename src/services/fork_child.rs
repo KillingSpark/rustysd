@@ -187,14 +187,14 @@ pub fn after_fork_child(
 
     for socket in &conf.sockets {
         let sock_fds = fd_store
-            .get_global(socket)
+            .get_global(&socket.name)
             .unwrap()
             .iter()
             .map(|(_, _, fd)| fd.as_raw_fd())
             .collect::<Vec<_>>();
 
         let sock_names = fd_store
-            .get_global(socket)
+            .get_global(&socket.name)
             .unwrap()
             .iter()
             .map(|(_, name, _)| name.clone())

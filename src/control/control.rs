@@ -228,7 +228,7 @@ pub fn format_service(srvc_unit: &Unit, status: UnitStatus) -> Value {
                 srvc.conf
                     .sockets
                     .iter()
-                    .map(|x| Value::String(x.clone()))
+                    .map(|x| Value::String(x.name.clone()))
                     .collect(),
             ),
         );

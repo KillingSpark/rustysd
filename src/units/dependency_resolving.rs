@@ -233,8 +233,8 @@ fn add_sock_srvc_relations(
     sock_install.before.push(srvc_id.clone());
     sock_install.required_by.push(srvc_id.clone());
 
-    srvc_conf.sockets.push(sock_id.name.clone());
-    sock_conf.services.push(srvc_id.name.clone());
+    srvc_conf.sockets.push(sock_id.clone());
+    sock_conf.services.push(srvc_id.clone());
 }
 
 /// This takes a set of services and sockets and matches them both by their name and their
@@ -274,17 +274,16 @@ pub fn apply_sockets_to_services(
 
                     // add sockets to services that specify that the socket belongs to them
                     // or sockets to services that specify that they belong to the service
-                    if (srvc.conf.sockets.contains(&sock_unit.id.name)
-                        && !sock.conf.services.contains(&srvc_unit.id.name))
-                        || (sock.conf.services.contains(&srvc_unit.id.name)
-                            && !srvc.conf.sockets.contains(&sock_unit.id.name))
+                    if (srvc.conf.sockets.contains(&sock_unit.id)
+                        && !sock.conf.services.contains(&srvc_unit.id))
+                        || (sock.conf.services.contains(&srvc_unit.id)
+                            && !srvc.conf.sockets.contains(&sock_unit.id))
                     {
                         trace!(
                             "add socket: {} to service: {} because one mentions the other",
                             sock_unit.id.name,
                             srvc_unit.id.name
                         );
-                        sock.conf.services.push(srvc_unit.id.name.clone());
                         add_sock_srvc_relations(
                             srvc_unit.id.clone(),
                             &mut srvc_unit.common.dependencies,

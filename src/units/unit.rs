@@ -215,8 +215,8 @@ impl Unit {
                             *status = UnitStatus::Started(StatusStarted::WaitingForSocket);
                         }
                         // tell socket activation to listen to these sockets again
-                        for unit in run_info.unit_table.values() {
-                            if specific.conf.sockets.contains(&unit.id.name) {
+                        for socket_id in &specific.conf.sockets {
+                            if let Some(unit) = run_info.unit_table.get(socket_id) {
                                 if let Specific::Socket(sock) = &unit.specific {
                                     let mut_state = &mut *sock.state.write().unwrap();
                                     mut_state.sock.activated = false;
@@ -328,74 +328,21 @@ impl Unit {
         }
         Ok(())
     }
-
-    /// FIXME this should operate on the original parsed config to only collect names
-    /// that this unit refers to. This is used for adding/removing units from the set.
-    /// Currently this severly over reports dependencies!
-    pub fn collect_names_needed(&self, names_needed: &mut Vec<String>) {
-        names_needed.extend(
-            self.common
-                .dependencies
-                .after
-                .iter()
-                .cloned()
-                .map(|id| id.name),
-        );
-        names_needed.extend(
-            self.common
-                .dependencies
-                .before
-                .iter()
-                .cloned()
-                .map(|id| id.name),
-        );
-        names_needed.extend(
-            self.common
-                .dependencies
-                .wanted_by
-                .iter()
-                .cloned()
-                .map(|id| id.name),
-        );
-        names_needed.extend(
-            self.common
-                .dependencies
-                .wants
-                .iter()
-                .cloned()
-                .map(|id| id.name),
-        );
-        names_needed.extend(
-            self.common
-                .dependencies
-                .required_by
-                .iter()
-                .cloned()
-                .map(|id| id.name),
-        );
-        names_needed.extend(
-            self.common
-                .dependencies
-                .requires
-                .iter()
-                .cloned()
-                .map(|id| id.name),
-        );
-        if let Specific::Socket(sock) = &self.specific {
-            names_needed.extend(sock.conf.services.iter().cloned());
-        }
-        if let Specific::Service(srvc) = &self.specific {
-            names_needed.extend(srvc.conf.sockets.iter().cloned());
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct UnitConfig {
     pub description: String,
+
+    /// This is needed for adding/removing units. All units in this set must be present
+    /// or this unit is considered invalid os it has to be removed too / cannot be added.
+    pub refs_by_name: Vec<UnitId>,
 }
 
 #[derive(Debug, Clone)]
+/// This are the runtime dependencies. They are extended when the unit is added into the unit set
+/// so all dependencies go both ways.
+///
 /// These vecs are meant like this:
 /// Dependencies::after: this unit should start after these units have been started
 /// Dependencies::before: this unit should start before these units have been started
@@ -537,14 +484,14 @@ pub struct ServiceConfig {
     pub exec_config: ExecConfig,
     pub platform_specific: PlatformSpecificServiceFields,
     pub dbus_name: Option<String>,
-    pub sockets: Vec<String>,
+    pub sockets: Vec<UnitId>,
 }
 
 /// The immutable config of a socket unit
 pub struct SocketConfig {
     pub sockets: Vec<SingleSocketConfig>,
     pub filedesc_name: String,
-    pub services: Vec<String>,
+    pub services: Vec<UnitId>,
 
     pub exec_config: ExecConfig,
 }
