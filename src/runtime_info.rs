@@ -1,3 +1,9 @@
+//! The RuntimeInfo encapsulates all information rustysd needs to do its job. The units, the pid and filedescriptors and the rustysd config.
+//! In the lifetime of ruytsd there will only ever be one RuntimeInfo which is passed wrapped inside the ArcMutRuntimeInfo.
+//! 
+//! The idea here is to make as much as possible concurrently readable while still being able to get exclusive access to e.g. remove units.
+//! Note that units themselves contain RWLocks so they can be worked on concurrently as long as no write() lock is placed on the RuntimeInfo.
+
 use crate::fd_store::FDStore;
 use crate::platform::EventFd;
 use crate::units::*;
@@ -7,9 +13,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 pub type UnitTable = HashMap<UnitId, Unit>;
-pub type PidTable = HashMap<Pid, PidEntry>;
 pub type MutFDStore = RwLock<FDStore>;
 
+/// This will be passed through to all the different threads as a central state struct
 pub struct RuntimeInfo {
     pub unit_table: UnitTable,
     pub pid_table: Mutex<PidTable>,
@@ -30,27 +36,15 @@ impl RuntimeInfo {
     }
 }
 
-// This will be passed through to all the different threads as a central state struct
 pub type ArcMutRuntimeInfo = Arc<RwLock<RuntimeInfo>>;
 
-pub fn lock_all(
-    units: &mut Vec<(UnitId, Arc<Mutex<Unit>>)>,
-) -> HashMap<UnitId, std::sync::MutexGuard<'_, Unit>> {
-    let mut units_locked = HashMap::new();
-    // sort to make sure units always get locked in the same ordering
-    units.sort_by(|(lid, _), (rid, _)| lid.cmp(rid));
 
-    for (id, unit) in units {
-        trace!("Lock unit: {:?}", id);
-        let other_unit_locked = unit.lock().unwrap();
-        trace!("Locked unit: {:?}", id);
-        units_locked.insert(id.clone(), other_unit_locked);
-    }
-
-    units_locked
-}
+/// The PidTable holds info about all launched processes
+pub type PidTable = HashMap<Pid, PidEntry>;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
+/// A process can be launched for these reasons. How an exit is handled depends 
+/// on this reason (e.g. oneshot services are supposed to exit. Normal services should not exit.)
 pub enum PidEntry {
     Service(UnitId, ServiceType),
     OneshotExited(crate::signal_handler::ChildTermination),
