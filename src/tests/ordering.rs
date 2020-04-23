@@ -39,9 +39,10 @@ fn test_unit_ordering() {
     [Unit]
     Description = {}
     After = {}
+    After = {}
     
     ",
-        "Target", "1.target"
+        "Target", "1.target", "2.target"
     );
 
     let parsed_file = crate::units::parse_file(&target3_str).unwrap();
@@ -64,8 +65,7 @@ fn test_unit_ordering() {
     unit_table.insert(target2_unit.id.clone(), target2_unit);
     unit_table.insert(target3_unit.id.clone(), target3_unit);
 
-    crate::units::fill_dependencies(&mut unit_table);
-    crate::units::add_implicit_before_after(&mut unit_table);
+    crate::units::fill_dependencies(&mut unit_table).unwrap();
     unit_table
         .values_mut()
         .for_each(|unit| unit.dedup_dependencies());
@@ -235,8 +235,7 @@ fn test_circle() {
     unit_table.insert(target2_unit.id.clone(), target2_unit);
     unit_table.insert(target3_unit.id.clone(), target3_unit);
 
-    crate::units::fill_dependencies(&mut unit_table);
-    crate::units::add_implicit_before_after(&mut unit_table);
+    crate::units::fill_dependencies(&mut unit_table).unwrap();
     unit_table
         .values_mut()
         .for_each(|unit| unit.dedup_dependencies());

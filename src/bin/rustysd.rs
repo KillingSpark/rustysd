@@ -286,6 +286,8 @@ fn main() {
 
     socket_activation::start_socketactivation_thread(run_info.clone());
 
+    trace!("Started all helper threads. Start activating units");
+
     // parallel startup of all services
     units::activate_units(run_info.clone());
 

@@ -14,6 +14,12 @@ pub struct DependencyError {
     msg: String,
 }
 
+impl std::convert::From<String> for DependencyError {
+    fn from(s: String) -> DependencyError {
+        DependencyError { msg: s }
+    }
+}
+
 impl std::fmt::Display for DependencyError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Dependency resolving error: {}", self.msg)
@@ -55,37 +61,13 @@ pub fn load_all_units(
 
     trace!("Units found: {}", unit_table.len());
 
-    fill_dependencies(&mut unit_table);
+    fill_dependencies(&mut unit_table).map_err(|e| LoadingError::Dependency(e.into()))?;
 
     prune_units(target_unit, &mut unit_table).unwrap();
     trace!("Finished pruning units");
 
-    let mut service_unit_table = HashMap::new();
-    let mut socket_unit_table = HashMap::new();
-    let mut target_unit_table = HashMap::new();
-    for (id, unit) in unit_table {
-        match id.kind {
-            UnitIdKind::Service => {
-                service_unit_table.insert(id, unit);
-            }
-            UnitIdKind::Socket => {
-                socket_unit_table.insert(id, unit);
-            }
-            UnitIdKind::Target => {
-                target_unit_table.insert(id, unit);
-            }
-        }
-    }
-
-    apply_sockets_to_services(&mut service_unit_table, &mut socket_unit_table)
-        .map_err(|e| DependencyError { msg: e })?;
-
-    let removed_ids = prune_unused_sockets(&mut socket_unit_table);
-
-    let mut unit_table = std::collections::HashMap::new();
-    unit_table.extend(service_unit_table);
-    unit_table.extend(socket_unit_table);
-    unit_table.extend(target_unit_table);
+    let removed_ids = prune_unused_sockets(&mut unit_table);
+    trace!("Finished pruning sockets");
 
     cleanup_removed_ids(&mut unit_table, &removed_ids);
 
@@ -103,7 +85,7 @@ fn cleanup_removed_ids(
     }
 }
 
-fn prune_unused_sockets(sockets: &mut std::collections::HashMap<UnitId, Unit>) -> Vec<UnitId> {
+fn prune_unused_sockets(sockets: &mut UnitTable) -> Vec<UnitId> {
     let mut ids_to_remove = Vec::new();
     for unit in sockets.values() {
         if let Specific::Socket(sock) = &unit.specific {

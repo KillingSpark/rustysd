@@ -203,10 +203,20 @@ pub fn activate_units(run_info: ArcMutRuntimeInfo) {
     // uses the 'after' relations.
     let mut root_units = Vec::new();
 
-    for (id, unit) in &run_info.read().unwrap().unit_table {
-        if unit.common.dependencies.after.is_empty() {
-            root_units.push(id.clone());
-            trace!("Root unit: {}", unit.id.name);
+    {
+        let run_info = &run_info.read().unwrap();
+        trace!("Collect root units");
+        for (id, unit) in run_info.unit_table.iter() {
+            if unit.common.dependencies.after.is_empty() {
+                root_units.push(id.clone());
+                trace!("Root unit: {}", unit.id.name);
+            } else {
+                trace!(
+                    "Not a root unit: {}. Starts after: {:?}",
+                    unit.id.name,
+                    unit.common.dependencies.after
+                );
+            }
         }
     }
 
