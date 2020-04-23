@@ -15,7 +15,19 @@ pub struct RuntimeInfo {
     pub pid_table: Mutex<PidTable>,
     pub fd_store: MutFDStore,
     pub config: crate::config::Config,
-    pub eventfds: Vec<EventFd>,
+    pub stdout_eventfd: EventFd,
+    pub stderr_eventfd: EventFd,
+    pub notification_eventfd: EventFd,
+    pub socket_activation_eventfd: EventFd,
+}
+
+impl RuntimeInfo {
+    pub fn notify_eventfds(&self) {
+        crate::platform::notify_event_fd(self.stdout_eventfd);
+        crate::platform::notify_event_fd(self.stderr_eventfd);
+        crate::platform::notify_event_fd(self.notification_eventfd);
+        crate::platform::notify_event_fd(self.socket_activation_eventfd);
+    }
 }
 
 // This will be passed through to all the different threads as a central state struct

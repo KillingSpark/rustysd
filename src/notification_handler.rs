@@ -3,7 +3,6 @@
 //! streams from the notification sockets get parsed and applied to the respective service
 
 use crate::platform::reset_event_fd;
-use crate::platform::EventFd;
 use crate::services::Service;
 use crate::services::StdIo;
 use crate::units::*;
@@ -26,7 +25,8 @@ where
         })
 }
 
-pub fn handle_all_streams(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
+pub fn handle_all_streams(run_info: ArcMutRuntimeInfo) {
+    let eventfd = { run_info.read().unwrap().notification_eventfd };
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(run_info.clone(), |map, srvc, id| {
@@ -106,7 +106,8 @@ pub fn handle_all_streams(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
     }
 }
 
-pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
+pub fn handle_all_std_out(run_info: ArcMutRuntimeInfo) {
+    let eventfd = { run_info.read().unwrap().stdout_eventfd };
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(run_info.clone(), |map, srvc, id| {
@@ -174,7 +175,8 @@ pub fn handle_all_std_out(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
     }
 }
 
-pub fn handle_all_std_err(eventfd: EventFd, run_info: ArcMutRuntimeInfo) {
+pub fn handle_all_std_err(run_info: ArcMutRuntimeInfo) {
+    let eventfd = { run_info.read().unwrap().stderr_eventfd };
     loop {
         // need to collect all again. There might be a newly started service
         let fd_to_srvc_id = collect_from_srvc(run_info.clone(), |map, srvc, id| {

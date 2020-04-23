@@ -154,7 +154,7 @@ impl Unit {
                     Ok(_) => {
                         let mut status = self.common.status.write().unwrap();
                         *status = UnitStatus::Started(StatusStarted::Running);
-                        crate::platform::notify_event_fds(&run_info.eventfds);
+                        run_info.notify_eventfds();
                         Ok(UnitStatus::Started(StatusStarted::Running))
                     }
                     Err(e) => {
@@ -193,7 +193,6 @@ impl Unit {
                         self.id.clone(),
                         &self.id.name,
                         run_info,
-                        &run_info.eventfds,
                         source,
                     )
                     .map_err(|e| UnitOperationError {
@@ -223,7 +222,7 @@ impl Unit {
                                 }
                             }
                         }
-                        crate::platform::notify_event_fds(&run_info.eventfds);
+                        run_info.notify_eventfds();
                         Ok(UnitStatus::Started(StatusStarted::WaitingForSocket))
                     }
                     Err(e) => {

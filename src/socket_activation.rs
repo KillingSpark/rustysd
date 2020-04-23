@@ -1,14 +1,9 @@
 //! Wait for sockets to activate their respective services
-
-use crate::platform::EventFd;
 use crate::units::*;
 
-pub fn start_socketactivation_thread(
-    run_info: ArcMutRuntimeInfo,
-    eventfd: crate::platform::EventFd,
-) {
+pub fn start_socketactivation_thread(run_info: ArcMutRuntimeInfo) {
     std::thread::spawn(move || loop {
-        let wait_result = wait_for_socket(eventfd, run_info.clone());
+        let wait_result = wait_for_socket(run_info.clone());
         match wait_result {
             Ok(ids) => {
                 let run_info = run_info.read().unwrap();
@@ -93,10 +88,8 @@ pub fn start_socketactivation_thread(
     });
 }
 
-pub fn wait_for_socket(
-    eventfd: EventFd,
-    run_info: ArcMutRuntimeInfo,
-) -> Result<Vec<UnitId>, String> {
+pub fn wait_for_socket(run_info: ArcMutRuntimeInfo) -> Result<Vec<UnitId>, String> {
+    let eventfd = { run_info.read().unwrap().socket_activation_eventfd };
     let (mut fdset, fd_to_sock_id) = {
         let run_info_locked = &*run_info.read().unwrap();
 

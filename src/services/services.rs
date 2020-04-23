@@ -1,5 +1,4 @@
 use super::start_service::*;
-use crate::platform::EventFd;
 use crate::units::*;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
@@ -148,7 +147,6 @@ impl Service {
         id: UnitId,
         name: &str,
         run_info: &RuntimeInfo,
-        eventfds: &[EventFd],
         source: ActivationSource,
     ) -> Result<StartResult, ServiceErrorReason> {
         if let Some(pid) = self.pid {
@@ -196,7 +194,6 @@ impl Service {
                 .map_err(|e| ServiceErrorReason::StartFailed(e))?;
                 if let Some(new_pid) = self.pid {
                     pid_table_locked.insert(new_pid, PidEntry::Service(id.clone(), conf.srcv_type));
-                    crate::platform::notify_event_fds(&eventfds);
                 }
             }
 
@@ -224,7 +221,6 @@ impl Service {
                 "Ignore service {} start, waiting for socket activation instead",
                 name,
             );
-            crate::platform::notify_event_fds(&eventfds);
             Ok(StartResult::WaitingForSocket)
         }
     }

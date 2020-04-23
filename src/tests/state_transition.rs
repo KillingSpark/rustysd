@@ -12,7 +12,10 @@ fn test_service_state_transitions() {
         fd_store: std::sync::RwLock::new(crate::fd_store::FDStore::default()),
         pid_table: std::sync::Mutex::new(crate::units::PidTable::default()),
         unit_table: crate::units::UnitTable::default(),
-        eventfds: vec![],
+        stdout_eventfd: crate::platform::make_event_fd().unwrap(),
+        stderr_eventfd: crate::platform::make_event_fd().unwrap(),
+        notification_eventfd: crate::platform::make_event_fd().unwrap(),
+        socket_activation_eventfd: crate::platform::make_event_fd().unwrap(),
     }));
 
     let signals = signal_hook::iterator::Signals::new(&[signal_hook::SIGCHLD]).unwrap();

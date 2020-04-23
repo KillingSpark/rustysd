@@ -108,11 +108,7 @@ fn pid1_specific_setup() {
 #[cfg(not(target_os = "linux"))]
 fn pid1_specific_setup() {}
 
-fn prepare_runtimeinfo(
-    conf: &config::Config,
-    eventfds: Vec<crate::platform::EventFd>,
-    dry_run: bool,
-) -> units::ArcMutRuntimeInfo {
+fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> units::ArcMutRuntimeInfo {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let unit_table = units::load_all_units(&conf.unit_dirs, &conf.target_unit).unwrap();
@@ -150,28 +146,28 @@ fn prepare_runtimeinfo(
         pid_table: pid_table,
         fd_store: std::sync::RwLock::new(rustysd::fd_store::FDStore::default()),
         config: conf.clone(),
-        eventfds: eventfds,
+        stdout_eventfd: platform::make_event_fd().unwrap(),
+        stderr_eventfd: platform::make_event_fd().unwrap(),
+        notification_eventfd: platform::make_event_fd().unwrap(),
+        socket_activation_eventfd: platform::make_event_fd().unwrap(),
     }));
 
     run_info
 }
 
-fn start_notification_handler_thread(
-    run_info: units::ArcMutRuntimeInfo,
-    eventfd: platform::EventFd,
-) {
+fn start_notification_handler_thread(run_info: units::ArcMutRuntimeInfo) {
     std::thread::spawn(move || {
-        notification_handler::handle_all_streams(eventfd, run_info.clone());
+        notification_handler::handle_all_streams(run_info.clone());
     });
 }
-fn start_stdout_handler_thread(run_info: units::ArcMutRuntimeInfo, eventfd: platform::EventFd) {
+fn start_stdout_handler_thread(run_info: units::ArcMutRuntimeInfo) {
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_out(eventfd, run_info.clone());
+        notification_handler::handle_all_std_out(run_info.clone());
     });
 }
-fn start_stderr_handler_thread(run_info: units::ArcMutRuntimeInfo, eventfd: platform::EventFd) {
+fn start_stderr_handler_thread(run_info: units::ArcMutRuntimeInfo) {
     std::thread::spawn(move || {
-        notification_handler::handle_all_std_err(eventfd, run_info.clone());
+        notification_handler::handle_all_std_err(run_info.clone());
     });
 }
 fn start_signal_handler_thread(
@@ -263,18 +259,7 @@ fn main() {
 
     rustysd::platform::become_subreaper(true);
 
-    let notification_eventfd = platform::make_event_fd().unwrap();
-    let stdout_eventfd = platform::make_event_fd().unwrap();
-    let stderr_eventfd = platform::make_event_fd().unwrap();
-    let sock_act_eventfd = platform::make_event_fd().unwrap();
-    let eventfds = vec![
-        notification_eventfd,
-        stdout_eventfd,
-        stderr_eventfd,
-        sock_act_eventfd,
-    ];
-
-    let run_info = prepare_runtimeinfo(&conf, eventfds.clone(), cli_args.dry_run);
+    let run_info = prepare_runtimeinfo(&conf, cli_args.dry_run);
 
     let signals = match Signals::new(&[
         signal_hook::SIGCHLD,
@@ -295,11 +280,11 @@ fn main() {
     // listen on user commands like listunits/kill/restart...
     control::open_all_sockets(run_info.clone(), &conf);
 
-    start_notification_handler_thread(run_info.clone(), notification_eventfd);
-    start_stdout_handler_thread(run_info.clone(), stdout_eventfd);
-    start_stderr_handler_thread(run_info.clone(), stderr_eventfd);
+    start_notification_handler_thread(run_info.clone());
+    start_stdout_handler_thread(run_info.clone());
+    start_stderr_handler_thread(run_info.clone());
 
-    socket_activation::start_socketactivation_thread(run_info.clone(), sock_act_eventfd);
+    socket_activation::start_socketactivation_thread(run_info.clone());
 
     // parallel startup of all services
     units::activate_units(run_info.clone());
