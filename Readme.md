@@ -62,7 +62,13 @@ imagine would be along the lines of:
 This would setup the process with the given restrictions and then exec into the given cmd. with this kind of tool there are a few benefits:
 1. Rustysd doesnt have to concern itself with how a platform does resource restriction, but there can be separate tools for each platform (if possible)
 1. Clear separation of concerns. Rustysd manages service lifetimes. It does not (or only for relatively trivial stuff) manage the runtime environment for those services.
-1. The tool can be useful to other contexts aswell  
+1. The tool can be useful to other contexts aswell
+
+For linux there are some existing utilities from the docker/container/oci-spec space:
+* The oci implementation from the docker guys [runc](https://github.com/opencontainers/runc)
+* For people who want completely static builds, an alternative oci implementation [crun](https://github.com/containers/crun) seems great
+* It SHOULD be possible to do something similar for BSD jails
+
 
 ## Goals
 Since this project is very young and wasn't started with any particular goal in mind, I am open to any and all ideas. Here are some that have been 
