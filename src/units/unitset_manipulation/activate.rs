@@ -1,7 +1,9 @@
 //! Activate units (recursively and parallel along the dependency tree)
 
-use super::*;
+use crate::runtime_info::*;
 use crate::services::ServiceErrorReason;
+use crate::units::*;
+
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 

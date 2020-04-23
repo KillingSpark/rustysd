@@ -28,6 +28,7 @@ pub mod fd_store;
 pub mod logging;
 pub mod notification_handler;
 pub mod platform;
+pub mod runtime_info;
 pub mod services;
 pub mod shutdown;
 pub mod signal_handler;

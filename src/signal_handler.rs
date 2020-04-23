@@ -1,7 +1,7 @@
 //! Handle signals send to this process from either the outside or the child processes
 
+use crate::runtime_info::*;
 use crate::services;
-use crate::units::*;
 use signal_hook::iterator::Signals;
 
 pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo) {

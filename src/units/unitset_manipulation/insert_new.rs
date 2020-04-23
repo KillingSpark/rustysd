@@ -1,4 +1,6 @@
+use crate::runtime_info::*;
 use crate::units;
+
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs;
@@ -70,7 +72,7 @@ pub fn load_new_unit(unit_dirs: &[PathBuf], find_name: &str) -> Result<units::Un
 // or in the new units
 fn check_all_names_exist(
     new_units: &HashMap<units::UnitId, units::Unit>,
-    unit_table_locked: &units::UnitTable,
+    unit_table_locked: &UnitTable,
 ) -> Result<(), String> {
     let mut names_needed = Vec::new();
     for new_unit in new_units.values() {
@@ -108,10 +110,7 @@ fn check_all_names_exist(
 }
 
 /// Inserts new units but first checks that the units referenced by the new units do exist
-pub fn insert_new_units(
-    new_units: HashMap<units::UnitId, units::Unit>,
-    run_info: &mut units::RuntimeInfo,
-) -> Result<(), String> {
+pub fn insert_new_units(new_units: UnitTable, run_info: &mut RuntimeInfo) -> Result<(), String> {
     // TODO check if new unit only refs existing units
     // TODO check if all ref'd units are not failed
     {

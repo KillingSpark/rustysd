@@ -1,17 +1,18 @@
+use crate::runtime_info::*;
 use crate::units::Unit;
 use std::convert::TryInto;
 
 #[test]
 fn test_service_state_transitions() {
-    let run_info = std::sync::Arc::new(std::sync::RwLock::new(crate::units::RuntimeInfo {
+    let run_info = std::sync::Arc::new(std::sync::RwLock::new(RuntimeInfo {
         config: crate::config::Config {
             notification_sockets_dir: "./notifications".into(),
             target_unit: "".into(),
             unit_dirs: vec![],
         },
         fd_store: std::sync::RwLock::new(crate::fd_store::FDStore::default()),
-        pid_table: std::sync::Mutex::new(crate::units::PidTable::default()),
-        unit_table: crate::units::UnitTable::default(),
+        pid_table: std::sync::Mutex::new(PidTable::default()),
+        unit_table: UnitTable::default(),
         stdout_eventfd: crate::platform::make_event_fd().unwrap(),
         stderr_eventfd: crate::platform::make_event_fd().unwrap(),
         notification_eventfd: crate::platform::make_event_fd().unwrap(),
@@ -32,7 +33,7 @@ fn test_service_state_transitions() {
     failing_startexec(run_info.clone());
 }
 
-fn successful(run_info: crate::units::ArcMutRuntimeInfo) {
+fn successful(run_info: ArcMutRuntimeInfo) {
     let descr = "This is a description";
     let service_execstart = "/bin/sleep 10";
     let service_execpre = "/bin/true";
@@ -87,7 +88,7 @@ fn successful(run_info: crate::units::ArcMutRuntimeInfo) {
     );
 }
 
-fn failing_startexec(run_info: crate::units::ArcMutRuntimeInfo) {
+fn failing_startexec(run_info: ArcMutRuntimeInfo) {
     let descr = "This is a description";
     let service_type = "oneshot";
     let service_execstart = "/bin/false";

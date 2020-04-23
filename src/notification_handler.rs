@@ -3,6 +3,7 @@
 //! streams from the notification sockets get parsed and applied to the respective service
 
 use crate::platform::reset_event_fd;
+use crate::runtime_info::*;
 use crate::services::Service;
 use crate::services::StdIo;
 use crate::units::*;

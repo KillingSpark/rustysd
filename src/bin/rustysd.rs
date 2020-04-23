@@ -7,6 +7,7 @@ use rustysd::control;
 use rustysd::logging;
 use rustysd::notification_handler;
 use rustysd::platform;
+use rustysd::runtime_info;
 use rustysd::signal_handler;
 use rustysd::socket_activation;
 use rustysd::units;
@@ -108,7 +109,7 @@ fn pid1_specific_setup() {
 #[cfg(not(target_os = "linux"))]
 fn pid1_specific_setup() {}
 
-fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> units::ArcMutRuntimeInfo {
+fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> runtime_info::ArcMutRuntimeInfo {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
     let unit_table = units::load_all_units(&conf.unit_dirs, &conf.target_unit).unwrap();
@@ -141,7 +142,7 @@ fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> units::ArcMutRun
 
     let pid_table = Mutex::new(std::collections::HashMap::new());
 
-    let run_info = Arc::new(RwLock::new(units::RuntimeInfo {
+    let run_info = Arc::new(RwLock::new(runtime_info::RuntimeInfo {
         unit_table: unit_table,
         pid_table: pid_table,
         fd_store: std::sync::RwLock::new(rustysd::fd_store::FDStore::default()),
@@ -155,24 +156,24 @@ fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> units::ArcMutRun
     run_info
 }
 
-fn start_notification_handler_thread(run_info: units::ArcMutRuntimeInfo) {
+fn start_notification_handler_thread(run_info: runtime_info::ArcMutRuntimeInfo) {
     std::thread::spawn(move || {
         notification_handler::handle_all_streams(run_info.clone());
     });
 }
-fn start_stdout_handler_thread(run_info: units::ArcMutRuntimeInfo) {
+fn start_stdout_handler_thread(run_info: runtime_info::ArcMutRuntimeInfo) {
     std::thread::spawn(move || {
         notification_handler::handle_all_std_out(run_info.clone());
     });
 }
-fn start_stderr_handler_thread(run_info: units::ArcMutRuntimeInfo) {
+fn start_stderr_handler_thread(run_info: runtime_info::ArcMutRuntimeInfo) {
     std::thread::spawn(move || {
         notification_handler::handle_all_std_err(run_info.clone());
     });
 }
 fn start_signal_handler_thread(
     signals: Signals,
-    run_info: units::ArcMutRuntimeInfo,
+    run_info: runtime_info::ArcMutRuntimeInfo,
 ) -> std::thread::JoinHandle<()> {
     let handle = std::thread::spawn(move || {
         // listen on signals from the child processes
