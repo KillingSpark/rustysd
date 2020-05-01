@@ -14,7 +14,8 @@ pub fn deactivate_unit_recursive(
     deactivate_unit_checkdeps(id_to_kill, run_info.clone())
 }
 
-pub fn deactivate_unit_checkdeps(id_to_kill: UnitId,
+pub fn deactivate_unit_checkdeps(
+    id_to_kill: UnitId,
     run_info: &RuntimeInfo,
 ) -> Result<(), UnitOperationError> {
     let unit = run_info.unit_table.get(&id_to_kill).unwrap();
@@ -88,5 +89,9 @@ pub fn reactivate_unit(
         "Reactivation of unit: {:?}. Deactivation ran. Activate again",
         id_to_restart
     );
-    crate::units::activate_unit_checkdeps(id_to_restart.clone(), run_info, ActivationSource::Regular)
+    crate::units::activate_unit_checkdeps(
+        id_to_restart.clone(),
+        run_info,
+        ActivationSource::Regular,
+    )
 }

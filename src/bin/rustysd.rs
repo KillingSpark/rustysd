@@ -294,7 +294,7 @@ fn main() {
         use std::convert::TryInto;
         run_info.config.target_unit.as_str().try_into().unwrap()
     };
-    
+
     // parallel startup of all services
     units::activate_needed_units(target_id, run_info.clone());
 
