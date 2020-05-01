@@ -38,6 +38,7 @@ pub enum Command {
     LoadAllNew,
     Remove(String),
     Stop(String),
+    StopAll(String),
     Shutdown,
 }
 
@@ -133,6 +134,24 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
                 }
             };
             Command::Stop(name)
+        }
+        "stop-all" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => s.clone(),
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => {
+                    return Err(ParseError::ParamsInvalid(format!(
+                        "Params must be a single string"
+                    )))
+                }
+            };
+            Command::StopAll(name)
         }
 
         "list-units" => {
@@ -402,6 +421,35 @@ pub fn execute_command(
             };
 
             match crate::units::deactivate_unit_checkdeps(id, run_info)
+                .map_err(|e| format!("{}", e))
+            {
+                Err(e) => {
+                    return Err(e);
+                }
+                Ok(_) => {
+                    // Happy
+                }
+            };
+        }
+        Command::StopAll(unit_name) => {
+            let run_info = &*run_info.read().unwrap();
+            let id = {
+                let units = find_units_with_name(&unit_name, &run_info.unit_table);
+                if units.len() > 1 {
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
+                    return Err(format!(
+                        "More than one unit found with name: {}: {:?}",
+                        unit_name, names
+                    ));
+                }
+                if units.len() == 0 {
+                    return Err(format!("No unit found with name: {}", unit_name));
+                }
+                let x = units[0].id.clone();
+                x
+            };
+
+            match crate::units::deactivate_unit_recursive(id, run_info)
                 .map_err(|e| format!("{}", e))
             {
                 Err(e) => {
