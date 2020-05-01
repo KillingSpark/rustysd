@@ -228,6 +228,7 @@ impl Service {
     }
 
     pub fn kill_all_remaining_processes(&mut self, name: &str) {
+        trace!("Kill all process for {}", name);
         if let Some(proc_group) = self.process_group {
             // TODO handle these errors
             match nix::sys::signal::kill(proc_group, nix::sys::signal::Signal::SIGKILL) {
@@ -509,10 +510,8 @@ impl Service {
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        if conf.startpost.is_empty() {
-            return Ok(());
-        }
-        let timeout = self.get_start_timeout(conf);
+        trace!("Run poststop for {}", name);
+        let timeout = self.get_stop_timeout(conf);
         let cmds = conf.stoppost.clone();
         let res = self.run_all_cmds(&cmds, id, name, timeout, run_info.clone());
 
@@ -522,7 +521,6 @@ impl Service {
         }
         self.pid = None;
         self.process_group = None;
-
         res
     }
 

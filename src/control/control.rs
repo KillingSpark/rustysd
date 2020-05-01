@@ -307,14 +307,10 @@ pub fn execute_command(
             };
 
             match crate::units::reactivate_unit(id, run_info).map_err(|e| format!("{}", e)) {
-                Err(e) => return Err(e),
-                Ok(StartResult::WaitForDependencies(deps)) => {
-                    return Err(format!(
-                        "Cannot start unit. It depends on these to be started first {:?}",
-                        deps
-                    ))
+                Err(e) => {
+                    return Err(e);
                 }
-                Ok(StartResult::Started(_)) => {
+                Ok(_) => {
                     // Happy
                 }
             };
@@ -358,7 +354,14 @@ pub fn execute_command(
                 x
             };
 
-            crate::units::deactivate_unit_recursive(id, run_info).map_err(|e| format!("{}", e))?;
+            match crate::units::deactivate_unit_checkdeps(id, run_info).map_err(|e| format!("{}", e)) {
+                Err(e) => {
+                    return Err(e);
+                }
+                Ok(_) => {
+                    // Happy
+                }
+            };
         }
         Command::Status(unit_name) => {
             let run_info = &*run_info.read().unwrap();

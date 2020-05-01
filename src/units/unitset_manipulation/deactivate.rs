@@ -11,15 +11,50 @@ pub fn deactivate_unit_recursive(
     };
     deactivate_units_recursive(kill_before_this, run_info)?;
 
-    deactivate_unit(id_to_kill, run_info.clone())
+    deactivate_unit_checkdeps(id_to_kill, run_info.clone())
 }
+
+pub fn deactivate_unit_checkdeps(id_to_kill: UnitId,
+    run_info: &RuntimeInfo,
+) -> Result<(), UnitOperationError> {
+    let unit = run_info.unit_table.get(&id_to_kill).unwrap();
+    let unkilled_depending =
+        unit.common
+            .dependencies
+            .kill_before_this()
+            .iter()
+            .fold(Vec::new(), |mut acc, elem| {
+                let elem_unit = run_info.unit_table.get(elem).unwrap();
+                let status_locked = elem_unit.common.status.read().unwrap();
+
+                if status_locked.is_started() {
+                    acc.push(elem.clone());
+                }
+                acc
+            });
+    if !unkilled_depending.is_empty() {
+        trace!(
+            "Unit: {} ignores deactivation. Not all units depending on this unit have been started (still waiting for: {:?})",
+            unit.id.name,
+            unkilled_depending,
+        );
+        return Err(UnitOperationError {
+            reason: UnitOperationErrorReason::DependencyError(unkilled_depending),
+            unit_name: unit.id.name.clone(),
+            unit_id: unit.id.clone(),
+        });
+    }
+
+    deactivate_unit(id_to_kill, run_info)
+}
+
 pub fn deactivate_unit(
     id_to_kill: UnitId,
     run_info: &RuntimeInfo,
 ) -> Result<(), UnitOperationError> {
-    // TODO deal with kill final
     let unit = run_info.unit_table.get(&id_to_kill).unwrap();
     unit.deactivate(run_info.clone())?;
+
     Ok(())
 }
 
@@ -38,7 +73,7 @@ pub fn deactivate_units(
     run_info: &RuntimeInfo,
 ) -> Result<(), UnitOperationError> {
     for id in ids_to_kill {
-        deactivate_unit(id, run_info.clone())?;
+        deactivate_unit_checkdeps(id, run_info.clone())?;
     }
     Ok(())
 }
@@ -53,5 +88,5 @@ pub fn reactivate_unit(
         "Reactivation of unit: {:?}. Deactivation ran. Activate again",
         id_to_restart
     );
-    crate::units::activate_unit(id_to_restart.clone(), run_info, ActivationSource::Regular)
+    crate::units::activate_unit_checkdeps(id_to_restart.clone(), run_info, ActivationSource::Regular)
 }

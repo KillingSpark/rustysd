@@ -373,6 +373,12 @@ impl Dependencies {
         self.after.dedup();
     }
 
+    pub fn kill_before_this(&self) -> Vec<UnitId> {
+        let mut ids = Vec::new();
+        ids.extend(self.required_by.iter().cloned());
+        ids
+    }
+
     /// Remove all occurences of this id from the vec
     fn remove_from_vec(ids: &mut Vec<UnitId>, id: &UnitId) {
         while let Some(idx) = ids.iter().position(|e| *e == *id) {

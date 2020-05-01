@@ -22,6 +22,7 @@ pub enum UnitOperationErrorReason {
     SocketCloseError(String),
     ServiceStartError(ServiceErrorReason),
     ServiceStopError(ServiceErrorReason),
+    DependencyError(Vec<UnitId>),
 }
 
 impl std::fmt::Display for UnitOperationError {
@@ -69,6 +70,13 @@ impl std::fmt::Display for UnitOperationError {
                     self.unit_name, self.unit_id, msg
                 )?;
             }
+            UnitOperationErrorReason::DependencyError(ids) => {
+                write!(
+                    f,
+                    "The unit {} (ID {}) failed to start/stop because these related units did not have the expected state: {:?}",
+                    self.unit_name, self.unit_id, ids
+                )?;
+            }
         }
         Ok(())
     }
@@ -89,7 +97,7 @@ fn activate_units_recursive(
             let tpool_copy2 = tpool_copy.clone();
             let errors_copy2 = errors_copy.clone();
 
-            match activate_unit(
+            match activate_unit_checkdeps(
                 id,
                 &*run_info_copy.read().unwrap(),
                 ActivationSource::Regular,
@@ -105,13 +113,14 @@ fn activate_units_recursive(
                     };
                     tpool_copy.execute(next_services_job);
                 }
-                Ok(StartResult::WaitForDependencies(_)) => {
-                    // Thats ok. The unit is waiting for more dependencies and will be
-                    // activated again when another dependency has finished starting
-                }
                 Err(e) => {
-                    error!("Error while activating unit {}", e);
-                    errors_copy.lock().unwrap().push(e);
+                    if let UnitOperationErrorReason::DependencyError(_) = e.reason {
+                        // Thats ok. The unit is waiting for more dependencies and will be
+                        // activated again when another dependency has finished starting
+                    } else {
+                        error!("Error while activating unit {}", e);
+                        errors_copy.lock().unwrap().push(e);
+                    }
                 }
             }
         });
@@ -121,7 +130,6 @@ fn activate_units_recursive(
 #[derive(Debug)]
 pub enum StartResult {
     Started(Vec<UnitId>),
-    WaitForDependencies(Vec<UnitId>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -139,13 +147,11 @@ impl ActivationSource {
     }
 }
 
-pub fn activate_unit(
+pub fn activate_unit_checkdeps(
     id_to_start: UnitId,
     run_info: &RuntimeInfo,
     source: ActivationSource,
 ) -> std::result::Result<StartResult, UnitOperationError> {
-    trace!("Activate id: {:?}", id_to_start);
-
     let unit = match run_info.unit_table.get(&id_to_start) {
         Some(unit) => unit,
         None => {
@@ -189,8 +195,36 @@ pub fn activate_unit(
             unit.id.name,
             unstarted_deps,
         );
-        return Ok(StartResult::WaitForDependencies(unstarted_deps));
+        return Err(UnitOperationError {
+            reason: UnitOperationErrorReason::DependencyError(unstarted_deps),
+            unit_name: unit.id.name.clone(),
+            unit_id: unit.id.clone(),
+        });
     }
+    activate_unit(id_to_start, run_info, source)
+}
+
+pub fn activate_unit(
+    id_to_start: UnitId,
+    run_info: &RuntimeInfo,
+    source: ActivationSource,
+) -> std::result::Result<StartResult, UnitOperationError> {
+    trace!("Activate id: {:?}", id_to_start);
+
+    let unit = match run_info.unit_table.get(&id_to_start) {
+        Some(unit) => unit,
+        None => {
+            // If this occurs, there is a flaw in the handling of dependencies
+            // IDs should be purged globally when units get removed
+            return Err(UnitOperationError {
+                reason: UnitOperationErrorReason::GenericStartError(
+                    "Tried to activate a unit that can not be found".into(),
+                ),
+                unit_name: id_to_start.name.clone(),
+                unit_id: id_to_start.clone(),
+            });
+        }
+    };
 
     let next_services_ids = unit.common.dependencies.before.clone();
 
