@@ -32,11 +32,12 @@ pub fn open_all_sockets(run_info: ArcMutRuntimeInfo, conf: &crate::config::Confi
 pub enum Command {
     ListUnits(Option<UnitIdKind>),
     Status(Option<String>),
-    Restart(String),
-    RestartAll(String),
     LoadNew(Vec<String>),
     LoadAllNew,
     Remove(String),
+    Restart(String),
+    Start(String),
+    StartAll(String),
     Stop(String),
     StopAll(String),
     Shutdown,
@@ -81,7 +82,7 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
             };
             Command::Restart(name)
         }
-        "restart-all" => {
+        "start" => {
             let name = match &call.params {
                 Some(params) => match params {
                     Value::String(s) => s.clone(),
@@ -97,7 +98,25 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
                     )))
                 }
             };
-            Command::RestartAll(name)
+            Command::Start(name)
+        }
+        "start-all" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => s.clone(),
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => {
+                    return Err(ParseError::ParamsInvalid(format!(
+                        "Params must be a single string"
+                    )))
+                }
+            };
+            Command::StartAll(name)
         }
         "remove" => {
             let name = match &call.params {
@@ -353,7 +372,37 @@ pub fn execute_command(
                 }
             };
         }
-        Command::RestartAll(unit_name) => {
+        Command::Start(unit_name) => {
+            let run_info = &*run_info.read().unwrap();
+            let id = {
+                let unit_table = &run_info.unit_table;
+                let units = find_units_with_name(&unit_name, unit_table);
+                if units.len() > 1 {
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
+                    return Err(format!(
+                        "More than one unit found with name: {}: {:?}",
+                        unit_name, names
+                    ));
+                }
+                if units.len() == 0 {
+                    return Err(format!("No unit found with name: {}", unit_name));
+                }
+                let x = units[0].id.clone();
+                x
+            };
+
+            match crate::units::activate_unit_checkdeps(id, run_info, ActivationSource::Regular)
+                .map_err(|e| format!("{}", e))
+            {
+                Err(e) => {
+                    return Err(e);
+                }
+                Ok(_) => {
+                    // Happy
+                }
+            };
+        }
+        Command::StartAll(unit_name) => {
             let id = {
                 let run_info_locked = &*run_info.read().unwrap();
                 let unit_table = &run_info_locked.unit_table;
