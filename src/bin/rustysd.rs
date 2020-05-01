@@ -289,8 +289,14 @@ fn main() {
 
     trace!("Started all helper threads. Start activating units");
 
+    let target_id: units::UnitId = {
+        let run_info: &runtime_info::RuntimeInfo = &*run_info.read().unwrap();
+        use std::convert::TryInto;
+        run_info.config.target_unit.as_str().try_into().unwrap()
+    };
+    
     // parallel startup of all services
-    units::activate_units(run_info.clone());
+    units::activate_needed_units(target_id, run_info.clone());
 
     handle.join().unwrap();
 }

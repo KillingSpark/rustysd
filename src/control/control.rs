@@ -33,6 +33,7 @@ pub enum Command {
     ListUnits(Option<UnitIdKind>),
     Status(Option<String>),
     Restart(String),
+    RestartAll(String),
     LoadNew(Vec<String>),
     LoadAllNew,
     Remove(String),
@@ -78,6 +79,24 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
                 }
             };
             Command::Restart(name)
+        }
+        "restart-all" => {
+            let name = match &call.params {
+                Some(params) => match params {
+                    Value::String(s) => s.clone(),
+                    _ => {
+                        return Err(ParseError::ParamsInvalid(format!(
+                            "Params must be a single string"
+                        )))
+                    }
+                },
+                None => {
+                    return Err(ParseError::ParamsInvalid(format!(
+                        "Params must be a single string"
+                    )))
+                }
+            };
+            Command::RestartAll(name)
         }
         "remove" => {
             let name = match &call.params {
@@ -315,6 +334,34 @@ pub fn execute_command(
                 }
             };
         }
+        Command::RestartAll(unit_name) => {
+            let id = {
+                let run_info_locked = &*run_info.read().unwrap();
+                let unit_table = &run_info_locked.unit_table;
+                let units = find_units_with_name(&unit_name, unit_table);
+                if units.len() > 1 {
+                    let names: Vec<_> = units.iter().map(|unit| unit.id.name.clone()).collect();
+                    return Err(format!(
+                        "More than one unit found with name: {}: {:?}",
+                        unit_name, names
+                    ));
+                }
+                if units.len() == 0 {
+                    return Err(format!("No unit found with name: {}", unit_name));
+                }
+                let x = units[0].id.clone();
+                x
+            };
+
+            let errs = crate::units::activate_needed_units(id, run_info);
+            if errs.len() > 0 {
+                let mut errstr = String::from("Errors while starting the units:");
+                for err in errs {
+                    errstr.push_str(&format!("\n{:?}", err));
+                }
+                return Err(errstr);
+            }
+        }
         Command::Remove(unit_name) => {
             let run_info = &mut *run_info.write().unwrap();
             let id = {
@@ -354,7 +401,9 @@ pub fn execute_command(
                 x
             };
 
-            match crate::units::deactivate_unit_checkdeps(id, run_info).map_err(|e| format!("{}", e)) {
+            match crate::units::deactivate_unit_checkdeps(id, run_info)
+                .map_err(|e| format!("{}", e))
+            {
                 Err(e) => {
                     return Err(e);
                 }

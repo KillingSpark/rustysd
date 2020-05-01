@@ -378,6 +378,23 @@ impl Dependencies {
         ids.extend(self.required_by.iter().cloned());
         ids
     }
+    pub fn start_before_this(&self) -> Vec<UnitId> {
+        let mut ids = Vec::new();
+        ids.extend(self.after.iter().cloned());
+        ids
+    }
+    pub fn start_concurrently_with_this(&self) -> Vec<UnitId> {
+        let mut ids = Vec::new();
+        ids.extend(self.wants.iter().cloned());
+        ids.extend(self.wanted_by.iter().cloned());
+        ids.extend(self.requires.iter().cloned());
+        ids.extend(self.required_by.iter().cloned());
+        let ids = ids
+            .into_iter()
+            .filter(|id| !self.after.contains(&id))
+            .collect();
+        ids
+    }
 
     /// Remove all occurences of this id from the vec
     fn remove_from_vec(ids: &mut Vec<UnitId>, id: &UnitId) {
