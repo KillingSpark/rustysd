@@ -34,6 +34,7 @@ pub enum Command {
     Status(Option<String>),
     LoadNew(Vec<String>),
     LoadAllNew,
+    LoadAllNewDry,
     Remove(String),
     Restart(String),
     Start(String),
@@ -202,6 +203,7 @@ fn parse_command(call: &super::jsonrpc2::Call) -> Result<Command, ParseError> {
         }
         "shutdown" => Command::Shutdown,
         "reload" => Command::LoadAllNew,
+        "reload-dry" => Command::LoadAllNewDry,
         "enable" => {
             let names = match &call.params {
                 Some(params) => match params {
@@ -614,6 +616,43 @@ pub fn execute_command(
             response_object.insert("Added".into(), serde_json::Value::Array(new_units_names));
             response_object.insert(
                 "Ignored".into(),
+                serde_json::Value::Array(ignored_units_names),
+            );
+            result_vec
+                .as_array_mut()
+                .unwrap()
+                .push(Value::Object(response_object));
+        }
+        Command::LoadAllNewDry => {
+            let run_info = &mut *run_info.write().unwrap();
+            let unit_table = &run_info.unit_table;
+            // get all units there are
+            let units = load_all_units(&run_info.config.unit_dirs, &run_info.config.target_unit)
+                .map_err(|e| format!("Error while loading unit definitons: {:?}", e))?;
+
+            // collect all names
+            let existing_names = unit_table
+                .values()
+                .map(|unit| unit.id.name.clone())
+                .collect::<Vec<_>>();
+
+            // filter out existing units
+            let mut ignored_units_names = Vec::new();
+            let mut new_units_names = Vec::new();
+            let mut new_units = std::collections::HashMap::new();
+            for (id, unit) in units {
+                if existing_names.contains(&unit.id.name) {
+                    ignored_units_names.push(Value::String(unit.id.name.clone()));
+                } else {
+                    new_units_names.push(Value::String(unit.id.name.clone()));
+                    new_units.insert(id, unit);
+                }
+            }
+
+            let mut response_object = serde_json::Map::new();
+            response_object.insert("Would add".into(), serde_json::Value::Array(new_units_names));
+            response_object.insert(
+                "Would ignore".into(),
                 serde_json::Value::Array(ignored_units_names),
             );
             result_vec
