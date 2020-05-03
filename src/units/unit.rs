@@ -32,6 +32,195 @@ pub struct ServiceSpecific {
     pub state: RwLock<ServiceState>,
 }
 
+impl SocketState {
+    fn activate(
+        &mut self,
+        id: &UnitId,
+        conf: &SocketConfig,
+        status: &RwLock<UnitStatus>,
+        run_info: &RuntimeInfo,
+    ) -> Result<UnitStatus, UnitOperationError> {
+        {
+            let mut status = status.write().unwrap();
+            if status.is_started() {
+                return Ok(status.clone());
+            }
+            *status = UnitStatus::Starting;
+        }
+
+        let open_res = self
+            .sock
+            .open_all(
+                conf,
+                id.name.clone(),
+                id.clone(),
+                &mut *run_info.fd_store.write().unwrap(),
+            )
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
+            });
+        match open_res {
+            Ok(_) => {
+                let mut status = status.write().unwrap();
+                *status = UnitStatus::Started(StatusStarted::Running);
+                run_info.notify_eventfds();
+                Ok(UnitStatus::Started(StatusStarted::Running))
+            }
+            Err(e) => {
+                let mut status = status.write().unwrap();
+                *status =
+                    UnitStatus::Stopped(StatusStopped::StoppedUnexpected, vec![e.reason.clone()]);
+                Err(e)
+            }
+        }
+    }
+
+    fn deactivate(
+        &mut self,
+        id: &UnitId,
+        conf: &SocketConfig,
+        status: &RwLock<UnitStatus>,
+        run_info: &RuntimeInfo,
+    ) -> Result<(), UnitOperationError> {
+        {
+            let mut status = status.write().unwrap();
+            if status.is_stopped() {
+                return Ok(());
+            }
+            *status = UnitStatus::Stopping;
+        }
+        let close_result = self
+            .sock
+            .close_all(
+                &conf,
+                id.name.clone(),
+                &mut *run_info.fd_store.write().unwrap(),
+            )
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::SocketCloseError(e),
+            });
+        match &close_result {
+            Ok(_) => {
+                let mut status = status.write().unwrap();
+                *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+            }
+            Err(e) => {
+                let mut status = status.write().unwrap();
+                *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![e.reason.clone()]);
+            }
+        };
+        close_result
+    }
+}
+
+impl ServiceState {
+    fn activate(
+        &mut self,
+        id: &UnitId,
+        conf: &ServiceConfig,
+        status: &RwLock<UnitStatus>,
+        run_info: &RuntimeInfo,
+        source: ActivationSource,
+    ) -> Result<UnitStatus, UnitOperationError> {
+        {
+            let mut status = status.write().unwrap();
+            match *status {
+                UnitStatus::Started(StatusStarted::WaitingForSocket) => {
+                    if source.is_socket_activation() {
+                        /* need activation */
+                    } else {
+                        return Ok(status.clone());
+                    }
+                }
+                UnitStatus::Started(StatusStarted::Running) => {
+                    return Ok(status.clone());
+                }
+                _ => { /* need activation */ }
+            }
+            *status = UnitStatus::Starting;
+        }
+        let start_res = self
+            .srvc
+            .start(conf, id.clone(), &id.name, run_info, source)
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::ServiceStartError(e),
+            });
+        match start_res {
+            Ok(crate::services::StartResult::Started) => {
+                {
+                    let mut status = status.write().unwrap();
+                    *status = UnitStatus::Started(StatusStarted::Running);
+                }
+                Ok(UnitStatus::Started(StatusStarted::Running))
+            }
+            Ok(crate::services::StartResult::WaitingForSocket) => {
+                {
+                    let mut status = status.write().unwrap();
+                    *status = UnitStatus::Started(StatusStarted::WaitingForSocket);
+                }
+                // tell socket activation to listen to these sockets again
+                for socket_id in &conf.sockets {
+                    if let Some(unit) = run_info.unit_table.get(socket_id) {
+                        if let Specific::Socket(sock) = &unit.specific {
+                            let mut_state = &mut *sock.state.write().unwrap();
+                            mut_state.sock.activated = false;
+                        }
+                    }
+                }
+                run_info.notify_eventfds();
+                Ok(UnitStatus::Started(StatusStarted::WaitingForSocket))
+            }
+            Err(e) => {
+                let mut status = status.write().unwrap();
+                *status =
+                    UnitStatus::Stopped(StatusStopped::StoppedUnexpected, vec![e.reason.clone()]);
+                Err(e)
+            }
+        }
+    }
+
+    fn deactivate(
+        &mut self,
+        id: &UnitId,
+        conf: &ServiceConfig,
+        status: &RwLock<UnitStatus>,
+        run_info: &RuntimeInfo,
+    ) -> Result<(), UnitOperationError> {
+        {
+            let mut status = status.write().unwrap();
+            if status.is_stopped() {
+                return Ok(());
+            }
+            *status = UnitStatus::Stopping;
+        }
+        let kill_result = self
+            .srvc
+            .kill(&conf, id.clone(), &id.name, run_info)
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::ServiceStopError(e),
+            });
+        match &kill_result {
+            Ok(_) => {
+                let mut status = status.write().unwrap();
+                *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+            }
+            Err(e) => {
+                let mut status = status.write().unwrap();
+                *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![e.reason.clone()]);
+            }
+        }
+        kill_result
+    }
+}
+
 impl ServiceSpecific {
     pub fn has_socket(&self, socket: &str) -> bool {
         self.conf.sockets.iter().any(|id| id.eq(socket))
@@ -130,111 +319,17 @@ impl Unit {
             }
             Specific::Socket(specific) => {
                 let state = &mut *specific.state.write().unwrap();
-                {
-                    let mut status = self.common.status.write().unwrap();
-                    if status.is_started() {
-                        return Ok(status.clone());
-                    }
-                    *status = UnitStatus::Starting;
-                }
-
-                let open_res = state
-                    .sock
-                    .open_all(
-                        &specific.conf,
-                        self.id.name.clone(),
-                        self.id.clone(),
-                        &mut *run_info.fd_store.write().unwrap(),
-                    )
-                    .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name.clone(),
-                        unit_id: self.id.clone(),
-                        reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
-                    });
-                match open_res {
-                    Ok(_) => {
-                        let mut status = self.common.status.write().unwrap();
-                        *status = UnitStatus::Started(StatusStarted::Running);
-                        run_info.notify_eventfds();
-                        Ok(UnitStatus::Started(StatusStarted::Running))
-                    }
-                    Err(e) => {
-                        let mut status = self.common.status.write().unwrap();
-                        *status = UnitStatus::Stopped(
-                            StatusStopped::StoppedUnexpected,
-                            vec![e.reason.clone()],
-                        );
-                        Err(e)
-                    }
-                }
+                state.activate(&self.id, &specific.conf, &self.common.status, run_info)
             }
             Specific::Service(specific) => {
                 let state = &mut *specific.state.write().unwrap();
-                {
-                    let mut status = self.common.status.write().unwrap();
-                    match *status {
-                        UnitStatus::Started(StatusStarted::WaitingForSocket) => {
-                            if source.is_socket_activation() {
-                                /* need activation */
-                            } else {
-                                return Ok(status.clone());
-                            }
-                        }
-                        UnitStatus::Started(StatusStarted::Running) => {
-                            return Ok(status.clone());
-                        }
-                        _ => { /* need activation */ }
-                    }
-                    *status = UnitStatus::Starting;
-                }
-                let start_res = state
-                    .srvc
-                    .start(
-                        &specific.conf,
-                        self.id.clone(),
-                        &self.id.name,
-                        run_info,
-                        source,
-                    )
-                    .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name.clone(),
-                        unit_id: self.id.clone(),
-                        reason: UnitOperationErrorReason::ServiceStartError(e),
-                    });
-                match start_res {
-                    Ok(crate::services::StartResult::Started) => {
-                        {
-                            let mut status = self.common.status.write().unwrap();
-                            *status = UnitStatus::Started(StatusStarted::Running);
-                        }
-                        Ok(UnitStatus::Started(StatusStarted::Running))
-                    }
-                    Ok(crate::services::StartResult::WaitingForSocket) => {
-                        {
-                            let mut status = self.common.status.write().unwrap();
-                            *status = UnitStatus::Started(StatusStarted::WaitingForSocket);
-                        }
-                        // tell socket activation to listen to these sockets again
-                        for socket_id in &specific.conf.sockets {
-                            if let Some(unit) = run_info.unit_table.get(socket_id) {
-                                if let Specific::Socket(sock) = &unit.specific {
-                                    let mut_state = &mut *sock.state.write().unwrap();
-                                    mut_state.sock.activated = false;
-                                }
-                            }
-                        }
-                        run_info.notify_eventfds();
-                        Ok(UnitStatus::Started(StatusStarted::WaitingForSocket))
-                    }
-                    Err(e) => {
-                        let mut status = self.common.status.write().unwrap();
-                        *status = UnitStatus::Stopped(
-                            StatusStopped::StoppedUnexpected,
-                            vec![e.reason.clone()],
-                        );
-                        Err(e)
-                    }
-                }
+                state.activate(
+                    &self.id,
+                    &specific.conf,
+                    &self.common.status,
+                    run_info,
+                    source,
+                )
             }
         }
     }
@@ -258,75 +353,17 @@ impl Unit {
                     return Ok(());
                 }
                 *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
+                Ok(())
             }
             Specific::Socket(specific) => {
                 let state = &mut *specific.state.write().unwrap();
-                {
-                    let mut status = self.common.status.write().unwrap();
-                    if status.is_stopped() {
-                        return Ok(());
-                    }
-                    *status = UnitStatus::Stopping;
-                }
-                let close_result = state
-                    .sock
-                    .close_all(
-                        &specific.conf,
-                        self.id.name.clone(),
-                        &mut *run_info.fd_store.write().unwrap(),
-                    )
-                    .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name.clone(),
-                        unit_id: self.id.clone(),
-                        reason: UnitOperationErrorReason::SocketCloseError(e),
-                    });
-                match close_result {
-                    Ok(_) => {
-                        let mut status = self.common.status.write().unwrap();
-                        *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
-                    }
-                    Err(e) => {
-                        let mut status = self.common.status.write().unwrap();
-                        *status = UnitStatus::Stopped(
-                            StatusStopped::StoppedFinal,
-                            vec![e.reason.clone()],
-                        );
-                    }
-                }
+                state.deactivate(&self.id, &specific.conf, &self.common.status, run_info)
             }
             Specific::Service(specific) => {
                 let state = &mut *specific.state.write().unwrap();
-                {
-                    let mut status = self.common.status.write().unwrap();
-                    if status.is_stopped() {
-                        return Ok(());
-                    }
-                    *status = UnitStatus::Stopping;
-                }
-                let kill_result = state
-                    .srvc
-                    .kill(&specific.conf, self.id.clone(), &self.id.name, run_info)
-                    .map_err(|e| UnitOperationError {
-                        unit_name: self.id.name.clone(),
-                        unit_id: self.id.clone(),
-                        reason: UnitOperationErrorReason::ServiceStopError(e),
-                    });
-                match kill_result {
-                    Ok(_) => {
-                        let mut status = self.common.status.write().unwrap();
-                        *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
-                    }
-                    Err(e) => {
-                        let mut status = self.common.status.write().unwrap();
-                        *status = UnitStatus::Stopped(
-                            StatusStopped::StoppedFinal,
-                            vec![e.reason.clone()],
-                        );
-                    }
-                }
+                state.deactivate(&self.id, &specific.conf, &self.common.status, run_info)
             }
         }
-        Ok(())
     }
 }
 
