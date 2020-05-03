@@ -21,10 +21,11 @@ pub fn prune_units(
         return Err(format!("Target unit {} not found", target_unit_name));
     };
     // This vec will record the unit ids that will be kept
-    let mut ids_to_keep = Vec::new();
+    let mut ids_to_keep = vec![startunit_id.clone()];
+    crate::units::collect_unit_start_subgraph(&mut ids_to_keep, unit_table);
 
     // walk the tree along the wants/requires/before/... relations and record which ids are needed
-    find_needed_units_recursive(startunit_id, unit_table, &mut ids_to_keep);
+    //find_needed_units_recursive(startunit_id, unit_table, &mut ids_to_keep);
 
     // Remove all units that have been deemed unnecessary
     let mut ids_to_remove = Vec::new();
@@ -40,6 +41,28 @@ pub fn prune_units(
 
     // Cleanup all removed IDs
     for unit in unit_table.values_mut() {
+        match &mut unit.specific {
+            Specific::Service(specific) => {
+                specific.conf.sockets = specific
+                    .conf
+                    .sockets
+                    .iter()
+                    .filter(|id| ids_to_keep.contains(id))
+                    .cloned()
+                    .collect()
+            }
+            Specific::Socket(specific) => {
+                specific.conf.services = specific
+                    .conf
+                    .services
+                    .iter()
+                    .filter(|id| ids_to_keep.contains(id))
+                    .cloned()
+                    .collect()
+            }
+            Specific::Target(_) => { /**/ }
+        }
+
         unit.common.dependencies.before = unit
             .common
             .dependencies
@@ -97,41 +120,6 @@ pub fn prune_units(
         unit.dedup_dependencies();
     }
     Ok(())
-}
-
-fn find_needed_units_recursive(
-    needed_id: UnitId,
-    unit_table: &HashMap<UnitId, Unit>,
-    visited_ids: &mut Vec<UnitId>,
-) {
-    if visited_ids.contains(&needed_id) {
-        return;
-    }
-    visited_ids.push(needed_id.clone());
-
-    let unit = unit_table.get(&needed_id).unwrap();
-    let mut new_needed_ids = Vec::new();
-
-    for new_id in &unit.common.dependencies.requires {
-        new_needed_ids.push(new_id.clone());
-    }
-    for new_id in &unit.common.dependencies.wants {
-        new_needed_ids.push(new_id.clone());
-    }
-    for new_id in &unit.common.dependencies.required_by {
-        new_needed_ids.push(new_id.clone());
-    }
-    for new_id in &unit.common.dependencies.wanted_by {
-        new_needed_ids.push(new_id.clone());
-    }
-    new_needed_ids.sort();
-    new_needed_ids.dedup();
-
-    trace!("Id {:?} references ids: {:?}", needed_id, new_needed_ids);
-
-    for new_id in &new_needed_ids {
-        find_needed_units_recursive(new_id.clone(), unit_table, visited_ids);
-    }
 }
 
 /// make edges between units visible on bot sides: required <-> required_by  after <-> before
