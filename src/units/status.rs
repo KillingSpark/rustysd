@@ -4,8 +4,9 @@ use crate::units::*;
 pub enum UnitStatus {
     NeverStarted,
     Starting,
-    Started(StatusStarted),
     Stopping,
+    Restarting,
+    Started(StatusStarted),
     Stopped(StatusStopped, Vec<UnitOperationErrorReason>),
 }
 

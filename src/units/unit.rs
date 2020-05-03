@@ -115,6 +115,75 @@ impl SocketState {
         };
         close_result
     }
+
+    fn reactivate(
+        &mut self,
+        id: &UnitId,
+        conf: &SocketConfig,
+        status: &RwLock<UnitStatus>,
+        run_info: &RuntimeInfo,
+    ) -> Result<(), UnitOperationError> {
+        // Check status and update. The unit will be in the 'Restarting' State until this operation has
+        // reached some endpoint. If the unit was already stopped, this is just a normal activate operation,
+        // and treated as such
+        {
+            let mut status_locked = status.write().unwrap();
+            if status_locked.is_stopped() {
+                // unlock, because activate needs to lock it itself.
+                std::mem::drop(status_locked);
+                return self.activate(id, conf, status, run_info).map(|_| ());
+            }
+            *status_locked = UnitStatus::Restarting;
+        }
+        let close_result = self
+            .sock
+            .close_all(
+                &conf,
+                id.name.clone(),
+                &mut *run_info.fd_store.write().unwrap(),
+            )
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::SocketCloseError(e),
+            });
+
+        // If closing failed, dont try to restart but fail early
+        if let Err(error) = close_result {
+            let mut status = status.write().unwrap();
+            *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![error.reason.clone()]);
+            return Err(error);
+        }
+
+        // Reopen and set the status according to the result
+        let open_res = self
+            .sock
+            .open_all(
+                conf,
+                id.name.clone(),
+                id.clone(),
+                &mut *run_info.fd_store.write().unwrap(),
+            )
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::SocketOpenError(format!("{}", e)),
+            });
+        match open_res {
+            Ok(_) => {
+                let mut status = status.write().unwrap();
+                *status = UnitStatus::Started(StatusStarted::Running);
+                run_info.notify_eventfds();
+                Ok(())
+            }
+            Err(e) => {
+                let mut status = status.write().unwrap();
+                *status =
+                    UnitStatus::Stopped(StatusStopped::StoppedUnexpected, vec![e.reason.clone()]);
+                Err(e)
+            }
+        }
+    }
 }
 
 impl ServiceState {
@@ -218,6 +287,86 @@ impl ServiceState {
             }
         }
         kill_result
+    }
+    fn reactivate(
+        &mut self,
+        id: &UnitId,
+        conf: &ServiceConfig,
+        status: &RwLock<UnitStatus>,
+        run_info: &RuntimeInfo,
+        source: ActivationSource,
+    ) -> Result<(), UnitOperationError> {
+        // Check status and update. The unit will be in the 'Restarting' State until this operation has
+        // reached some endpoint. If the unit was already stopped, this is just a normal activate operation,
+        // and treated as such
+        {
+            let mut status_locked = status.write().unwrap();
+            if status_locked.is_stopped() {
+                // unlock, because activate needs to lock it itself.
+                std::mem::drop(status_locked);
+                return self
+                    .activate(id, conf, status, run_info, source)
+                    .map(|_| ());
+            }
+            *status_locked = UnitStatus::Restarting;
+        }
+        let kill_result = self
+            .srvc
+            .kill(&conf, id.clone(), &id.name, run_info)
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::ServiceStopError(e),
+            });
+
+        // If killing failed, dont try to restart but fail early
+        if let Err(error) = kill_result {
+            let mut status = status.write().unwrap();
+            *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![error.reason.clone()]);
+            return Err(error);
+        }
+
+        // Restart and set the status according to the result
+        let start_res = self
+            .srvc
+            .start(conf, id.clone(), &id.name, run_info, source)
+            .map_err(|e| UnitOperationError {
+                unit_name: id.name.clone(),
+                unit_id: id.clone(),
+                reason: UnitOperationErrorReason::ServiceStartError(e),
+            });
+        match start_res {
+            Ok(crate::services::StartResult::Started) => {
+                {
+                    let mut status = status.write().unwrap();
+                    *status = UnitStatus::Started(StatusStarted::Running);
+                }
+                Ok(())
+            }
+            Ok(crate::services::StartResult::WaitingForSocket) => {
+                {
+                    let mut status = status.write().unwrap();
+                    *status = UnitStatus::Started(StatusStarted::WaitingForSocket);
+                }
+                // tell socket activation to listen to these sockets again
+                for socket_id in &conf.sockets {
+                    if let Some(unit) = run_info.unit_table.get(socket_id) {
+                        if let Specific::Socket(sock) = &unit.specific {
+                            let mut_state = &mut *sock.state.write().unwrap();
+                            mut_state.sock.activated = false;
+                        }
+                    }
+                }
+                run_info.notify_eventfds();
+                Ok(())
+            }
+            Err(e) => {
+                let mut status = status.write().unwrap();
+                *status =
+                    UnitStatus::Stopped(StatusStopped::StoppedUnexpected, vec![e.reason.clone()]);
+                Err(e)
+            }
+        }
     }
 }
 
@@ -344,7 +493,6 @@ impl Unit {
     /// 1. Update status depending on the results
     /// 1. return
     pub fn deactivate(&self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
-        // TODO change status here!
         trace!("Deactivate unit: {}", self.id.name);
         match &self.specific {
             Specific::Target(_) => {
@@ -362,6 +510,50 @@ impl Unit {
             Specific::Service(specific) => {
                 let state = &mut *specific.state.write().unwrap();
                 state.deactivate(&self.id, &specific.conf, &self.common.status, run_info)
+            }
+        }
+    }
+    /// This rectivates the unit and manages the state transitions. It reports back any
+    /// errors encountered while stopping the unit.
+    ///
+    /// If the unit was stopped this just calls activate.
+    ///
+    /// This always happens in this order:
+    /// 1. Lock unit mutable state
+    /// 1. Update status to 'Restarting'
+    /// 1. Do unit specific deactivation
+    /// 1. If this fails: Update status and return
+    /// 1. Do unit specific activation
+    /// 1. Update status according to the result
+    /// 1. return
+    pub fn reactivate(
+        &self,
+        run_info: &RuntimeInfo,
+        source: ActivationSource,
+    ) -> Result<(), UnitOperationError> {
+        trace!("Reactivate unit: {}", self.id.name);
+        match &self.specific {
+            Specific::Target(_) => {
+                let mut status = self.common.status.write().unwrap();
+                if status.is_stopped() {
+                    return Ok(());
+                }
+                *status = UnitStatus::Started(StatusStarted::Running);
+                Ok(())
+            }
+            Specific::Socket(specific) => {
+                let state = &mut *specific.state.write().unwrap();
+                state.reactivate(&self.id, &specific.conf, &self.common.status, run_info)
+            }
+            Specific::Service(specific) => {
+                let state = &mut *specific.state.write().unwrap();
+                state.reactivate(
+                    &self.id,
+                    &specific.conf,
+                    &self.common.status,
+                    run_info,
+                    source,
+                )
             }
         }
     }

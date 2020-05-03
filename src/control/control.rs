@@ -365,7 +365,9 @@ pub fn execute_command(
                 x
             };
 
-            match crate::units::reactivate_unit(id, run_info).map_err(|e| format!("{}", e)) {
+            match crate::units::reactivate_unit_checkdeps(id, run_info)
+                .map_err(|e| format!("{}", e))
+            {
                 Err(e) => {
                     return Err(e);
                 }
