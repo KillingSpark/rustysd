@@ -176,6 +176,49 @@ fn test_unit_ordering() {
         .dependencies
         .after
         .contains(&id1));
+
+    // Test the collection of start subgraphs
+    // add a new unrelated unit, that should never occur in any of these operations for {1,2,3}.target
+    let target4_str = format!(
+        "
+    [Unit]
+    Description = {}
+    
+    ",
+        "Target"
+    );
+    let parsed_file = crate::units::parse_file(&target4_str).unwrap();
+    let target4_unit =
+        crate::units::parse_target(parsed_file, &std::path::PathBuf::from("/path/to/4.target"))
+            .unwrap();
+    let target4_unit: Unit = target4_unit.try_into().unwrap();
+    let id4 = target4_unit.id.clone();
+    unit_table.insert(target4_unit.id.clone(), target4_unit);
+
+    // 3.target needs all units
+    let mut ids_to_start = vec![id3.clone()];
+    crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
+    ids_to_start.sort();
+    assert_eq!(ids_to_start, vec![id1.clone(), id2.clone(), id3.clone()]);
+    
+    // 2.target needs 1 and 2
+    let mut ids_to_start = vec![id2.clone()];
+    crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
+    ids_to_start.sort();
+    assert_eq!(ids_to_start, vec![id1.clone(), id2.clone()]);
+    
+    
+    // 1.target needs only 1
+    let mut ids_to_start = vec![id1.clone()];
+    crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
+    ids_to_start.sort();
+    assert_eq!(ids_to_start, vec![id1.clone()]);
+    
+    // 4.target needs only 4
+    let mut ids_to_start = vec![id4.clone()];
+    crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
+    ids_to_start.sort();
+    assert_eq!(ids_to_start, vec![id4.clone()]);
 }
 
 #[test]

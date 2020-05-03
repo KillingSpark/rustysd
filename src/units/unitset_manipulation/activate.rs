@@ -82,7 +82,7 @@ impl std::fmt::Display for UnitOperationError {
     }
 }
 
-fn unstarted_deps(id: &UnitId, run_info: &RuntimeInfo) -> Vec<UnitId> {
+pub fn unstarted_deps(id: &UnitId, run_info: &RuntimeInfo) -> Vec<UnitId> {
     let unit = match run_info.unit_table.get(id) {
         Some(unit) => unit,
         None => {

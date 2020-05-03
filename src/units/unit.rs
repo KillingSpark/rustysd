@@ -386,9 +386,7 @@ impl Dependencies {
     pub fn start_concurrently_with_this(&self) -> Vec<UnitId> {
         let mut ids = Vec::new();
         ids.extend(self.wants.iter().cloned());
-        ids.extend(self.wanted_by.iter().cloned());
         ids.extend(self.requires.iter().cloned());
-        ids.extend(self.required_by.iter().cloned());
         let ids = ids
             .into_iter()
             .filter(|id| !self.after.contains(&id))
