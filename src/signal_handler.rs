@@ -27,7 +27,7 @@ pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo) {
                         });
                 }
                 signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
-                    println!("Received termination signal. Rustysd checking out");
+                    info!("Received termination signal. Rustysd checking out");
                     crate::shutdown::shutdown_sequence(run_info.clone());
                 }
 

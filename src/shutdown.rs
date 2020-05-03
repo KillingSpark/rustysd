@@ -120,7 +120,7 @@ static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 pub fn shutdown_sequence(run_info: ArcMutRuntimeInfo) {
     if SHUTTING_DOWN.compare_and_swap(false, true, std::sync::atomic::Ordering::SeqCst) {
         // is alerady shutting down. Exit the process.
-        println!("Got a second termination signal. Exiting potentially dirty");
+        warn!("Got a second termination signal. Exiting potentially dirty");
         std::process::exit(0);
     }
 
@@ -166,7 +166,7 @@ pub fn shutdown_sequence(run_info: ArcMutRuntimeInfo) {
             .map_err(|e| error!("Error while cleaning up cgroups: {}", e));
         }
 
-        println!("Shutdown finished");
+        info!("Shutdown finished");
         std::process::exit(0);
     });
 }
