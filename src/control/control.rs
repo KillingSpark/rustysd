@@ -650,7 +650,10 @@ pub fn execute_command(
             }
 
             let mut response_object = serde_json::Map::new();
-            response_object.insert("Would add".into(), serde_json::Value::Array(new_units_names));
+            response_object.insert(
+                "Would add".into(),
+                serde_json::Value::Array(new_units_names),
+            );
             response_object.insert(
                 "Would ignore".into(),
                 serde_json::Value::Array(ignored_units_names),

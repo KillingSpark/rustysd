@@ -200,20 +200,19 @@ fn test_unit_ordering() {
     crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
     ids_to_start.sort();
     assert_eq!(ids_to_start, vec![id1.clone(), id2.clone(), id3.clone()]);
-    
+
     // 2.target needs 1 and 2
     let mut ids_to_start = vec![id2.clone()];
     crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
     ids_to_start.sort();
     assert_eq!(ids_to_start, vec![id1.clone(), id2.clone()]);
-    
-    
+
     // 1.target needs only 1
     let mut ids_to_start = vec![id1.clone()];
     crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
     ids_to_start.sort();
     assert_eq!(ids_to_start, vec![id1.clone()]);
-    
+
     // 4.target needs only 4
     let mut ids_to_start = vec![id4.clone()];
     crate::units::collect_unit_start_subgraph(&mut ids_to_start, &unit_table);
