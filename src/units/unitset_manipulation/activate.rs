@@ -122,7 +122,7 @@ pub enum StartResult {
     Started(Vec<UnitId>),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivationSource {
     Regular,
     SocketActivation,

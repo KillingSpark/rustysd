@@ -40,14 +40,6 @@ impl SocketState {
         status: &RwLock<UnitStatus>,
         run_info: &RuntimeInfo,
     ) -> Result<UnitStatus, UnitOperationError> {
-        {
-            let mut status = status.write().unwrap();
-            if status.is_started() {
-                return Ok(status.clone());
-            }
-            *status = UnitStatus::Starting;
-        }
-
         let open_res = self
             .sock
             .open_all(
@@ -84,13 +76,6 @@ impl SocketState {
         status: &RwLock<UnitStatus>,
         run_info: &RuntimeInfo,
     ) -> Result<(), UnitOperationError> {
-        {
-            let mut status = status.write().unwrap();
-            if status.is_stopped() {
-                return Ok(());
-            }
-            *status = UnitStatus::Stopping;
-        }
         let close_result = self
             .sock
             .close_all(
@@ -123,18 +108,6 @@ impl SocketState {
         status: &RwLock<UnitStatus>,
         run_info: &RuntimeInfo,
     ) -> Result<(), UnitOperationError> {
-        // Check status and update. The unit will be in the 'Restarting' State until this operation has
-        // reached some endpoint. If the unit was already stopped, this is just a normal activate operation,
-        // and treated as such
-        {
-            let mut status_locked = status.write().unwrap();
-            if status_locked.is_stopped() {
-                // unlock, because activate needs to lock it itself.
-                std::mem::drop(status_locked);
-                return self.activate(id, conf, status, run_info).map(|_| ());
-            }
-            *status_locked = UnitStatus::Restarting;
-        }
         let close_result = self
             .sock
             .close_all(
@@ -195,23 +168,6 @@ impl ServiceState {
         run_info: &RuntimeInfo,
         source: ActivationSource,
     ) -> Result<UnitStatus, UnitOperationError> {
-        {
-            let mut status = status.write().unwrap();
-            match *status {
-                UnitStatus::Started(StatusStarted::WaitingForSocket) => {
-                    if source.is_socket_activation() {
-                        /* need activation */
-                    } else {
-                        return Ok(status.clone());
-                    }
-                }
-                UnitStatus::Started(StatusStarted::Running) => {
-                    return Ok(status.clone());
-                }
-                _ => { /* need activation */ }
-            }
-            *status = UnitStatus::Starting;
-        }
         let start_res = self
             .srvc
             .start(conf, id.clone(), &id.name, run_info, source)
@@ -261,13 +217,6 @@ impl ServiceState {
         status: &RwLock<UnitStatus>,
         run_info: &RuntimeInfo,
     ) -> Result<(), UnitOperationError> {
-        {
-            let mut status = status.write().unwrap();
-            if status.is_stopped() {
-                return Ok(());
-            }
-            *status = UnitStatus::Stopping;
-        }
         let kill_result = self
             .srvc
             .kill(&conf, id.clone(), &id.name, run_info)
@@ -296,20 +245,6 @@ impl ServiceState {
         run_info: &RuntimeInfo,
         source: ActivationSource,
     ) -> Result<(), UnitOperationError> {
-        // Check status and update. The unit will be in the 'Restarting' State until this operation has
-        // reached some endpoint. If the unit was already stopped, this is just a normal activate operation,
-        // and treated as such
-        {
-            let mut status_locked = status.write().unwrap();
-            if status_locked.is_stopped() {
-                // unlock, because activate needs to lock it itself.
-                std::mem::drop(status_locked);
-                return self
-                    .activate(id, conf, status, run_info, source)
-                    .map(|_| ());
-            }
-            *status_locked = UnitStatus::Restarting;
-        }
         let kill_result = self
             .srvc
             .kill(&conf, id.clone(), &id.name, run_info)
@@ -387,7 +322,9 @@ impl SocketSpecific {
     }
 }
 
-pub struct TargetSpecific {}
+pub struct TargetSpecific {
+    pub state: RwLock<TargetState>,
+}
 
 #[derive(Default)]
 /// All units have some common mutable state
@@ -406,6 +343,18 @@ pub struct SocketState {
 }
 pub struct TargetState {
     pub common: CommonState,
+}
+
+enum LockedState<'a> {
+    Service(
+        std::sync::RwLockWriteGuard<'a, ServiceState>,
+        &'a ServiceConfig,
+    ),
+    Socket(
+        std::sync::RwLockWriteGuard<'a, SocketState>,
+        &'a SocketConfig,
+    ),
+    Target(std::sync::RwLockWriteGuard<'a, TargetState>),
 }
 
 impl Unit {
@@ -440,22 +389,172 @@ impl Unit {
         self.common.dependencies.dedup();
     }
 
+    /// Check if the transition to state 'Starting' can be done
+    ///
+    /// This is the case if:
+    /// 1. All units that have a before relation to this unit have been run at least once
+    /// 1. All of the above that are required by this unit are in the state 'Started'
+    fn state_transition_starting(&self, run_info: &RuntimeInfo) -> Result<(), Vec<UnitId>> {
+        let (mut self_lock, others) = aquire_locks(
+            vec![self.id.clone()],
+            self.common.dependencies.after.clone(),
+            &run_info.unit_table,
+        );
+
+        let unstarted_deps = others
+            .iter()
+            .fold(Vec::new(), |mut acc, (id, status_locked)| {
+                let required = self.common.dependencies.requires.contains(id);
+                let ready = if required {
+                    status_locked.is_started()
+                } else {
+                    **status_locked != UnitStatus::NeverStarted
+                };
+
+                if !ready {
+                    acc.push(id.clone());
+                }
+                acc
+            });
+
+        if unstarted_deps.is_empty() {
+            **self_lock.get_mut(&self.id).unwrap() = UnitStatus::Starting;
+            Ok(())
+        } else {
+            Err(unstarted_deps)
+        }
+        // All locks are released again here
+    }
+
+    /// Check if the transition to state 'Restarting' can be done. Returns whether the status before was
+    /// Started, which requires a full restart.
+    ///
+    /// This is the case if:
+    /// 1. All units that have a before relation to this unit have been run at least once
+    /// 1. All of the above that are required by this unit are in the state 'Started'
+    fn state_transition_restarting(&self, run_info: &RuntimeInfo) -> Result<bool, Vec<UnitId>> {
+        let (mut self_lock, others) = aquire_locks(
+            vec![self.id.clone()],
+            self.common.dependencies.after.clone(),
+            &run_info.unit_table,
+        );
+
+        let unstarted_deps = others
+            .iter()
+            .fold(Vec::new(), |mut acc, (id, status_locked)| {
+                let required = self.common.dependencies.requires.contains(id);
+                let ready = if required {
+                    status_locked.is_started()
+                } else {
+                    **status_locked != UnitStatus::NeverStarted
+                };
+
+                if !ready {
+                    acc.push(id.clone());
+                }
+                acc
+            });
+
+        if unstarted_deps.is_empty() {
+            let need_full_restart = self_lock.get_mut(&self.id).unwrap().is_started();
+            **self_lock.get_mut(&self.id).unwrap() = UnitStatus::Restarting;
+            Ok(need_full_restart)
+        } else {
+            Err(unstarted_deps)
+        }
+        // All locks are released again here
+    }
+
+    /// Check if the transition to state 'Stopping' can be done
+    ///
+    /// This is the case if:
+    /// 1. All units that have a requires relation to this unit have been stopped
+    fn state_transition_stopping(&self, run_info: &RuntimeInfo) -> Result<(), Vec<UnitId>> {
+        let (mut self_lock, others) = aquire_locks(
+            vec![self.id.clone()],
+            self.common.dependencies.kill_before_this(),
+            &run_info.unit_table,
+        );
+
+        let unkilled_depending = others
+            .iter()
+            .fold(Vec::new(), |mut acc, (id, status_locked)| {
+                if status_locked.is_started() {
+                    acc.push(id.clone());
+                }
+                acc
+            });
+
+        if unkilled_depending.is_empty() {
+            **self_lock.get_mut(&self.id).unwrap() = UnitStatus::Stopping;
+            Ok(())
+        } else {
+            Err(unkilled_depending)
+        }
+        // All locks are released again here
+    }
+
     /// This activates the unit and manages the state transitions. It reports back the new unit status or any
     /// errors encountered while starting the unit. Note that these errors are also recorded in the units status.
-    ///
-    /// This always happens in this order:
-    /// 1. Lock unit mutable state
-    /// 1. Update status to 'Starting'
-    /// 1. Do unit specific activation
-    /// 1. Update status depending on the results
-    /// 1. return
     pub fn activate(
         &self,
         run_info: &RuntimeInfo,
         source: ActivationSource,
     ) -> Result<UnitStatus, UnitOperationError> {
-        match &self.specific {
-            Specific::Target(_) => {
+        let state = match &self.specific {
+            Specific::Service(specific) => {
+                LockedState::Service(specific.state.write().unwrap(), &specific.conf)
+            }
+            Specific::Socket(specific) => {
+                LockedState::Socket(specific.state.write().unwrap(), &specific.conf)
+            }
+            Specific::Target(specific) => LockedState::Target(specific.state.write().unwrap()),
+        };
+
+        {
+            let self_status = &*self.common.status.read().unwrap();
+            match self_status {
+                UnitStatus::Started(StatusStarted::WaitingForSocket) => {
+                    if source == ActivationSource::SocketActivation {
+                        // Need activation
+                    } else {
+                        // Dont need activation
+                        return Ok(self_status.clone());
+                    }
+                }
+                UnitStatus::Started(_) => {
+                    // Dont need activation
+                    return Ok(self_status.clone());
+                }
+                UnitStatus::Stopped(_, _) => {
+                    if source == ActivationSource::SocketActivation {
+                        // Dont need activation
+                        return Ok(self_status.clone());
+                    } else {
+                        // Need activation
+                    }
+                }
+                _ => {
+                    // Need activation
+                }
+            }
+        }
+
+        self.state_transition_starting(run_info).map_err(|bad_ids| {
+            trace!(
+                "Unit: {} ignores activation. Not all dependencies have been started (still waiting for: {:?})",
+                self.id.name,
+                bad_ids,
+            );
+            UnitOperationError {
+                reason: UnitOperationErrorReason::DependencyError(bad_ids),
+                unit_name: self.id.name.clone(),
+                unit_id: self.id.clone(),
+            }
+        })?;
+
+        match state {
+            LockedState::Target(_state) => {
                 {
                     let mut status = self.common.status.write().unwrap();
                     if status.is_started() {
@@ -466,94 +565,142 @@ impl Unit {
                 trace!("Reached target {}", self.id.name);
                 Ok(UnitStatus::Started(StatusStarted::Running))
             }
-            Specific::Socket(specific) => {
-                let state = &mut *specific.state.write().unwrap();
-                state.activate(&self.id, &specific.conf, &self.common.status, run_info)
+            LockedState::Socket(mut state, conf) => {
+                let state = &mut *state;
+                state.activate(&self.id, conf, &self.common.status, run_info)
             }
-            Specific::Service(specific) => {
-                let state = &mut *specific.state.write().unwrap();
-                state.activate(
-                    &self.id,
-                    &specific.conf,
-                    &self.common.status,
-                    run_info,
-                    source,
-                )
+            LockedState::Service(mut state, conf) => {
+                let state = &mut *state;
+                state.activate(&self.id, conf, &self.common.status, run_info, source)
             }
         }
     }
 
     /// This dectivates the unit and manages the state transitions. It reports back any
-    /// errors encountered while stopping the unit.
-    ///
-    /// This always happens in this order:
-    /// 1. Lock unit mutable state
-    /// 1. Update status to 'Stopping'
-    /// 1. Do unit specific deactivation
-    /// 1. Update status depending on the results
-    /// 1. return
+    /// errors encountered while stopping the unit
     pub fn deactivate(&self, run_info: &RuntimeInfo) -> Result<(), UnitOperationError> {
-        trace!("Deactivate unit: {}", self.id.name);
-        match &self.specific {
-            Specific::Target(_) => {
-                let mut status = self.common.status.write().unwrap();
-                if status.is_stopped() {
+        let state = match &self.specific {
+            Specific::Service(specific) => {
+                LockedState::Service(specific.state.write().unwrap(), &specific.conf)
+            }
+            Specific::Socket(specific) => {
+                LockedState::Socket(specific.state.write().unwrap(), &specific.conf)
+            }
+            Specific::Target(specific) => LockedState::Target(specific.state.write().unwrap()),
+        };
+
+        {
+            let self_status = &*self.common.status.read().unwrap();
+            match self_status {
+                UnitStatus::Stopped(_, _) => {
                     return Ok(());
                 }
+                _ => {
+                    // Need deactivation
+                }
+            }
+        }
+
+        self.state_transition_stopping(run_info).map_err(|bad_ids| {
+            trace!(
+                "Unit: {} ignores deactivation. Not all units depending on this unit have been started (still waiting for: {:?})",
+                self.id.name,
+                bad_ids,
+            );
+            UnitOperationError {
+                reason: UnitOperationErrorReason::DependencyError(bad_ids),
+                unit_name: self.id.name.clone(),
+                unit_id: self.id.clone(),
+            }
+        })?;
+
+        trace!("Deactivate unit: {}", self.id.name);
+        match state {
+            LockedState::Target(_) => {
+                let mut status = self.common.status.write().unwrap();
                 *status = UnitStatus::Stopped(StatusStopped::StoppedFinal, vec![]);
                 Ok(())
             }
-            Specific::Socket(specific) => {
-                let state = &mut *specific.state.write().unwrap();
-                state.deactivate(&self.id, &specific.conf, &self.common.status, run_info)
+            LockedState::Socket(mut state, conf) => {
+                let state = &mut *state;
+                state.deactivate(&self.id, conf, &self.common.status, run_info)
             }
-            Specific::Service(specific) => {
-                let state = &mut *specific.state.write().unwrap();
-                state.deactivate(&self.id, &specific.conf, &self.common.status, run_info)
+            LockedState::Service(mut state, conf) => {
+                let state = &mut *state;
+                state.deactivate(&self.id, conf, &self.common.status, run_info)
             }
         }
     }
+
     /// This rectivates the unit and manages the state transitions. It reports back any
     /// errors encountered while stopping the unit.
     ///
     /// If the unit was stopped this just calls activate.
-    ///
-    /// This always happens in this order:
-    /// 1. Lock unit mutable state
-    /// 1. Update status to 'Restarting'
-    /// 1. Do unit specific deactivation
-    /// 1. If this fails: Update status and return
-    /// 1. Do unit specific activation
-    /// 1. Update status according to the result
-    /// 1. return
     pub fn reactivate(
         &self,
         run_info: &RuntimeInfo,
         source: ActivationSource,
     ) -> Result<(), UnitOperationError> {
         trace!("Reactivate unit: {}", self.id.name);
-        match &self.specific {
-            Specific::Target(_) => {
-                let mut status = self.common.status.write().unwrap();
-                if status.is_stopped() {
-                    return Ok(());
-                }
-                *status = UnitStatus::Started(StatusStarted::Running);
-                Ok(())
+
+        let state = match &self.specific {
+            Specific::Service(specific) => {
+                LockedState::Service(specific.state.write().unwrap(), &specific.conf)
             }
             Specific::Socket(specific) => {
-                let state = &mut *specific.state.write().unwrap();
-                state.reactivate(&self.id, &specific.conf, &self.common.status, run_info)
+                LockedState::Socket(specific.state.write().unwrap(), &specific.conf)
             }
-            Specific::Service(specific) => {
-                let state = &mut *specific.state.write().unwrap();
-                state.reactivate(
-                    &self.id,
-                    &specific.conf,
-                    &self.common.status,
-                    run_info,
-                    source,
-                )
+            Specific::Target(specific) => LockedState::Target(specific.state.write().unwrap()),
+        };
+
+        let need_full_restart = self.state_transition_restarting(run_info).map_err(|bad_ids| {
+            trace!(
+                "Unit: {} ignores deactivation. Not all units depending on this unit have been started (still waiting for: {:?})",
+                self.id.name,
+                bad_ids,
+            );
+            UnitOperationError {
+                reason: UnitOperationErrorReason::DependencyError(bad_ids),
+                unit_name: self.id.name.clone(),
+                unit_id: self.id.clone(),
+            }
+        })?;
+
+        if need_full_restart {
+            match state {
+                LockedState::Target(_) => {
+                    let mut status = self.common.status.write().unwrap();
+                    *status = UnitStatus::Started(StatusStarted::Running);
+                    Ok(())
+                }
+                LockedState::Socket(mut state, conf) => {
+                    let state = &mut *state;
+                    state.reactivate(&self.id, conf, &self.common.status, run_info)
+                }
+                LockedState::Service(mut state, conf) => {
+                    let state = &mut *state;
+                    state.reactivate(&self.id, conf, &self.common.status, run_info, source)
+                }
+            }
+        } else {
+            match state {
+                LockedState::Target(_) => {
+                    let mut status = self.common.status.write().unwrap();
+                    *status = UnitStatus::Started(StatusStarted::Running);
+                    Ok(())
+                }
+                LockedState::Socket(mut state, conf) => {
+                    let state = &mut *state;
+                    state
+                        .activate(&self.id, conf, &self.common.status, run_info)
+                        .map(|_| ())
+                }
+                LockedState::Service(mut state, conf) => {
+                    let state = &mut *state;
+                    state
+                        .activate(&self.id, conf, &self.common.status, run_info, source)
+                        .map(|_| ())
+                }
             }
         }
     }

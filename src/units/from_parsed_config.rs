@@ -122,7 +122,11 @@ pub fn unit_from_parsed_target(conf: ParsedTargetConfig) -> Result<Unit, String>
             name: conf.common.name,
         },
         common: make_common_from_parsed(conf.common.unit, conf.common.install)?,
-        specific: Specific::Target(TargetSpecific {}),
+        specific: Specific::Target(TargetSpecific {
+            state: RwLock::new(TargetState {
+                common: CommonState::default(),
+            }),
+        }),
     })
 }
 
