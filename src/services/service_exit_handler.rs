@@ -45,7 +45,7 @@ pub fn service_exit_handler(
                     error!("Pid exited that was already saved as exited");
                     return Ok(());
                 }
-                PidEntry::OneshotExited(_) => {
+                PidEntry::ServiceExited(_) => {
                     // TODO is this sensibel? How do we handle this?
                     error!("Pid exited that was already saved as exited");
                     return Ok(());
@@ -67,11 +67,9 @@ pub fn service_exit_handler(
         let entry = pid_table_locked.remove(&pid);
         match entry {
             Some(entry) => match entry {
-                PidEntry::Service(id, srvctype) => {
-                    if srvctype == ServiceType::OneShot {
-                        trace!("Save oneshot service as exited. PID: {}", pid);
-                        pid_table_locked.insert(pid, PidEntry::OneshotExited(code));
-                    }
+                PidEntry::Service(id, _srvctype) => {
+                    trace!("Save service as exited. PID: {}", pid);
+                    pid_table_locked.insert(pid, PidEntry::ServiceExited(code));
                     id
                 }
                 PidEntry::Helper(_id, _srvc_name) => {
@@ -80,7 +78,7 @@ pub fn service_exit_handler(
                 PidEntry::HelperExited(_) => {
                     unreachable!();
                 }
-                PidEntry::OneshotExited(_) => {
+                PidEntry::ServiceExited(_) => {
                     unreachable!();
                 }
             },

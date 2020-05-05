@@ -61,6 +61,7 @@ pub enum RunCmdError {
     SpawnError(String, String),
     WaitError(String, String),
     BadExitCode(String, crate::signal_handler::ChildTermination),
+    ExitBeforeNotify(crate::signal_handler::ChildTermination),
     Generic(String),
 }
 
@@ -68,6 +69,9 @@ impl std::fmt::Display for RunCmdError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
             RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
+            RunCmdError::ExitBeforeNotify(exit) => {
+                format!("Service exited before sendeinf READY=1 with: {:?}", exit)
+            }
             RunCmdError::SpawnError(cmd, err) => format!("{} failed to spawn with: {:?}", cmd, err),
             RunCmdError::WaitError(cmd, err) => {
                 format!("{} could not be waited on because: {:?}", cmd, err)
@@ -609,7 +613,7 @@ fn wait_for_helper_child(
             match pid_table_locked.get(&pid) {
                 Some(entry) => {
                     match entry {
-                        PidEntry::OneshotExited(_) => {
+                        PidEntry::ServiceExited(_) => {
                             // Should never happen
                             unreachable!(
                             "Was waiting on helper process but pid got saved as PidEntry::OneshotExited"

@@ -46,7 +46,7 @@ pub type PidTable = HashMap<Pid, PidEntry>;
 /// on this reason (e.g. oneshot services are supposed to exit. Normal services should not exit.)
 pub enum PidEntry {
     Service(UnitId, ServiceType),
-    OneshotExited(crate::signal_handler::ChildTermination),
+    ServiceExited(crate::signal_handler::ChildTermination),
     Helper(UnitId, String),
     HelperExited(crate::signal_handler::ChildTermination),
 }

@@ -37,6 +37,22 @@ pub fn wait_for_service(
                     ));
                 };
 
+                {
+                    let mut pid_table_locked = pid_table.lock().unwrap();
+                    if let Some(PidEntry::ServiceExited(_)) =
+                        pid_table_locked.get(&srvc.pid.unwrap())
+                    {
+                        trace!(
+                            "The service {} has exited before sending a READY=1 notification",
+                            name
+                        );
+                        let pid_entry = pid_table_locked.remove(&srvc.pid.unwrap());
+                        if let Some(PidEntry::ServiceExited(code)) = pid_entry {
+                            return Err(RunCmdError::ExitBeforeNotify(code));
+                        }
+                    }
+                }
+
                 if let Some(duration_timeout) = duration_timeout {
                     let duration_elapsed = start_time.elapsed();
                     if duration_elapsed > duration_timeout {
@@ -103,10 +119,10 @@ pub fn wait_for_service(
                                 PidEntry::Service(_, _) => {
                                     // Still running. Wait more
                                 }
-                                PidEntry::OneshotExited(_) => {
+                                PidEntry::ServiceExited(_) => {
                                     trace!("End wait for {}", name);
                                     let entry_owned = pid_table_locked.remove(&pid).unwrap();
-                                    if let PidEntry::OneshotExited(code) = entry_owned {
+                                    if let PidEntry::ServiceExited(code) = entry_owned {
                                         if !code.success() {
                                             if !conf
                                                 .exec
