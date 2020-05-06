@@ -145,8 +145,24 @@ pub fn service_exit_handler(
             "Recursively killing all services requiring service {}",
             name
         );
-        crate::units::deactivate_unit_recursive(&srvc_id, run_info.clone())
-            .map_err(|e| format!("{}", e))?;
+        loop {
+            let res = crate::units::deactivate_unit_recursive(&srvc_id, run_info.clone());
+            let retry = if let Err(e) = &res {
+                if let UnitOperationErrorReason::DependencyError(_) = e.reason {
+                    // Only retry if this is the case. This only occurs if, while the units are being deactivated,
+                    // another unit got activated that would not be able to run with this unit deactivated. 
+                    // This should generally be pretty rare but it should be handled properly.
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if !retry {
+                res.map_err(|e| format!("{}", e))?;
+            }
+        }
     }
     Ok(())
 }
