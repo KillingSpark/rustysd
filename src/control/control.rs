@@ -365,9 +365,7 @@ pub fn execute_command(
                 x
             };
 
-            match crate::units::reactivate_unit_checkdeps(id, run_info)
-                .map_err(|e| format!("{}", e))
-            {
+            match crate::units::reactivate_unit(id, run_info).map_err(|e| format!("{}", e)) {
                 Err(e) => {
                     return Err(e);
                 }
@@ -395,7 +393,7 @@ pub fn execute_command(
                 x
             };
 
-            match crate::units::activate_unit_checkdeps(id, run_info, ActivationSource::Regular)
+            match crate::units::activate_unit(id, run_info, ActivationSource::Regular)
                 .map_err(|e| format!("{}", e))
             {
                 Err(e) => {
@@ -473,9 +471,7 @@ pub fn execute_command(
                 x
             };
 
-            match crate::units::deactivate_unit_checkdeps(id, run_info)
-                .map_err(|e| format!("{}", e))
-            {
+            match crate::units::deactivate_unit(&id, run_info).map_err(|e| format!("{}", e)) {
                 Err(e) => {
                     return Err(e);
                 }
@@ -502,7 +498,7 @@ pub fn execute_command(
                 x
             };
 
-            match crate::units::deactivate_unit_recursive(id, run_info)
+            match crate::units::deactivate_unit_recursive(&id, run_info)
                 .map_err(|e| format!("{}", e))
             {
                 Err(e) => {

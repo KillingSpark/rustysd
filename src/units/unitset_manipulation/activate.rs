@@ -137,44 +137,9 @@ impl ActivationSource {
     }
 }
 
-pub fn activate_unit_checkdeps(
-    id_to_start: UnitId,
-    run_info: &RuntimeInfo,
-    source: ActivationSource,
-) -> std::result::Result<StartResult, UnitOperationError> {
-    let unit = match run_info.unit_table.get(&id_to_start) {
-        Some(unit) => unit,
-        None => {
-            // If this occurs, there is a flaw in the handling of dependencies
-            // IDs should be purged globally when units get removed
-            return Err(UnitOperationError {
-                reason: UnitOperationErrorReason::GenericStartError(
-                    "Tried to activate a unit that can not be found".into(),
-                ),
-                unit_name: id_to_start.name.clone(),
-                unit_id: id_to_start.clone(),
-            });
-        }
-    };
-
-    // if not all dependencies are yet started ignore this call. This unit will be activated again when
-    // the next dependency gets ready
-    let unstarted_deps = unstarted_deps(&id_to_start, run_info);
-    if !unstarted_deps.is_empty() {
-        trace!(
-            "Unit: {} ignores activation. Not all dependencies have been started (still waiting for: {:?})",
-            unit.id.name,
-            unstarted_deps,
-        );
-        return Err(UnitOperationError {
-            reason: UnitOperationErrorReason::DependencyError(unstarted_deps),
-            unit_name: unit.id.name.clone(),
-            unit_id: unit.id.clone(),
-        });
-    }
-    activate_unit(id_to_start, run_info, source)
-}
-
+/// Activate the unit and return all units that are ordered later than this unit
+///
+/// This also checks that all 'requires' relations are held up
 pub fn activate_unit(
     id_to_start: UnitId,
     run_info: &RuntimeInfo,
@@ -306,7 +271,7 @@ fn activate_units_recursive(
         let errors_copy = errors.clone();
         let filter_ids_copy = filter_ids.clone();
         tpool.execute(move || {
-            match activate_unit_checkdeps(
+            match activate_unit(
                 id,
                 &*run_info_copy.read().unwrap(),
                 ActivationSource::Regular,
