@@ -177,6 +177,10 @@ Requiring bigger changes or seem complicated:
 * Socket activation in inetd style
 * The whole dbus shenanigans (besides waiting on dbus services, which is implemented)
 * Service type forking is missing
+    * I would argue that this is an unnecessary type anyways. This would be better handled by using somthing like 
+        [supervisords pidproxy](https://github.com/Supervisor/supervisor/blob/master/supervisor/pidproxy.py)
+    * This is kinda true for dbus services too, which could be easily wrapped into something similar and just behave like a
+        normal 'notify' services
 * The rest of the sd_notify API (with storing filedescriptors and such)
 
 Requiring small changes / additions transparent to the other modules:
