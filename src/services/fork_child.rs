@@ -26,7 +26,7 @@ fn close_all_unneeded_fds(_srvc: &mut Service, _fd_store: &FDStore) {
     //}
 }
 
-fn setup_env_vars(socket_names: Vec<String>, notify_socket_env_var: &str) {
+fn setup_env_vars(socket_names: Vec<String>, notify_socket_env_var: &str, conf: &ServiceConfig) {
     // The following two lines do deadlock after fork and before exec... I would have loved to just use these
     // This has probably something to do with the global env_lock() that is being used in the std
     // std::env::set_var("LISTEN_FDS", format!("{}", srvc.file_descriptors.len()));
@@ -64,6 +64,14 @@ fn setup_env_vars(socket_names: Vec<String>, notify_socket_env_var: &str) {
     }
     unsafe {
         setenv("NOTIFY_SOCKET", notify_socket_env_var);
+    }
+
+    if let Some(env) = &conf.exec_config.environment {
+        for (key, val) in &env.vars {
+            unsafe {
+                setenv(&key, &val);
+            }
+        }
     }
 
     //trace!(
@@ -209,7 +217,7 @@ pub fn after_fork_child(
         std::process::exit(1);
     }
 
-    setup_env_vars(names, notify_socket_env_var);
+    setup_env_vars(names, notify_socket_env_var, conf);
     let (cmd, args) = prepare_exec_args(conf);
 
     if nix::unistd::getuid().is_root() {

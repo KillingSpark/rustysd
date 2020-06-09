@@ -74,6 +74,27 @@ pub fn string_to_bool(s: &str) -> bool {
     *s_upper == *"YES" || *s_upper == *"TRUE" || is_num_and_one
 }
 
+fn parse_environment(raw_line: &str) -> Result<EnvVars, ParsingErrorReason> {
+    debug!("raw line: {}", raw_line);
+    let split = shlex::split(raw_line).ok_or(ParsingErrorReason::Generic(format!(
+        "Could not parse cmdline: {}",
+        raw_line
+    )))?;
+    debug!("split: {:?}", split);
+    let mut vars: Vec<(String, String)> = Vec::new();
+
+    for pair in split {
+        let p: Vec<&str> = pair.split('=').collect();
+        let key = p[0].to_owned();
+        let val = p[1].to_owned();
+        vars.push((key, val));
+    }
+
+    Ok(EnvVars {
+        vars,
+    })
+}
+
 pub fn parse_unit_section(
     mut section: ParsedSection,
 ) -> Result<ParsedUnitSection, ParsingErrorReason> {
@@ -121,6 +142,7 @@ pub fn parse_exec_section(
     let stdout = section.remove("STANDARDOUTPUT");
     let stderr = section.remove("STANDARDERROR");
     let supplementary_groups = section.remove("SUPPLEMENTARYGROUPS");
+    let environment = section.remove("ENVIRONMENT");
 
     let user = match user {
         None => None,
@@ -203,12 +225,21 @@ pub fn parse_exec_section(
         }),
     };
 
+    let environment = match environment {
+        Some(vec) => {
+            debug!("Env vec: {:?}", vec);
+            Some(parse_environment(&vec[0].1)?)
+        }
+        None => None,
+    };
+
     Ok(ParsedExecSection {
         user,
         group,
         stderr_path,
         stdout_path,
         supplementary_groups,
+        environment,
     })
 }
 

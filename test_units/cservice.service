@@ -3,6 +3,7 @@ ExecStart= ./test_c_service/test_service  arg1 arg2
 Sockets= cservice.socket
 NotifyAccess= all
 Type= notify
+Environment="VAR1=word1 word2" VAR2=word3 "VAR3=$word 5 6"
 Restart= always
 
 [Install]

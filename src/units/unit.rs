@@ -851,6 +851,7 @@ pub struct ExecConfig {
     pub supplementary_groups: Vec<nix::unistd::Gid>,
     pub stdout_path: Option<StdIoOption>,
     pub stderr_path: Option<StdIoOption>,
+    pub environment: Option<EnvVars>,
 }
 
 #[cfg(target_os = "linux")]

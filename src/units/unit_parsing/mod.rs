@@ -92,6 +92,7 @@ pub struct ParsedExecSection {
     pub stdout_path: Option<StdIoOption>,
     pub stderr_path: Option<StdIoOption>,
     pub supplementary_groups: Vec<String>,
+    pub environment: Option<EnvVars>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
@@ -143,6 +144,11 @@ pub struct Commandline {
     pub cmd: String,
     pub args: Vec<String>,
     pub prefixes: Vec<CommandlinePrefix>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct EnvVars {
+    pub vars: Vec<(String, String)>,
 }
 
 impl ToString for Commandline {

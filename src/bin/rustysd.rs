@@ -112,7 +112,7 @@ fn pid1_specific_setup() {}
 fn prepare_runtimeinfo(conf: &config::Config, dry_run: bool) -> runtime_info::ArcMutRuntimeInfo {
     // initial loading of the units and matching of the various before/after settings
     // also opening all fildescriptors in the socket files
-    let unit_table = units::load_all_units(&conf.unit_dirs, &conf.target_unit).unwrap();
+    let unit_table = units::load_all_units(&conf.unit_dirs, &conf.target_unit).expect("loading unit files");
     trace!("Finished loading units");
     if let Err(e) = units::sanity_check_dependencies(&unit_table) {
         match e {
