@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <systemd/sd-daemon.h>
 #include <unistd.h>
 #include <string.h>
@@ -26,6 +27,8 @@ int main(int argc, char **argv) {
           printf("\tFD #%d  Fifo socket test (should be 1): %d\n", i, sd_is_fifo(i+3, "./sockets/cservice.fifo"));
       }
   }
+
+  printf("Env var VAR1: %s\tVAR2: %s\tVAR3: %s\n", getenv("VAR1"), getenv("VAR2"), getenv("VAR3"));
 
   int res = sd_notify(0, "READY=1\n");
   printf("Result of sd_notify: %d\n", res);

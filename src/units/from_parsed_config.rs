@@ -197,6 +197,7 @@ impl std::convert::TryFrom<ParsedExecSection> for ExecConfig {
             supplementary_groups: supp_gids,
             stderr_path: parsed.stderr_path,
             stdout_path: parsed.stdout_path,
+            environment: parsed.environment,
         })
     }
 }
