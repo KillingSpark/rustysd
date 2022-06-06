@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 signal-hook = "0.1.10"
 libc = "0.2.65"
-nix = "0.16.1"
+nix = "0.20.2"
 log = "0.4.8"
 fern = "0.5.9"
 chrono = "0.4.9"
