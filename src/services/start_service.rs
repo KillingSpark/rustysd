@@ -40,22 +40,26 @@ fn start_service_with_filedescriptors(
     // 1. in fork execve the cmd with the args
     // 1. in parent set pid and return. Waiting will be done afterwards if necessary
 
+    let notifications_path = {
+        if let Some(p) = &srvc.notifications_path {
+            p.to_str().unwrap().to_owned()
+        } else {
+            return Err(RunCmdError::Generic(format!(
+                "Tried to start service: {} without a notifications path",
+                name,
+            )));
+        }
+    };
+
     super::fork_os_specific::pre_fork_os_specific(srvc).map_err(|e| RunCmdError::Generic(e))?;
 
     // make sure we have the lock that the child will need
-    match nix::unistd::fork() {
+    match unsafe { nix::unistd::fork() } {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             srvc.pid = Some(child);
             srvc.process_group = Some(nix::unistd::Pid::from_raw(-child.as_raw()));
         }
         Ok(nix::unistd::ForkResult::Child) => {
-            let notifications_path = {
-                if let Some(p) = &srvc.notifications_path {
-                    p.to_str().unwrap().to_owned()
-                } else {
-                    unreachable!();
-                }
-            };
             let stdout = {
                 if let Some(stdio) = &srvc.stdout {
                     stdio.write_fd()

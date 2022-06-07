@@ -5,7 +5,7 @@ use std::os::unix::net::UnixStream;
 extern crate nix;
 
 fn main() {
-    match nix::unistd::fork() {
+    match unsafe { nix::unistd::fork() } {
         Ok(nix::unistd::ForkResult::Parent { .. }) => loop {
             let mut stream = UnixStream::connect("./sockets/servicelog_stream").unwrap();
             stream.write_all(b"AAAA\n").unwrap();

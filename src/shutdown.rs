@@ -118,8 +118,16 @@ fn shutdown_unit(shutdown_id: &UnitId, run_info: &RuntimeInfo) {
 static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 // TODO maybe this should be available everywhere for situations where normally a panic would occur?
 pub fn shutdown_sequence(run_info: ArcMutRuntimeInfo) {
-    if SHUTTING_DOWN.compare_and_swap(false, true, std::sync::atomic::Ordering::SeqCst) {
-        // is alerady shutting down. Exit the process.
+    if SHUTTING_DOWN
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_err()
+    {
+        // is already shutting down. Exit the process.
         warn!("Got a second termination signal. Exiting potentially dirty");
         std::process::exit(0);
     }

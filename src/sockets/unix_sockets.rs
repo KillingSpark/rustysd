@@ -75,7 +75,7 @@ impl UnixSocketConfig {
                 trace!("opening streaming unix socket: {:?}", path);
                 // Bind to socket
                 let stream = match UnixListener::bind(&spath) {
-                    Err(e) => panic!(format!("failed to bind socket: {}", e)),
+                    Err(e) => panic!("failed to bind socket: {}", e),
                     Ok(stream) => stream,
                 };
                 //need to stop the listener to drop which would close the filedescriptor
@@ -99,7 +99,7 @@ impl UnixSocketConfig {
                 trace!("opening datagram unix socket: {:?}", path);
                 // Bind to socket
                 let stream = match UnixDatagram::bind(&spath) {
-                    Err(e) => panic!(format!("failed to bind socket: {}", e)),
+                    Err(e) => panic!("failed to bind socket: {}", e),
                     Ok(stream) => stream,
                 };
                 //need to stop the listener to drop which would close the filedescriptor
