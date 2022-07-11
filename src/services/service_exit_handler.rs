@@ -1,4 +1,4 @@
-use log::{trace, error};
+use log::{error, trace};
 
 use crate::runtime_info::*;
 use crate::signal_handler::ChildTermination;
@@ -152,7 +152,7 @@ pub fn service_exit_handler(
             let retry = if let Err(e) = &res {
                 if let UnitOperationErrorReason::DependencyError(_) = e.reason {
                     // Only retry if this is the case. This only occurs if, while the units are being deactivated,
-                    // another unit got activated that would not be able to run with this unit deactivated. 
+                    // another unit got activated that would not be able to run with this unit deactivated.
                     // This should generally be pretty rare but it should be handled properly.
                     true
                 } else {

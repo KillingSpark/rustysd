@@ -29,7 +29,9 @@ pub fn handle_signals(mut signals: Signals, run_info: ArcMutRuntimeInfo) {
                             }
                         });
                 }
-                signal_hook::consts::SIGTERM | signal_hook::consts::SIGINT | signal_hook::consts::SIGQUIT => {
+                signal_hook::consts::SIGTERM
+                | signal_hook::consts::SIGINT
+                | signal_hook::consts::SIGQUIT => {
                     info!("Received termination signal. Rustysd checking out");
                     crate::shutdown::shutdown_sequence(run_info.clone());
                 }

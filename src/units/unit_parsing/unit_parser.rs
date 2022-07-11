@@ -92,9 +92,7 @@ fn parse_environment(raw_line: &str) -> Result<EnvVars, ParsingErrorReason> {
         vars.push((key, val));
     }
 
-    Ok(EnvVars {
-        vars,
-    })
+    Ok(EnvVars { vars })
 }
 
 pub fn parse_unit_section(
