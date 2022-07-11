@@ -1,3 +1,5 @@
+use log::{trace, error};
+
 use crate::runtime_info::*;
 use crate::signal_handler::ChildTermination;
 use crate::units::*;

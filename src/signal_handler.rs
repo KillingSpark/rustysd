@@ -2,6 +2,9 @@
 
 use crate::runtime_info::*;
 use crate::services;
+use log::error;
+use log::info;
+use log::trace;
 use signal_hook::iterator::Signals;
 
 pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo) {

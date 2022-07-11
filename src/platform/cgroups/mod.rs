@@ -7,6 +7,8 @@
 use std::fs;
 use std::io::Read;
 
+use log::trace;
+
 mod cgroup1;
 mod cgroup2;
 

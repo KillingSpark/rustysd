@@ -5,6 +5,7 @@ use crate::services::ServiceErrorReason;
 use crate::units::*;
 
 use std::sync::{Arc, Mutex};
+use log::{trace, error};
 use threadpool::ThreadPool;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]

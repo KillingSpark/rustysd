@@ -1,6 +1,7 @@
 use crate::runtime_info::*;
 use crate::units::*;
 
+use log::trace;
 use serde_json::Value;
 
 pub fn open_all_sockets(run_info: ArcMutRuntimeInfo, conf: &crate::config::Config) {

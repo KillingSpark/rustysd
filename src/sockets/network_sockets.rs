@@ -1,5 +1,7 @@
 use std::{net::TcpListener, net::UdpSocket, os::unix::io::AsRawFd, os::unix::io::RawFd};
 
+use log::trace;
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TcpSocketConfig {
     pub addr: std::net::SocketAddr,

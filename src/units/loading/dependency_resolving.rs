@@ -1,3 +1,6 @@
+use log::trace;
+use log::warn;
+
 use crate::runtime_info::*;
 use crate::units::*;
 

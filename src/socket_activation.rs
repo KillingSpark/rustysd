@@ -1,4 +1,7 @@
 //! Wait for sockets to activate their respective services
+use log::error;
+use log::trace;
+
 use crate::runtime_info::*;
 use crate::units::*;
 

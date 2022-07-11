@@ -1,3 +1,5 @@
+use log::trace;
+
 use super::CgroupError;
 use std::fs;
 use std::io::Read;

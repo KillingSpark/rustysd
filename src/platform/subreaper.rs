@@ -1,5 +1,7 @@
 #[cfg(target_os = "linux")]
 pub fn become_subreaper(set: bool) {
+    use log::error;
+
     unsafe {
         // Set subreaper to collect all zombies left behind by the services
         let res = if set {

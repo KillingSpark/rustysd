@@ -4,6 +4,8 @@ use std::{
     os::unix::net::{UnixDatagram, UnixListener},
 };
 
+use log::trace;
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum UnixSocketConfig {
     Stream(String),

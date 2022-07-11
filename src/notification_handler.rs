@@ -2,6 +2,9 @@
 //! Stdout and stderr get redirected to the normal stdout/err but are prefixed with a unique string to identify their output
 //! streams from the notification sockets get parsed and applied to the respective service
 
+use log::trace;
+use log::warn;
+
 use crate::platform::reset_event_fd;
 use crate::runtime_info::*;
 use crate::services::Service;

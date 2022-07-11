@@ -1,3 +1,6 @@
+use log::error;
+use log::trace;
+
 use super::start_service::*;
 use crate::runtime_info::*;
 use crate::units::*;

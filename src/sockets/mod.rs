@@ -4,6 +4,7 @@ mod fifo;
 mod network_sockets;
 mod unix_sockets;
 pub use fifo::*;
+use log::trace;
 pub use network_sockets::*;
 pub use unix_sockets::*;
 

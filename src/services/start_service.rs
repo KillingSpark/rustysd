@@ -1,3 +1,5 @@
+use log::error;
+
 use super::fork_child;
 use crate::fd_store::FDStore;
 use crate::services::RunCmdError;

@@ -1,6 +1,8 @@
 //! Parse all supported unit types / options for these and do needed operations like matching services <-> sockets and adding implicit dependencies like
 //! all sockets to socket.target
 
+use log::debug;
+
 use crate::units::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
