@@ -65,6 +65,8 @@ pub use linux_eventfd::*;
 
 #[cfg(feature = "linux_eventfd")]
 mod linux_eventfd {
+    use log::error;
+    use log::trace;
     use std::os::unix::io::RawFd;
 
     #[derive(Clone, Copy)]
