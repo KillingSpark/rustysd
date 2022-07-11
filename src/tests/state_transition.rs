@@ -19,7 +19,7 @@ fn test_service_state_transitions() {
         socket_activation_eventfd: crate::platform::make_event_fd().unwrap(),
     }));
 
-    let signals = signal_hook::iterator::Signals::new(&[signal_hook::SIGCHLD]).unwrap();
+    let signals = signal_hook::iterator::Signals::new(&[signal_hook::consts::SIGCHLD]).unwrap();
 
     let run_info_clone = run_info.clone();
     let _handle = std::thread::spawn(move || {

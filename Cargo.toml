@@ -5,11 +5,11 @@ authors = ["Moritz Borcherding <moritz.borcherding@web.de>"]
 edition = "2018"
 
 [dependencies]
-signal-hook = "0.1.10"
+signal-hook = "0.3"
 libc = "0.2"
 nix = "0.24"
 log = "0.4"
-fern = "0.5"
+fern = "0.6"
 chrono = "0.4"
 threadpool = "1.7"
 serde_json = "1.0"

@@ -7,12 +7,12 @@ use log::info;
 use log::trace;
 use signal_hook::iterator::Signals;
 
-pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo) {
+pub fn handle_signals(mut signals: Signals, run_info: ArcMutRuntimeInfo) {
     loop {
         // Pick up new signals
         for signal in signals.forever() {
             match signal as libc::c_int {
-                signal_hook::SIGCHLD => {
+                signal_hook::consts::SIGCHLD => {
                     std::iter::from_fn(get_next_exited_child)
                         .take_while(Result::is_ok)
                         .for_each(|val| {
@@ -29,7 +29,7 @@ pub fn handle_signals(signals: Signals, run_info: ArcMutRuntimeInfo) {
                             }
                         });
                 }
-                signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
+                signal_hook::consts::SIGTERM | signal_hook::consts::SIGINT | signal_hook::consts::SIGQUIT => {
                     info!("Received termination signal. Rustysd checking out");
                     crate::shutdown::shutdown_sequence(run_info.clone());
                 }

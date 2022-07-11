@@ -109,10 +109,10 @@ pub fn run_service_manager() {
     let run_info = prepare_runtimeinfo(&conf, cli_args.dry_run);
 
     let signals = match Signals::new(&[
-        signal_hook::SIGCHLD,
-        signal_hook::SIGTERM,
-        signal_hook::SIGINT,
-        signal_hook::SIGQUIT,
+        signal_hook::consts::SIGCHLD,
+        signal_hook::consts::SIGTERM,
+        signal_hook::consts::SIGINT,
+        signal_hook::consts::SIGQUIT,
     ]) {
         Ok(signals) => signals,
         Err(e) => {
