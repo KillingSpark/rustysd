@@ -51,12 +51,12 @@ pub fn run_exec_helper() {
 pub fn run_service_manager() {
     pid1_specific_setup();
 
-    let cli_args = parse_args().unwrap_or_else(|e| {
+    let cli_args = CliArgs::try_parse().unwrap_or_else(|e| {
         unrecoverable_error(e.to_string());
         unreachable!();
     });
 
-    if let Some(path) = &cli_args.conf_path {
+    if let Some(path) = &cli_args.conf {
         if !path.exists() {
             unrecoverable_error(format!("config path given that does not exist"));
         }
@@ -65,17 +65,7 @@ pub fn run_service_manager() {
         }
     }
 
-    if cli_args.show_help {
-        println!("{}", USAGE);
-        std::process::exit(0);
-    } else if cli_args.free_args.len() > 0 {
-        unrecoverable_error(format!(
-            "{}\n\nUnknown cli arg(s): {:?}",
-            USAGE, cli_args.free_args
-        ));
-    }
-
-    let (log_conf, conf) = config::load_config(&cli_args.conf_path);
+    let (log_conf, conf) = config::load_config(&cli_args.conf);
 
     logging::setup_logging(&log_conf).unwrap();
     let conf = match conf {
@@ -316,22 +306,12 @@ fn start_signal_handler_thread(
     handle
 }
 
-const USAGE: &'static str = "Usage: rustysd [-c | --config PATH] [-d | --dry-run] [-h | --help]";
+use clap::Parser;
 
-#[derive(Default)]
+#[derive(Parser, Debug)]
 struct CliArgs {
-    conf_path: Option<std::path::PathBuf>,
+    #[clap(short, long, value_parser)]
+    conf: Option<std::path::PathBuf>,
+    #[clap(short, long, value_parser)]
     dry_run: bool,
-    show_help: bool,
-    free_args: Vec<String>,
-}
-
-fn parse_args() -> Result<CliArgs, pico_args::Error> {
-    let mut args = pico_args::Arguments::from_env();
-    Ok(CliArgs {
-        conf_path: args.opt_value_from_str(["-c", "--config"])?,
-        dry_run: args.contains(["-d", "--dry-run"]),
-        show_help: args.contains(["-h", "--help"]),
-        free_args: args.free()?,
-    })
 }
