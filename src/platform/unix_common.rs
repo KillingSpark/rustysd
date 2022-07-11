@@ -33,7 +33,6 @@ pub fn make_seqpacket_socket(path: &std::path::PathBuf) -> Result<RawFd, String>
     let protocol = 0; // not really important, used to choose protocol but we dont support sockets where thats relevant
 
     let unix_addr = nix::sys::socket::UnixAddr::new(path).unwrap();
-    let sock_addr = nix::sys::socket::SockAddr::Unix(unix_addr);
 
     let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, protocol) };
     if fd < 0 {
@@ -43,7 +42,7 @@ pub fn make_seqpacket_socket(path: &std::path::PathBuf) -> Result<RawFd, String>
         ));
     }
     // then bind the socket to the path
-    nix::sys::socket::bind(fd, &sock_addr).unwrap();
+    nix::sys::socket::bind(fd, &unix_addr).unwrap();
     // then make the socket an accepting one
     nix::sys::socket::listen(fd, 128).unwrap();
 

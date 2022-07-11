@@ -157,7 +157,7 @@ pub fn handle_all_std_out(run_info: ArcMutRuntimeInfo) {
                                 ////
                                 let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
                                     Ok(b) => b,
-                                    Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                    Err(nix::Error::EWOULDBLOCK) => 0,
                                     Err(e) => panic!("{}", e),
                                 };
                                 ////
@@ -226,7 +226,7 @@ pub fn handle_all_std_err(run_info: ArcMutRuntimeInfo) {
                                 ////
                                 let bytes = match nix::unistd::read(*fd, &mut buf[..]) {
                                     Ok(b) => b,
-                                    Err(nix::Error::Sys(nix::errno::EWOULDBLOCK)) => 0,
+                                    Err(nix::Error::EWOULDBLOCK) => 0,
                                     Err(e) => panic!("{}", e),
                                 };
                                 ////

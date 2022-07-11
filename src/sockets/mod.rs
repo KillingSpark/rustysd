@@ -18,7 +18,7 @@ pub fn close_raw_fd(fd: RawFd) {
         match nix::unistd::close(fd) {
             Ok(()) => break,
             Err(e) => {
-                if let Some(nix::errno::Errno::EBADF) = e.as_errno() {
+                if let nix::errno::Errno::EBADF = e {
                     break;
                 }
                 // Other errors (EINTR and EIO) mean that we should try again

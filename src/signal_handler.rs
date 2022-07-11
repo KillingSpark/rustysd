@@ -82,7 +82,7 @@ fn get_next_exited_child() -> Option<ChildIterElem> {
             }
         },
         Err(e) => {
-            if let nix::Error::Sys(nix::errno::Errno::ECHILD) = e {
+            if let nix::Error::ECHILD = e {
             } else {
                 trace!("Error while waiting: {}", e);
             }

@@ -133,7 +133,7 @@ pub fn wait_for_socket(run_info: ArcMutRuntimeInfo) -> Result<Vec<UnitId>, Strin
             Ok(activated_ids)
         }
         Err(e) => {
-            if let nix::Error::Sys(nix::errno::Errno::EINTR) = e {
+            if let nix::Error::EINTR = e {
                 Ok(Vec::new())
             } else {
                 Err(format!("Error while selecting: {}", e))
