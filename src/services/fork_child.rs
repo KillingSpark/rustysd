@@ -1,6 +1,7 @@
 use crate::services::Service;
 use crate::units::ServiceConfig;
 use std::os::unix::io::RawFd;
+use std::path::Path;
 
 fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
     // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
@@ -73,6 +74,7 @@ fn move_into_new_process_group() {
 }
 
 pub fn after_fork_child(
+    selfpath: &Path,
     srvc: &mut Service,
     conf: &ServiceConfig,
     name: &str,
@@ -119,7 +121,7 @@ pub fn after_fork_child(
         }
     }
 
-    let cmd = std::ffi::CString::new("/proc/self/exe").unwrap();
+    let cmd = std::ffi::CString::new(selfpath.to_str().unwrap()).unwrap();
     let args = &[&std::ffi::CString::new("exec_helper").unwrap()];
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
 

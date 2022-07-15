@@ -195,6 +195,7 @@ impl Service {
                 // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
                 start_service(
+                    &run_info.config.self_path,
                     self,
                     conf,
                     name.clone(),

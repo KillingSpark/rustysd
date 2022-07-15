@@ -6,7 +6,10 @@ use crate::services::RunCmdError;
 use crate::services::Service;
 use crate::units::ServiceConfig;
 
+use std::path::Path;
+
 fn start_service_with_filedescriptors(
+    self_path: &Path,
     srvc: &mut Service,
     conf: &ServiceConfig,
     name: &str,
@@ -124,6 +127,7 @@ fn start_service_with_filedescriptors(
                 }
             };
             fork_child::after_fork_child(
+                self_path,
                 srvc,
                 conf,
                 &name,
@@ -139,11 +143,12 @@ fn start_service_with_filedescriptors(
 }
 
 pub fn start_service(
+    self_path: &Path,
     srvc: &mut Service,
     conf: &ServiceConfig,
     name: &str,
     fd_store: &FDStore,
 ) -> Result<(), super::RunCmdError> {
-    start_service_with_filedescriptors(srvc, conf, name, fd_store)?;
+    start_service_with_filedescriptors(self_path, srvc, conf, name, fd_store)?;
     Ok(())
 }
