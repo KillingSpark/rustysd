@@ -55,6 +55,52 @@ fn start_service_with_filedescriptors(
 
     super::fork_os_specific::pre_fork_os_specific(srvc).map_err(|e| RunCmdError::Generic(e))?;
 
+
+    let mut fds = Vec::new();
+    let mut names = Vec::new();
+
+    for socket in &conf.sockets {
+        let sock_fds = fd_store
+            .get_global(&socket.name)
+            .unwrap()
+            .iter()
+            .map(|(_, _, fd)| fd.as_raw_fd())
+            .collect::<Vec<_>>();
+
+        let sock_names = fd_store
+            .get_global(&socket.name)
+            .unwrap()
+            .iter()
+            .map(|(_, name, _)| name.clone())
+            .collect::<Vec<_>>();
+
+        fds.extend(sock_fds);
+        names.extend(sock_names);
+    }
+
+    let exec_helper_conf = crate::ExecHelperConfig {
+        cmd: conf.exec.cmd.clone(),
+        args: conf.exec.args.clone(),
+        env: vec![
+            ("LISTEN_FDS".to_owned(), format!("{}", names.len())),
+            ("LISTEN_FDNAMES".to_owned(), names.join(":")),
+            ("NOTIFY_SOCKET".to_owned(), notifications_path.clone()),
+        ],
+    };
+    let exec_helper_conf_fd = nix::sys::memfd::memfd_create(
+        &std::ffi::CString::new(name).unwrap(),
+        nix::sys::memfd::MemFdCreateFlag::empty(),
+    )
+    .unwrap();
+    use std::os::unix::io::FromRawFd;
+    let mut exec_helper_conf_file = unsafe { std::fs::File::from_raw_fd(exec_helper_conf_fd) };
+    serde_json::to_writer(&mut exec_helper_conf_file, &exec_helper_conf).unwrap();
+    use std::io::Write;
+    exec_helper_conf_file.write(&[b'\n']).unwrap();
+    use std::io::Seek;
+    exec_helper_conf_file.seek(std::io::SeekFrom::Start(0)).unwrap();
+    std::mem::forget(exec_helper_conf_file);
+
     // make sure we have the lock that the child will need
     match unsafe { nix::unistd::fork() } {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
@@ -80,10 +126,10 @@ fn start_service_with_filedescriptors(
                 srvc,
                 conf,
                 &name,
-                fd_store,
-                &notifications_path,
+                fds,
                 stdout,
                 stderr,
+                exec_helper_conf_fd,
             );
         }
         Err(e) => error!("Fork for service: {} failed with: {}", name, e),

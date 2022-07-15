@@ -13,6 +13,7 @@ fern = "0.6"
 chrono = "0.4"
 threadpool = "1.8"
 serde_json = "1.0"
+serde = { version = "1.0", features = [ "derive" ] }
 toml = "0.5"
 dbus = {version = "*", optional = true}
 shlex = "1.1"
