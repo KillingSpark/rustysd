@@ -77,7 +77,7 @@ fn start_service_with_filedescriptors(
         names.extend(sock_names);
     }
 
-    let exec_helper_conf = crate::ExecHelperConfig {
+    let exec_helper_conf = crate::entrypoints::ExecHelperConfig {
         cmd: conf.exec.cmd.clone(),
         args: conf.exec.args.clone(),
         env: vec![
