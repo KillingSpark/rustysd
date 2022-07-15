@@ -4,7 +4,7 @@ use std::os::unix::io::RawFd;
 
 fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
     // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
-    let actual_new_fd = nix::unistd::dup2(new_stdout, 1).unwrap();
+    let actual_new_fd = nix::unistd::dup2(new_stdout, libc::STDOUT_FILENO).unwrap();
     if actual_new_fd != 1 {
         panic!(
             "Could not dup the pipe to stdout. Got duped to: {}",
@@ -12,7 +12,7 @@ fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
         );
     }
     // dup new stderr to fd 2. The other end of the pipe will be read from the service daemon
-    let actual_new_fd = nix::unistd::dup2(new_stderr, 2).unwrap();
+    let actual_new_fd = nix::unistd::dup2(new_stderr, libc::STDERR_FILENO).unwrap();
     if actual_new_fd != 2 {
         panic!(
             "Could not dup the pipe to stderr. Got duped to: {}",
@@ -23,7 +23,7 @@ fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
 
 fn dup_fds(name: &str, mut sockets: Vec<RawFd>) -> Result<(), String> {
     // start at 3. 0,1,2 are stdin,stdout,stderr
-    let file_desc_offset = 3;
+    let file_desc_offset = (libc::STDERR_FILENO + 1) as usize;
     for fd_idx in 0..sockets.len() {
         let old_fd = sockets[fd_idx];
         let new_fd = (file_desc_offset + fd_idx) as RawFd;
