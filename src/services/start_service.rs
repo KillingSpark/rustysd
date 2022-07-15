@@ -55,7 +55,6 @@ fn start_service_with_filedescriptors(
 
     super::fork_os_specific::pre_fork_os_specific(srvc).map_err(|e| RunCmdError::Generic(e))?;
 
-
     let mut fds = Vec::new();
     let mut names = Vec::new();
 
@@ -98,7 +97,9 @@ fn start_service_with_filedescriptors(
     use std::io::Write;
     exec_helper_conf_file.write(&[b'\n']).unwrap();
     use std::io::Seek;
-    exec_helper_conf_file.seek(std::io::SeekFrom::Start(0)).unwrap();
+    exec_helper_conf_file
+        .seek(std::io::SeekFrom::Start(0))
+        .unwrap();
     std::mem::forget(exec_helper_conf_file);
 
     // make sure we have the lock that the child will need

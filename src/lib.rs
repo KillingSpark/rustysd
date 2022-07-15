@@ -52,7 +52,10 @@ pub struct ExecHelperConfig {
     pub env: Vec<(String, String)>,
 }
 
-fn prepare_exec_args(cmd_str: &str, args_str: &[String]) -> (std::ffi::CString, Vec<std::ffi::CString>) {
+fn prepare_exec_args(
+    cmd_str: &str,
+    args_str: &[String],
+) -> (std::ffi::CString, Vec<std::ffi::CString>) {
     let cmd = std::ffi::CString::new(cmd_str).unwrap();
 
     let exec_name = std::path::PathBuf::from(cmd_str);
@@ -76,10 +79,10 @@ pub fn run_exec_helper() {
     println!("Apply config: {:?}", config);
     let (cmd, args) = prepare_exec_args(&config.cmd, &config.args);
     // TODO env and LISTEN_PID env var
-    for (k,v) in config.env.iter() {
+    for (k, v) in config.env.iter() {
         std::env::set_var(k, v);
     }
-    
+
     std::env::set_var("LISTEN_PID", format!("{}", nix::unistd::getpid()));
     nix::unistd::execv(&cmd, &args).unwrap();
 }
