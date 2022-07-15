@@ -81,6 +81,7 @@ fn start_service_with_filedescriptors(
     }
 
     let exec_helper_conf = crate::entrypoints::ExecHelperConfig {
+        name: name.to_owned(),
         cmd: conf.exec.cmd.clone(),
         args: conf.exec.args.clone(),
         env: vec![
@@ -88,6 +89,14 @@ fn start_service_with_filedescriptors(
             ("LISTEN_FDNAMES".to_owned(), names.join(":")),
             ("NOTIFY_SOCKET".to_owned(), notifications_path.clone()),
         ],
+        group: conf.exec_config.group.as_raw(),
+        supplementary_groups: conf
+            .exec_config
+            .supplementary_groups
+            .iter()
+            .map(|gid| gid.as_raw())
+            .collect(),
+        user: conf.exec_config.user.as_raw(),
     };
     let exec_helper_conf_fd = nix::sys::memfd::memfd_create(
         &std::ffi::CString::new(name).unwrap(),
