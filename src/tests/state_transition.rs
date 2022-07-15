@@ -9,6 +9,7 @@ fn test_service_state_transitions() {
             notification_sockets_dir: "./notifications".into(),
             target_unit: "".into(),
             unit_dirs: vec![],
+            self_path: std::path::PathBuf::from("/proc/self/exe"),
         },
         fd_store: std::sync::RwLock::new(crate::fd_store::FDStore::default()),
         pid_table: std::sync::Mutex::new(PidTable::default()),
