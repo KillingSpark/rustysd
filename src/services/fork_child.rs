@@ -21,13 +21,23 @@ fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
     }
 }
 
-fn dup_fds(name: &str, sockets: Vec<RawFd>) -> Result<(), String> {
+fn dup_fds(name: &str, mut sockets: Vec<RawFd>) -> Result<(), String> {
     // start at 3. 0,1,2 are stdin,stdout,stderr
     let file_desc_offset = 3;
-    let mut fd_idx = 0;
+    for fd_idx in 0..sockets.len() {
+        let old_fd = sockets[fd_idx];
+        let new_fd = (file_desc_offset + fd_idx) as RawFd;
 
-    for old_fd in sockets {
-        let new_fd = file_desc_offset + fd_idx;
+        for fd in sockets.iter_mut().skip(fd_idx) {
+            if *fd == new_fd {
+                // We need to rescue this fd!
+                let rescued_fd =
+                    nix::unistd::dup(*fd).map_err(|e| format!("Error while duping fd: {}", e))?;
+                let _ = nix::unistd::close(*fd);
+                *fd = rescued_fd;
+            }
+        }
+
         let actual_new_fd = if new_fd as i32 != old_fd {
             //ignore output. newfd might already be closed.
             // TODO check for actual errors other than bad_fd
@@ -53,7 +63,6 @@ fn dup_fds(name: &str, sockets: Vec<RawFd>) -> Result<(), String> {
                 );
             }
         };
-        fd_idx += 1;
     }
     Ok(())
 }
