@@ -1,4 +1,3 @@
-
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct ExecHelperConfig {
     pub cmd: String,
