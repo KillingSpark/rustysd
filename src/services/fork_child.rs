@@ -6,9 +6,8 @@ use std::os::unix::io::RawFd;
 /// At least on linux this is a good reference: https://man7.org/linux/man-pages/man7/signal-safety.7.html
 pub fn after_fork_child(
     selfpath: &std::ffi::CStr,
-    self_args: &[&std::ffi::CStr],
-    name: &str,
-    socket_fds: Vec<RawFd>,
+    self_args: &[*const libc::c_char],
+    socket_fds: &mut [RawFd],
     new_stdout: RawFd,
     new_stderr: RawFd,
     exec_helper_config: RawFd,
@@ -24,61 +23,78 @@ pub fn after_fork_child(
     // Setup the new stdio so println! and eprintln! go to the expected fds
     dup_stdio(new_stdout, new_stderr, exec_helper_config);
 
+    // Now we may at least write to stderr
+    write_to_stderr("Prepare fork child before execing!");
+
     // Lets move into a new process group before execing
     move_into_new_process_group();
 
     // Dup all the fds for the service here, because we use SO_CLOEXEC on all fds so doing it after exec isn't possible
-    if let Err(e) = dup_fds(name, socket_fds) {
-        eprintln!("[FORK_CHILD {}] error while duping fds: {}", name, e);
-        std::process::exit(1);
-    }
+    dup_fds(socket_fds);
 
     // Just so we have a clearer picture on what is happening while debugging
-    eprintln!("EXECV: {:?} {:?}", &selfpath, self_args);
+    write_to_stderr("Exec the exec helper");
 
     // Finally exec the exec_helper
-    match nix::unistd::execv(selfpath, self_args) {
-        Ok(_) => {
-            eprintln!(
-                "[FORK_CHILD {}] execv returned Ok()... This should never happen",
-                name
-            );
+    match unsafe { libc::execv(selfpath.as_ptr(), self_args.as_ptr().cast()) } {
+        -1 => {
+            write_to_stderr("execv errored");
+            std::process::exit(1);
         }
-        Err(e) => {
-            eprintln!("[FORK_CHILD {}] execv errored: {:?}", name, e);
+        _ => {
+            write_to_stderr("execv returned Ok()... This should never happen");
             std::process::exit(1);
         }
     }
 }
 
-fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd, exec_helper_config: RawFd) {
-    // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
-    let actual_new_fd = nix::unistd::dup2(new_stdout, libc::STDOUT_FILENO).unwrap();
-    if actual_new_fd != 1 {
-        panic!(
-            "Could not dup the pipe to stdout. Got duped to: {}",
-            actual_new_fd
+fn write_to_stderr(msg: &str) {
+    unsafe {
+        libc::write(
+            libc::STDERR_FILENO,
+            (msg.as_bytes() as *const [u8]).cast(),
+            msg.as_bytes().len() as _,
         );
+        libc::write(libc::STDERR_FILENO, (&b'\n' as *const u8).cast(), 1 as _);
     }
-    // dup new stderr to fd 2. The other end of the pipe will be read from the service daemon
-    let actual_new_fd = nix::unistd::dup2(new_stderr, libc::STDERR_FILENO).unwrap();
-    if actual_new_fd != 2 {
-        panic!(
-            "Could not dup the pipe to stderr. Got duped to: {}",
-            actual_new_fd
-        );
+}
+
+fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd, exec_helper_config: RawFd) {
+    fn dup_one_stdio(
+        old_stdio: RawFd,
+        new_stdio: RawFd,
+        fd_name: &str,
+        write_error_msg_to_stderr: bool,
+    ) {
+        let actual_new_fd = unsafe { libc::dup2(old_stdio, new_stdio) };
+        if actual_new_fd != new_stdio {
+            if write_error_msg_to_stderr {
+                let msg = "Could not dup fd";
+                write_to_stderr(msg);
+                write_to_stderr(fd_name);
+            }
+            std::process::exit(1);
+        }
+        unsafe { libc::close(old_stdio) };
     }
 
-    nix::unistd::dup2(exec_helper_config, libc::STDIN_FILENO).unwrap();
-    nix::unistd::close(exec_helper_config).unwrap();
+    // First dup stderr so we can potentially log other dup errors
+    dup_one_stdio(new_stderr, libc::STDERR_FILENO, "stderr", false);
+    dup_one_stdio(new_stdout, libc::STDOUT_FILENO, "stdout", true);
+    dup_one_stdio(exec_helper_config, libc::STDIN_FILENO, "stdin", true);
 }
 
 fn move_into_new_process_group() {
     //make this process the process group leader
-    nix::unistd::setpgid(nix::unistd::getpid(), nix::unistd::Pid::from_raw(0)).unwrap();
+    unsafe {
+        if libc::setpgid(libc::getpid(), 0) != 0 {
+            write_to_stderr("Could not move to new process group");
+            std::process::exit(1);
+        }
+    };
 }
 
-fn dup_fds(name: &str, mut sockets: Vec<RawFd>) -> Result<(), String> {
+fn dup_fds(sockets: &mut [RawFd]) {
     // start at 3. 0,1,2 are stdin,stdout,stderr
     let file_desc_offset = (libc::STDERR_FILENO + 1) as usize;
     for fd_idx in 0..sockets.len() {
@@ -88,38 +104,50 @@ fn dup_fds(name: &str, mut sockets: Vec<RawFd>) -> Result<(), String> {
         for fd in sockets.iter_mut().skip(fd_idx) {
             if *fd == new_fd {
                 // We need to rescue this fd!
-                let rescued_fd =
-                    nix::unistd::dup(*fd).map_err(|e| format!("Error while duping fd: {}", e))?;
-                let _ = nix::unistd::close(*fd);
+                let rescued_fd = unsafe { libc::dup(*fd) };
+                if rescued_fd < 0 {
+                    write_to_stderr("Could not dup fd");
+                    std::process::exit(1);
+                }
+                let _ = unsafe { libc::close(*fd) };
                 *fd = rescued_fd;
             }
         }
 
-        let actual_new_fd = if new_fd as i32 != old_fd {
+        if new_fd as i32 != old_fd {
             //ignore output. newfd might already be closed.
             // TODO check for actual errors other than bad_fd
             let _ = nix::unistd::close(new_fd as i32);
-            let actual_new_fd = nix::unistd::dup2(old_fd, new_fd as i32)
-                .map_err(|e| format!("Error while duping fd: {}", e))?;
-            let _ = nix::unistd::close(old_fd as i32);
-            actual_new_fd
-        } else {
-            new_fd
-        };
-        if new_fd != actual_new_fd {
-            panic!(
-                "Could not dup2 fd {} to {} as required. Was duped to: {}!",
-                old_fd, new_fd, actual_new_fd
-            );
-        }
-        unsafe {
-            if let Err(msg) = crate::platform::unset_cloexec(new_fd) {
-                eprintln!(
-                    "[FORK_CHILD {}] Error while unsetting cloexec flag {}",
-                    name, msg
-                );
+            let actual_new_fd = unsafe { libc::dup2(old_fd, new_fd as RawFd) };
+            if actual_new_fd != new_fd {
+                write_to_stderr("Could not dup2 fd");
+                std::process::exit(1);
             }
-        };
+            let _ = unsafe { libc::close(old_fd as i32) };
+        } else {
+            // nothing to do, already correct fd
+        }
+
+        unsafe {
+            unset_cloexec(new_fd);
+        }
     }
-    Ok(())
+}
+
+unsafe fn unset_cloexec(fd: RawFd) {
+    let old_flags = libc::fcntl(fd, libc::F_GETFD, 0);
+    if old_flags <= -1 {
+        write_to_stderr("Couldn't get fd_flags for FD");
+        std::process::exit(1);
+    } else {
+        // need to actually flip the u32 not just negate the i32.....
+        let unset_cloexec_flag = (libc::FD_CLOEXEC as u32 ^ 0xFFFF_FFFF) as i32;
+        let new_flags = old_flags & unset_cloexec_flag;
+
+        let result = libc::fcntl(fd, libc::F_SETFD, new_flags);
+        if result <= -1 {
+            write_to_stderr("failed to manually unset the CLOEXEC flag on FD");
+            std::process::exit(1);
+        }
+    }
 }
