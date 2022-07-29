@@ -1,3 +1,4 @@
+use crate::units::PlatformSpecificServiceFields;
 use crate::units::ServiceConfig;
 
 #[cfg(feature = "cgroups")]
@@ -19,17 +20,14 @@ pub fn pre_fork_os_specific(srvc: &ServiceConfig) -> Result<(), String> {
     Ok(())
 }
 
-pub fn post_fork_os_specific(srvc: &ServiceConfig) -> Result<(), String> {
+pub fn post_fork_os_specific(conf: &PlatformSpecificServiceFields) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         use log::trace;
-        trace!(
-            "Move service to cgroup: {:?}",
-            &srvc.platform_specific.cgroup_path
-        );
-        cgroups::move_self_to_cgroup(&srvc.platform_specific.cgroup_path)
+        trace!("Move service to cgroup: {:?}", &conf.cgroup_path);
+        cgroups::move_self_to_cgroup(&conf.cgroup_path)
             .map_err(|e| format!("postfork os specific: {}", e))?;
     }
-    let _ = srvc;
+    let _ = conf;
     Ok(())
 }

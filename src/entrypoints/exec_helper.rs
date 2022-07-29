@@ -1,3 +1,5 @@
+use crate::units::PlatformSpecificServiceFields;
+
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct ExecHelperConfig {
     pub name: String,
@@ -10,6 +12,8 @@ pub struct ExecHelperConfig {
     pub group: libc::gid_t,
     pub supplementary_groups: Vec<libc::gid_t>,
     pub user: libc::uid_t,
+
+    pub platform_specific: PlatformSpecificServiceFields,
 }
 
 fn prepare_exec_args(
@@ -37,6 +41,13 @@ pub fn run_exec_helper() {
     println!("Exec helper trying to read config from stdin");
     let config: ExecHelperConfig = serde_json::from_reader(std::io::stdin()).unwrap();
     println!("Apply config: {:?}", config);
+
+    if let Err(e) =
+        crate::services::fork_os_specific::post_fork_os_specific(&config.platform_specific)
+    {
+        eprintln!("[FORK_CHILD {}] postfork error: {}", config.name, e);
+        std::process::exit(1);
+    }
 
     if nix::unistd::getuid().is_root() {
         match crate::platform::drop_privileges(

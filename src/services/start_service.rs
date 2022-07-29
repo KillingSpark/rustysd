@@ -97,6 +97,8 @@ fn start_service_with_filedescriptors(
             .map(|gid| gid.as_raw())
             .collect(),
         user: conf.exec_config.user.as_raw(),
+
+        platform_specific: conf.platform_specific.clone(),
     };
     let exec_helper_conf_fd = nix::sys::memfd::memfd_create(
         &std::ffi::CString::new(name).unwrap(),
@@ -137,7 +139,6 @@ fn start_service_with_filedescriptors(
             };
             fork_child::after_fork_child(
                 self_path,
-                conf,
                 &name,
                 fds,
                 stdout,

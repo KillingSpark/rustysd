@@ -1,4 +1,3 @@
-use crate::units::ServiceConfig;
 use std::os::unix::io::RawFd;
 use std::path::Path;
 
@@ -74,18 +73,12 @@ fn move_into_new_process_group() {
 
 pub fn after_fork_child(
     selfpath: &Path,
-    conf: &ServiceConfig,
     name: &str,
     socket_fds: Vec<RawFd>,
     new_stdout: RawFd,
     new_stderr: RawFd,
     exec_helper_config: RawFd,
 ) {
-    if let Err(e) = super::fork_os_specific::post_fork_os_specific(conf) {
-        eprintln!("[FORK_CHILD {}] postfork error: {}", name, e);
-        std::process::exit(1);
-    }
-
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
     move_into_new_process_group();
@@ -100,23 +93,6 @@ pub fn after_fork_child(
     if let Err(e) = dup_fds(name, socket_fds) {
         eprintln!("[FORK_CHILD {}] error while duping fds: {}", name, e);
         std::process::exit(1);
-    }
-
-    if nix::unistd::getuid().is_root() && !conf.exec_config.user.is_root() {
-        match crate::platform::drop_privileges(
-            conf.exec_config.group,
-            &conf.exec_config.supplementary_groups,
-            conf.exec_config.user,
-        ) {
-            Ok(()) => { /* Happy */ }
-            Err(e) => {
-                eprintln!(
-                    "[FORK_CHILD {}] could not drop privileges because: {}",
-                    name, e
-                );
-                std::process::exit(1);
-            }
-        }
     }
 
     let cmd = std::ffi::CString::new(selfpath.to_str().unwrap()).unwrap();
