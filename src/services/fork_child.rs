@@ -1,4 +1,3 @@
-use crate::services::Service;
 use crate::units::ServiceConfig;
 use std::os::unix::io::RawFd;
 use std::path::Path;
@@ -75,7 +74,6 @@ fn move_into_new_process_group() {
 
 pub fn after_fork_child(
     selfpath: &Path,
-    srvc: &mut Service,
     conf: &ServiceConfig,
     name: &str,
     socket_fds: Vec<RawFd>,
@@ -83,7 +81,7 @@ pub fn after_fork_child(
     new_stderr: RawFd,
     exec_helper_config: RawFd,
 ) {
-    if let Err(e) = super::fork_os_specific::post_fork_os_specific(srvc) {
+    if let Err(e) = super::fork_os_specific::post_fork_os_specific(conf) {
         eprintln!("[FORK_CHILD {}] postfork error: {}", name, e);
         std::process::exit(1);
     }
@@ -104,7 +102,7 @@ pub fn after_fork_child(
         std::process::exit(1);
     }
 
-    if nix::unistd::getuid().is_root() {
+    if nix::unistd::getuid().is_root() && !conf.exec_config.user.is_root() {
         match crate::platform::drop_privileges(
             conf.exec_config.group,
             &conf.exec_config.supplementary_groups,

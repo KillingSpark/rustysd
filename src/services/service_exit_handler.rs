@@ -102,7 +102,9 @@ pub fn service_exit_handler(
         if let Specific::Service(srvc) = &unit.specific {
             if srvc.conf.srcv_type == ServiceType::OneShot {
                 let mut_state = &mut *srvc.state.write().unwrap();
-                mut_state.srvc.kill_all_remaining_processes(&unit.id.name);
+                mut_state
+                    .srvc
+                    .kill_all_remaining_processes(&srvc.conf, &unit.id.name);
                 return Ok(());
             }
         }

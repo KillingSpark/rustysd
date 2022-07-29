@@ -1,11 +1,12 @@
-use crate::services::Service;
+use crate::units::ServiceConfig;
+use log::trace;
 
 #[cfg(feature = "cgroups")]
 use crate::platform::cgroups;
 
 /// This is the place to do anything that is not standard unix but specific to one os. Like cgroups
 
-pub fn pre_fork_os_specific(srvc: &mut Service) -> Result<(), String> {
+pub fn pre_fork_os_specific(srvc: &ServiceConfig) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         std::fs::create_dir_all(&srvc.platform_specific.cgroup_path).map_err(|e| {
@@ -19,7 +20,7 @@ pub fn pre_fork_os_specific(srvc: &mut Service) -> Result<(), String> {
     Ok(())
 }
 
-pub fn post_fork_os_specific(srvc: &mut Service) -> Result<(), String> {
+pub fn post_fork_os_specific(srvc: &ServiceConfig) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         trace!(

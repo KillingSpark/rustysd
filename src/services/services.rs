@@ -235,7 +235,7 @@ impl Service {
         }
     }
 
-    pub fn kill_all_remaining_processes(&mut self, name: &str) {
+    pub fn kill_all_remaining_processes(&mut self, conf: &ServiceConfig, name: &str) {
         trace!("Kill all process for {}", name);
         if let Some(proc_group) = self.process_group {
             // TODO handle these errors
@@ -246,7 +246,7 @@ impl Service {
         } else {
             trace!("Tried to kill service that didn't have a process-group. This might have resulted in orphan processes.");
         }
-        match super::kill_os_specific::kill(self, nix::sys::signal::Signal::SIGKILL) {
+        match super::kill_os_specific::kill(conf, nix::sys::signal::Signal::SIGKILL) {
             Ok(_) => trace!("Success killing process os specificly for service {}", name,),
             Err(e) => error!(
                 "Error killing process os specificly for service {}: {}",
@@ -525,7 +525,7 @@ impl Service {
 
         if conf.srcv_type != ServiceType::OneShot {
             // already happened when the oneshot process exited in the exit handler
-            self.kill_all_remaining_processes(name);
+            self.kill_all_remaining_processes(conf, name);
         }
         self.pid = None;
         self.process_group = None;

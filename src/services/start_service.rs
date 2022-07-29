@@ -56,7 +56,7 @@ fn start_service_with_filedescriptors(
         }
     };
 
-    super::fork_os_specific::pre_fork_os_specific(srvc).map_err(|e| RunCmdError::Generic(e))?;
+    super::fork_os_specific::pre_fork_os_specific(conf).map_err(|e| RunCmdError::Generic(e))?;
 
     let mut fds = Vec::new();
     let mut names = Vec::new();
@@ -137,7 +137,6 @@ fn start_service_with_filedescriptors(
             };
             fork_child::after_fork_child(
                 self_path,
-                srvc,
                 conf,
                 &name,
                 fds,
