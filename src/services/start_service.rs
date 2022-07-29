@@ -141,7 +141,7 @@ fn start_service_with_filedescriptors(
                     unreachable!();
                 }
             };
-            
+
             fork_child::after_fork_child(
                 &self_path_cstr,
                 self_args.as_slice(),

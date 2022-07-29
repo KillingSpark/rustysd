@@ -1,7 +1,7 @@
 use std::os::unix::io::RawFd;
 
 /// After forking we setup the all filedescriptors, move into a new process group and then exec the exec_helper
-/// 
+///
 /// Note that this is called between fork and exec. This means this needs to be careful about what we call here!
 /// At least on linux this is a good reference: https://man7.org/linux/man-pages/man7/signal-safety.7.html
 pub fn after_fork_child(
