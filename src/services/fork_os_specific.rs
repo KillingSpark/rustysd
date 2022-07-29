@@ -1,5 +1,4 @@
 use crate::units::ServiceConfig;
-use log::trace;
 
 #[cfg(feature = "cgroups")]
 use crate::platform::cgroups;
@@ -23,6 +22,7 @@ pub fn pre_fork_os_specific(srvc: &ServiceConfig) -> Result<(), String> {
 pub fn post_fork_os_specific(srvc: &ServiceConfig) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
+        use log::trace;
         trace!(
             "Move service to cgroup: {:?}",
             &srvc.platform_specific.cgroup_path
