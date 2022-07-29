@@ -1,7 +1,6 @@
 use std::os::unix::io::RawFd;
-use std::path::Path;
 
-fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
+fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd, exec_helper_config: RawFd) {
     // dup new stdout to fd 1. The other end of the pipe will be read from the service daemon
     let actual_new_fd = nix::unistd::dup2(new_stdout, libc::STDOUT_FILENO).unwrap();
     if actual_new_fd != 1 {
@@ -18,6 +17,9 @@ fn dup_stdio(new_stdout: RawFd, new_stderr: RawFd) {
             actual_new_fd
         );
     }
+
+    nix::unistd::dup2(exec_helper_config, libc::STDIN_FILENO).unwrap();
+    nix::unistd::close(exec_helper_config).unwrap();
 }
 
 fn dup_fds(name: &str, mut sockets: Vec<RawFd>) -> Result<(), String> {
@@ -72,7 +74,8 @@ fn move_into_new_process_group() {
 }
 
 pub fn after_fork_child(
-    selfpath: &Path,
+    selfpath: &std::ffi::CStr,
+    self_args: &[&std::ffi::CStr],
     name: &str,
     socket_fds: Vec<RawFd>,
     new_stdout: RawFd,
@@ -81,27 +84,29 @@ pub fn after_fork_child(
 ) {
     // DO NOT USE THE LOGGER HERE. It aquires a global lock which might be held at the time of forking
     // But since this is the only thread that is in the child process the lock will never be released!
-    move_into_new_process_group();
-
-    // no more logging after this point!
+    //
+    // Also:
     // The filedescriptor used by the logger might have been duped to another
     // one and logging into that one would be.... bad
     // Hopefully the close() means that no old logs will get written to that filedescriptor
 
-    dup_stdio(new_stdout, new_stderr);
+    // Setup the new stdio so println! and eprintln! go to the expected fds
+    dup_stdio(new_stdout, new_stderr, exec_helper_config);
 
+    // Lets move into a new process group before execing
+    move_into_new_process_group();
+
+    // Dup all the fds for the service here, because we use SO_CLOEXEC on all fds so doing it after exec isn't possible
     if let Err(e) = dup_fds(name, socket_fds) {
         eprintln!("[FORK_CHILD {}] error while duping fds: {}", name, e);
         std::process::exit(1);
     }
 
-    let cmd = std::ffi::CString::new(selfpath.to_str().unwrap()).unwrap();
-    let args = &[&std::ffi::CString::new("exec_helper").unwrap()];
-    eprintln!("EXECV: {:?} {:?}", &cmd, &args);
+    // Just so we have a clearer picture on what is happening while debugging
+    eprintln!("EXECV: {:?} {:?}", &selfpath, self_args);
 
-    nix::unistd::dup2(exec_helper_config, libc::STDIN_FILENO).unwrap();
-    nix::unistd::close(exec_helper_config).unwrap();
-    match nix::unistd::execv(&cmd, args) {
+    // Finally exec the exec_helper
+    match nix::unistd::execv(selfpath, self_args) {
         Ok(_) => {
             eprintln!(
                 "[FORK_CHILD {}] execv returned Ok()... This should never happen",

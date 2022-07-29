@@ -116,6 +116,10 @@ fn start_service_with_filedescriptors(
         .unwrap();
     std::mem::forget(exec_helper_conf_file);
 
+    let self_path_cstr = std::ffi::CString::new(self_path.to_str().unwrap()).unwrap();
+    let name_arg = std::ffi::CString::new("exec_helper").unwrap();
+    let self_args = [name_arg.as_c_str()];
+
     // make sure we have the lock that the child will need
     match unsafe { nix::unistd::fork() } {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
@@ -137,8 +141,10 @@ fn start_service_with_filedescriptors(
                     unreachable!();
                 }
             };
+            
             fork_child::after_fork_child(
-                self_path,
+                &self_path_cstr,
+                self_args.as_slice(),
                 &name,
                 fds,
                 stdout,

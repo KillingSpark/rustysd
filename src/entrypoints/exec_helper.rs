@@ -42,6 +42,8 @@ pub fn run_exec_helper() {
     let config: ExecHelperConfig = serde_json::from_reader(std::io::stdin()).unwrap();
     println!("Apply config: {:?}", config);
 
+    nix::unistd::close(libc::STDIN_FILENO).expect("I want to be able to close this fd!");
+
     if let Err(e) =
         crate::services::fork_os_specific::post_fork_os_specific(&config.platform_specific)
     {
