@@ -242,7 +242,32 @@ pub fn load_config(config_path: &Option<PathBuf>) -> (LoggingConfig, Result<Conf
             {
                 PathBuf::from("/proc/self/exe")
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(target_os = "freebsd")]
+            {
+                let mib: [libc::c_int; 4] = [0; 4];
+                mib[0] = libc::CTL_KERN;
+                mib[1] = libc::KERN_PROC;
+                mib[2] = libc::KERN_PROC_PATHNAME;
+                mib[3] = -1;
+                let mut buf: [libc::c_char; 1024] = [0; 1024];
+                let mut cb = std::mem::size_of_val(buf) as _;
+                let res = unsafe {
+                    libc::sysctl(
+                        mib.as_ptr(),
+                        4,
+                        buf.as_mut_ptr(),
+                        &mut cb as *mut _,
+                        NULL,
+                        0,
+                    );
+                };
+                if res != 0 {
+                    return Err("No selfpath configured, and querying KERN_PROC_PATHNAME failed!");
+                }
+                let bytes: &[u8] = std::slice::from_raw_parts(buf.as_ptr().cast(), cb as usize);
+                std::path::PathBuf::from(bytes)
+            }
+            #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
             {
                 return Err("Need a selfpath configured!");
             }
