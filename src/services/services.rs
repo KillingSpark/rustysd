@@ -64,7 +64,8 @@ pub enum RunCmdError {
     SpawnError(String, String),
     WaitError(String, String),
     BadExitCode(String, crate::signal_handler::ChildTermination),
-    ExitBeforeNotify(crate::signal_handler::ChildTermination),
+    ExitBeforeNotify(String, crate::signal_handler::ChildTermination),
+    CreatingShmemFailed(String, std::io::ErrorKind),
     Generic(String),
 }
 
@@ -72,13 +73,17 @@ impl std::fmt::Display for RunCmdError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
             RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
-            RunCmdError::ExitBeforeNotify(exit) => {
-                format!("Service exited before sendeinf READY=1 with: {:?}", exit)
+            RunCmdError::ExitBeforeNotify(cmd, exit) => {
+                format!("{} exited before sendeinf READY=1 with: {:?}", cmd, exit)
             }
             RunCmdError::SpawnError(cmd, err) => format!("{} failed to spawn with: {:?}", cmd, err),
             RunCmdError::WaitError(cmd, err) => {
                 format!("{} could not be waited on because: {:?}", cmd, err)
             }
+            RunCmdError::CreatingShmemFailed(cmd, err) => format!(
+                "{} could not create shared memory for passing the chainloading config: {:?}",
+                cmd, err
+            ),
             RunCmdError::Timeout(cmd, err) => format!("{} reached its timeout: {:?}", cmd, err),
             RunCmdError::Generic(err) => format!("Generic error: {}", err),
         };
@@ -195,6 +200,7 @@ impl Service {
                 // Doing it under the lock of the pid_table prevents races between processes exiting very
                 // fast and inserting the new pid into the pid table
                 start_service(
+                    &run_info.config.self_path,
                     self,
                     conf,
                     name.clone(),
@@ -234,7 +240,7 @@ impl Service {
         }
     }
 
-    pub fn kill_all_remaining_processes(&mut self, name: &str) {
+    pub fn kill_all_remaining_processes(&mut self, conf: &ServiceConfig, name: &str) {
         trace!("Kill all process for {}", name);
         if let Some(proc_group) = self.process_group {
             // TODO handle these errors
@@ -245,7 +251,7 @@ impl Service {
         } else {
             trace!("Tried to kill service that didn't have a process-group. This might have resulted in orphan processes.");
         }
-        match super::kill_os_specific::kill(self, nix::sys::signal::Signal::SIGKILL) {
+        match super::kill_os_specific::kill(conf, nix::sys::signal::Signal::SIGKILL) {
             Ok(_) => trace!("Success killing process os specificly for service {}", name,),
             Err(e) => error!(
                 "Error killing process os specificly for service {}: {}",
@@ -524,7 +530,7 @@ impl Service {
 
         if conf.srcv_type != ServiceType::OneShot {
             // already happened when the oneshot process exited in the exit handler
-            self.kill_all_remaining_processes(name);
+            self.kill_all_remaining_processes(conf, name);
         }
         self.pid = None;
         self.process_group = None;

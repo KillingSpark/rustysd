@@ -857,13 +857,13 @@ pub struct ExecConfig {
 }
 
 #[cfg(target_os = "linux")]
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PlatformSpecificServiceFields {
     pub cgroup_path: std::path::PathBuf,
 }
 
 #[cfg(not(target_os = "linux"))]
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, , serde::Serialize, serde::Deserialize)]
 pub struct PlatformSpecificServiceFields {}
 
 #[derive(Clone, Eq, PartialEq, Debug)]

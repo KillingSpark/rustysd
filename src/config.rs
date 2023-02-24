@@ -25,6 +25,7 @@ pub struct Config {
     pub unit_dirs: Vec<PathBuf>,
     pub target_unit: String,
     pub notification_sockets_dir: PathBuf,
+    pub self_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -77,6 +78,9 @@ fn load_toml(
         if let Some(toml::Value::String(val)) = map.get("target_unit") {
             settings.insert("target.unit".to_owned(), SettingValue::Str(val.clone()));
         }
+        if let Some(toml::Value::String(val)) = map.get("selfpath") {
+            settings.insert("selfpath".to_owned(), SettingValue::Str(val.clone()));
+        }
         if let Some(toml::Value::String(val)) = map.get("notifications_dir") {
             settings.insert(
                 "notifications.dir".to_owned(),
@@ -126,6 +130,9 @@ fn load_json(
         }
         if let Some(serde_json::Value::String(val)) = map.get("target_unit") {
             settings.insert("target.unit".to_owned(), SettingValue::Str(val.clone()));
+        }
+        if let Some(serde_json::Value::String(val)) = map.get("selfpath") {
+            settings.insert("selfpath".to_owned(), SettingValue::Str(val.clone()));
         }
         if let Some(serde_json::Value::String(val)) = map.get("notifications_dir") {
             settings.insert(
@@ -191,12 +198,16 @@ pub fn load_config(config_path: &Option<PathBuf>) -> (LoggingConfig, Result<Conf
         _ => false,
     });
 
-    let notification_sockets_dir = settings.get("notifications.dir").map(|dir| match dir {
+    let notification_sockets_dir = settings.get("notifications.dir").and_then(|dir| match dir {
         SettingValue::Str(s) => Some(PathBuf::from(s)),
         _ => None,
     });
-    let target_unit = settings.get("target.unit").map(|name| match name {
+    let target_unit = settings.get("target.unit").and_then(|name| match name {
         SettingValue::Str(s) => Some(s.clone()),
+        _ => None,
+    });
+    let self_path = settings.get("selfpath").and_then(|dir| match dir {
+        SettingValue::Str(s) => Some(PathBuf::from(s)),
         _ => None,
     });
 
@@ -221,13 +232,15 @@ pub fn load_config(config_path: &Option<PathBuf>) -> (LoggingConfig, Result<Conf
 
     let config = Config {
         unit_dirs: unit_dirs.unwrap_or_else(|| vec![PathBuf::from("./unitfiles")]),
-        target_unit: target_unit
-            .unwrap_or(Some("default.target".to_owned()))
-            .unwrap(),
+        target_unit: target_unit.unwrap_or("default.target".to_owned()),
 
         notification_sockets_dir: notification_sockets_dir
-            .unwrap_or_else(|| Some(PathBuf::from("./notifications")))
-            .unwrap(),
+            .unwrap_or_else(|| PathBuf::from("./notifications")),
+
+        self_path: self_path.unwrap_or_else(|| {
+            std::env::current_exe()
+                .expect("Could not get own executable name and it was not configured explicitly")
+        }),
     };
 
     let conf = if let Some(json_conf) = json_conf {

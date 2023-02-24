@@ -2,6 +2,9 @@ use crate::services::*;
 use crate::sockets::*;
 use crate::units::*;
 
+#[cfg(feature = "cgroups")]
+use log::trace;
+
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::RwLock;

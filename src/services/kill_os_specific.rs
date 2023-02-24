@@ -1,9 +1,9 @@
-use crate::services::Service;
+use crate::units::ServiceConfig;
 
 #[cfg(feature = "cgroups")]
 use crate::platform::cgroups;
 
-pub fn kill(srvc: &mut Service, sig: nix::sys::signal::Signal) -> Result<(), String> {
+pub fn kill(srvc: &ServiceConfig, sig: nix::sys::signal::Signal) -> Result<(), String> {
     #[cfg(feature = "cgroups")]
     {
         cgroups::freeze_kill_thaw_cgroup(&srvc.platform_specific.cgroup_path, sig)
