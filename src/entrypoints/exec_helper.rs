@@ -82,5 +82,6 @@ pub fn run_exec_helper() {
     std::env::set_var("LISTEN_PID", format!("{}", nix::unistd::getpid()));
 
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
-    nix::unistd::execv(&cmd, &args).unwrap();
+
+    nix::unistd::execvp(&cmd, &args).unwrap();
 }
