@@ -64,7 +64,8 @@ pub enum RunCmdError {
     SpawnError(String, String),
     WaitError(String, String),
     BadExitCode(String, crate::signal_handler::ChildTermination),
-    ExitBeforeNotify(crate::signal_handler::ChildTermination),
+    ExitBeforeNotify(String, crate::signal_handler::ChildTermination),
+    CreatingShmemFailed(String, std::io::ErrorKind),
     Generic(String),
 }
 
@@ -72,13 +73,17 @@ impl std::fmt::Display for RunCmdError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let msg = match self {
             RunCmdError::BadExitCode(cmd, exit) => format!("{} exited with: {:?}", cmd, exit),
-            RunCmdError::ExitBeforeNotify(exit) => {
-                format!("Service exited before sendeinf READY=1 with: {:?}", exit)
+            RunCmdError::ExitBeforeNotify(cmd, exit) => {
+                format!("{} exited before sendeinf READY=1 with: {:?}", cmd, exit)
             }
             RunCmdError::SpawnError(cmd, err) => format!("{} failed to spawn with: {:?}", cmd, err),
             RunCmdError::WaitError(cmd, err) => {
                 format!("{} could not be waited on because: {:?}", cmd, err)
             }
+            RunCmdError::CreatingShmemFailed(cmd, err) => format!(
+                "{} could not create shared memory for passing the chainloading config: {:?}",
+                cmd, err
+            ),
             RunCmdError::Timeout(cmd, err) => format!("{} reached its timeout: {:?}", cmd, err),
             RunCmdError::Generic(err) => format!("Generic error: {}", err),
         };

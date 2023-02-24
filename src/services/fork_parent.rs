@@ -52,7 +52,7 @@ pub fn wait_for_service(
                         );
                         let pid_entry = pid_table_locked.remove(&srvc.pid.unwrap());
                         if let Some(PidEntry::ServiceExited(code)) = pid_entry {
-                            return Err(RunCmdError::ExitBeforeNotify(code));
+                            return Err(RunCmdError::ExitBeforeNotify(name.to_owned(), code));
                         }
                     }
                 }
