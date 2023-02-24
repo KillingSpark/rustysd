@@ -108,7 +108,7 @@ fn start_service_with_filedescriptors(
     // crate the shared memory file
     let exec_helper_conf_fd = shmemfdrs::create_shmem(
         &std::ffi::CString::new(name).unwrap(),
-        marshalled_config.as_bytes().len() + 1024,
+        marshalled_config.as_bytes().len() + 1,
     );
     if exec_helper_conf_fd < 0 {
         return Err(RunCmdError::CreatingShmemFailed(
