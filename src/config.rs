@@ -238,7 +238,8 @@ pub fn load_config(config_path: &Option<PathBuf>) -> (LoggingConfig, Result<Conf
             .unwrap_or_else(|| PathBuf::from("./notifications")),
 
         self_path: self_path.unwrap_or_else(|| {
-            std::env::current_exe().expect("Could not get own executable name and it was not configured explicitly")
+            std::env::current_exe()
+                .expect("Could not get own executable name and it was not configured explicitly")
         }),
     };
 
