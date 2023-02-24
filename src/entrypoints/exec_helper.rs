@@ -73,7 +73,8 @@ pub fn run_exec_helper() {
     }
 
     let (cmd, args) = prepare_exec_args(&config.cmd, &config.args);
-    // TODO env and LISTEN_PID env var
+
+    // setup environment vars
     for (k, v) in config.env.iter() {
         std::env::set_var(k, v);
     }
