@@ -19,4 +19,7 @@ jobs:
 
     - name: Run tests
       run: cargo test --verbose --features linux_eventfd
+
+    - name: Check freebsd
+      run: cargo check --target x86_64-unknown-freebsd
   
