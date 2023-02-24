@@ -103,8 +103,13 @@ fn start_service_with_filedescriptors(
         platform_specific: conf.platform_specific.clone(),
     };
 
+    let marshalled_config = serde_json::to_string(&exec_helper_conf).unwrap();
+
     // crate the shared memory file
-    let exec_helper_conf_fd = shmemfdrs::create_shmem(&std::ffi::CString::new(name).unwrap(), 0);
+    let exec_helper_conf_fd = shmemfdrs::create_shmem(
+        &std::ffi::CString::new(name).unwrap(),
+        marshalled_config.as_bytes().len() + 1024,
+    );
     if exec_helper_conf_fd < 0 {
         return Err(RunCmdError::CreatingShmemFailed(
             name.to_owned(),
@@ -115,8 +120,10 @@ fn start_service_with_filedescriptors(
     let mut exec_helper_conf_file = unsafe { std::fs::File::from_raw_fd(exec_helper_conf_fd) };
 
     // write the config to the file
-    serde_json::to_writer(&mut exec_helper_conf_file, &exec_helper_conf).unwrap();
     use std::io::Write;
+    exec_helper_conf_file
+        .write_all(marshalled_config.as_bytes())
+        .unwrap();
     exec_helper_conf_file.write(&[b'\n']).unwrap();
     use std::io::Seek;
     exec_helper_conf_file
