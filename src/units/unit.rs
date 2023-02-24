@@ -863,7 +863,7 @@ pub struct PlatformSpecificServiceFields {
 }
 
 #[cfg(not(target_os = "linux"))]
-#[derive(Clone, Eq, PartialEq, Debug, , serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PlatformSpecificServiceFields {}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
