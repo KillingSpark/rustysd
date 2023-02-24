@@ -20,6 +20,9 @@ jobs:
     - name: Run tests
       run: cargo test --verbose --features linux_eventfd
 
+    - name: Get freebsd toolchain
+      run: rustup target add x86_64-unknown-freebsd 
+
     - name: Check freebsd
       run: cargo check --target x86_64-unknown-freebsd
   
