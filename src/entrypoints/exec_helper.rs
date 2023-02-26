@@ -1,10 +1,12 @@
+use std::path::{PathBuf, Path};
+
 use crate::units::PlatformSpecificServiceFields;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct ExecHelperConfig {
     pub name: String,
 
-    pub cmd: String,
+    pub cmd: PathBuf,
     pub args: Vec<String>,
 
     pub env: Vec<(String, String)>,
@@ -17,10 +19,10 @@ pub struct ExecHelperConfig {
 }
 
 fn prepare_exec_args(
-    cmd_str: &str,
+    cmd_str: &Path,
     args_str: &[String],
 ) -> (std::ffi::CString, Vec<std::ffi::CString>) {
-    let cmd = std::ffi::CString::new(cmd_str).unwrap();
+    let cmd = std::ffi::CString::new(cmd_str.to_string_lossy().as_bytes()).unwrap();
 
     let exec_name = std::path::PathBuf::from(cmd_str);
     let exec_name = exec_name.file_name().unwrap();
@@ -83,5 +85,5 @@ pub fn run_exec_helper() {
 
     eprintln!("EXECV: {:?} {:?}", &cmd, &args);
 
-    nix::unistd::execvp(&cmd, &args).unwrap();
+    nix::unistd::execv(&cmd, &args).unwrap();
 }

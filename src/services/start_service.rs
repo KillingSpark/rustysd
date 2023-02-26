@@ -1,4 +1,5 @@
 use log::error;
+use log::trace;
 use which::which;
 
 use super::fork_child;
@@ -90,7 +91,7 @@ fn start_service_with_filedescriptors(
     // We transfer the config via a anonymous shared memory file
     let exec_helper_conf = crate::entrypoints::ExecHelperConfig {
         name: name.to_owned(),
-        cmd: conf.exec.cmd.clone(),
+        cmd: cmd,
         args: conf.exec.args.clone(),
         env: vec![
             ("LISTEN_FDS".to_owned(), format!("{}", names.len())),
@@ -141,6 +142,7 @@ fn start_service_with_filedescriptors(
     let name_arg = std::ffi::CString::new("exec_helper").unwrap();
     let self_args = [name_arg.as_ptr(), std::ptr::null()];
 
+    trace!("Start main executable for service: {name}: {:?} {:?}", exec_helper_conf.cmd, exec_helper_conf.args);
     match unsafe { nix::unistd::fork() } {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             // make sure the file exists until after we fork before closing it
