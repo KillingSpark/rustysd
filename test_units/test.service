@@ -4,11 +4,11 @@ Sockets= test_second.socket
 NotifyAccess= all
 Type= notify
 Restart= always
-ExecStartPre= /bin/echo "perstart"
-ExecStartPre= /bin/echo "This should be printed with the correct prefix even tough it is a message from ExecStartPre"
-ExecStartPost= /bin/echo "posstart"
-ExecStop = /bin/echo "stop"
-ExecStopPost = /bin/echo "poststop"
+ExecStartPre= echo "perstart"
+ExecStartPre= echo "This should be printed with the correct prefix even tough it is a message from ExecStartPre"
+ExecStartPost= echo "posstart"
+ExecStop = echo "stop"
+ExecStopPost = echo "poststop"
 
 [Unit]
 Before= test2.service

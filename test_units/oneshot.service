@@ -1,9 +1,9 @@
 [Service]
-ExecStart= /bin/echo "This is a log from a service"
-ExecStartPre= /bin/sleep 1
-ExecStartPost= /bin/sleep 1
+ExecStart= echo "This is a log from a service"
+ExecStartPre= sleep 1
+ExecStartPost= sleep 1
 ExecStop = echo "Stop"
-ExecStop = /bin/false
+ExecStop = false
 ExecStopPost = echo "Post stop"
 Type= oneshot
 TimeoutStartSec= 0min 4s

@@ -1,4 +1,5 @@
 use log::error;
+use which::which;
 
 use super::fork_child;
 use crate::fd_store::FDStore;
@@ -16,7 +17,12 @@ fn start_service_with_filedescriptors(
     fd_store: &FDStore,
 ) -> Result<(), RunCmdError> {
     // check if executable even exists
-    let cmd = std::path::PathBuf::from(&conf.exec.cmd);
+    let cmd = which(&conf.exec.cmd).map_err(|err| {
+        RunCmdError::SpawnError(
+            name.to_owned(),
+            format!("Could not resolve command to an exectuable file: {err:?}"),
+        )
+    })?;
     if !cmd.exists() {
         error!(
             "The service {} specified an executable that does not exist: {:?}",
