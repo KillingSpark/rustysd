@@ -184,9 +184,9 @@ impl Service {
                 &run_info.config.notification_sockets_dir,
             )
             .map_err(|e| ServiceErrorReason::PreparingFailed(e))?;
-            self.run_prestart(conf, id.clone(), name, run_info.clone())
+            self.run_prestart(conf, id.clone(), name, run_info)
                 .map_err(|prestart_err| {
-                    match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
+                    match self.run_poststop(conf, id.clone(), name, run_info) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(prestart_err),
                         Err(poststop_err) => ServiceErrorReason::PrestartAndPoststopFailed(
                             prestart_err,
@@ -203,7 +203,7 @@ impl Service {
                     &run_info.config.self_path,
                     self,
                     conf,
-                    name.clone(),
+                    name,
                     &*run_info.fd_store.read().unwrap(),
                 )
                 .map_err(|e| ServiceErrorReason::StartFailed(e))?;
@@ -213,16 +213,16 @@ impl Service {
             }
 
             super::fork_parent::wait_for_service(self, conf, name, run_info).map_err(
-                |start_err| match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
+                |start_err| match self.run_poststop(conf, id.clone(), name, run_info) {
                     Ok(_) => ServiceErrorReason::StartFailed(start_err),
                     Err(poststop_err) => {
                         ServiceErrorReason::StartAndPoststopFailed(start_err, poststop_err)
                     }
                 },
             )?;
-            self.run_poststart(conf, id.clone(), name, run_info.clone())
+            self.run_poststart(conf, id.clone(), name, run_info)
                 .map_err(|poststart_err| {
-                    match self.run_poststop(conf, id.clone(), name, run_info.clone()) {
+                    match self.run_poststop(conf, id.clone(), name, run_info) {
                         Ok(_) => ServiceErrorReason::PrestartFailed(poststart_err),
                         Err(poststop_err) => ServiceErrorReason::PoststartAndPoststopFailed(
                             poststart_err,
@@ -267,7 +267,7 @@ impl Service {
         name: &str,
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
-        self.run_stop_cmd(conf, id, name, run_info.clone())
+        self.run_stop_cmd(conf, id, name, run_info)
     }
     pub fn kill(
         &mut self,
@@ -469,7 +469,7 @@ impl Service {
         run_info: &RuntimeInfo,
     ) -> Result<(), RunCmdError> {
         for cmd in cmds {
-            self.run_cmd(cmd, id.clone(), name, timeout, run_info.clone())?;
+            self.run_cmd(cmd, id.clone(), name, timeout, run_info)?;
         }
         Ok(())
     }
@@ -486,7 +486,7 @@ impl Service {
         }
         let timeout = self.get_stop_timeout(conf);
         let cmds = conf.stop.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
+        self.run_all_cmds(&cmds, id, name, timeout, run_info)
     }
     fn run_prestart(
         &mut self,
@@ -500,7 +500,7 @@ impl Service {
         }
         let timeout = self.get_start_timeout(conf);
         let cmds = conf.startpre.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
+        self.run_all_cmds(&cmds, id, name, timeout, run_info)
     }
     fn run_poststart(
         &mut self,
@@ -514,7 +514,7 @@ impl Service {
         }
         let timeout = self.get_start_timeout(conf);
         let cmds = conf.startpost.clone();
-        self.run_all_cmds(&cmds, id, name, timeout, run_info.clone())
+        self.run_all_cmds(&cmds, id, name, timeout, run_info)
     }
     fn run_poststop(
         &mut self,
@@ -526,7 +526,7 @@ impl Service {
         trace!("Run poststop for {}", name);
         let timeout = self.get_stop_timeout(conf);
         let cmds = conf.stoppost.clone();
-        let res = self.run_all_cmds(&cmds, id, name, timeout, run_info.clone());
+        let res = self.run_all_cmds(&cmds, id, name, timeout, run_info);
 
         if conf.srcv_type != ServiceType::OneShot {
             // already happened when the oneshot process exited in the exit handler

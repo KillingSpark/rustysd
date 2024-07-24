@@ -9,6 +9,7 @@ pub use pipe_eventfd::*;
 
 #[cfg(not(feature = "linux_eventfd"))]
 mod pipe_eventfd {
+    use std::os::fd::IntoRawFd;
     use std::os::unix::io::RawFd;
 
     use log::{error, trace};
@@ -28,7 +29,7 @@ mod pipe_eventfd {
 
     pub fn make_event_fd() -> Result<EventFd, String> {
         let (r, w) = nix::unistd::pipe().map_err(|e| format!("Error creating pipe, {}", e))?;
-        Ok(EventFd(r, w))
+        Ok(EventFd(r.into_raw_fd(), w.into_raw_fd()))
     }
 
     pub fn notify_event_fd(eventfd: EventFd) {

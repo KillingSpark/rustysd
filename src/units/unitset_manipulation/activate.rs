@@ -165,7 +165,7 @@ pub fn activate_unit(
 
     let next_services_ids = unit.common.dependencies.before.clone();
 
-    unit.activate(run_info.clone(), source)
+    unit.activate(run_info, source)
         .map(|_| StartResult::Started(next_services_ids))
 }
 

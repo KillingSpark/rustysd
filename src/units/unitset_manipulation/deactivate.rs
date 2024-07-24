@@ -24,7 +24,7 @@ pub fn deactivate_unit_recursive(
 
     deactivate_units_recursive(&unit.common.dependencies.required_by, run_info)?;
 
-    deactivate_unit(id_to_kill, run_info.clone())
+    deactivate_unit(id_to_kill, run_info)
 }
 
 pub fn deactivate_unit(
@@ -45,7 +45,7 @@ pub fn deactivate_unit(
             });
         }
     };
-    unit.deactivate(run_info.clone())?;
+    unit.deactivate(run_info)?;
 
     Ok(())
 }
@@ -65,7 +65,7 @@ pub fn deactivate_units(
     run_info: &RuntimeInfo,
 ) -> Result<(), UnitOperationError> {
     for id in ids_to_kill {
-        deactivate_unit(id, run_info.clone())?;
+        deactivate_unit(id, run_info)?;
     }
     Ok(())
 }

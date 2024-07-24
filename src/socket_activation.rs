@@ -1,6 +1,8 @@
 //! Wait for sockets to activate their respective services
+
 use log::error;
 use log::trace;
+use std::os::fd::BorrowedFd;
 
 use crate::runtime_info::*;
 use crate::units::*;
@@ -106,11 +108,11 @@ pub fn wait_for_socket(run_info: ArcMutRuntimeInfo) -> Result<Vec<UnitId>, Strin
                 if let Specific::Socket(specific) = &unit.specific {
                     let mut_state = &*specific.state.read().unwrap();
                     if !mut_state.sock.activated {
-                        fdset.insert(*fd);
+                        fdset.insert(unsafe { BorrowedFd::borrow_raw(*fd) });
                     }
                 }
             }
-            fdset.insert(eventfd.read_end());
+            fdset.insert(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) });
         }
         (fdset, fd_to_sock_id)
     };
@@ -119,13 +121,13 @@ pub fn wait_for_socket(run_info: ArcMutRuntimeInfo) -> Result<Vec<UnitId>, Strin
     match result {
         Ok(_) => {
             let mut activated_ids = Vec::new();
-            if fdset.contains(eventfd.read_end()) {
+            if fdset.contains(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) }) {
                 trace!("Interrupted socketactivation select because the eventfd fired");
                 crate::platform::reset_event_fd(eventfd);
                 trace!("Reset eventfd value");
             } else {
                 for (fd, id) in &fd_to_sock_id {
-                    if fdset.contains(*fd) {
+                    if fdset.contains(unsafe { BorrowedFd::borrow_raw(*fd) }) {
                         activated_ids.push(id.clone());
                     }
                 }

@@ -1,3 +1,5 @@
+use nix::sys::socket::Backlog;
+use std::os::fd::BorrowedFd;
 use std::os::unix::io::RawFd;
 
 pub fn make_seqpacket_socket(path: &std::path::PathBuf) -> Result<RawFd, String> {
@@ -18,7 +20,11 @@ pub fn make_seqpacket_socket(path: &std::path::PathBuf) -> Result<RawFd, String>
     // then bind the socket to the path
     nix::sys::socket::bind(fd, &unix_addr).unwrap();
     // then make the socket an accepting one
-    nix::sys::socket::listen(fd, 128).unwrap();
+    nix::sys::socket::listen(
+        &unsafe { BorrowedFd::borrow_raw(fd) },
+        Backlog::new(128).unwrap(),
+    )
+    .unwrap();
 
     Ok(fd)
 }

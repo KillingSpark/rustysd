@@ -150,7 +150,7 @@ pub fn service_exit_handler(
             name
         );
         loop {
-            let res = crate::units::deactivate_unit_recursive(&srvc_id, run_info.clone());
+            let res = crate::units::deactivate_unit_recursive(&srvc_id, run_info);
             let retry = if let Err(e) = &res {
                 if let UnitOperationErrorReason::DependencyError(_) = e.reason {
                     // Only retry if this is the case. This only occurs if, while the units are being deactivated,

@@ -10,6 +10,7 @@ use crate::runtime_info::*;
 use crate::services::Service;
 use crate::services::StdIo;
 use crate::units::*;
+use std::os::fd::BorrowedFd;
 use std::{collections::HashMap, os::unix::io::AsRawFd};
 
 fn collect_from_srvc<F>(run_info: ArcMutRuntimeInfo, f: F) -> HashMap<i32, UnitId>
@@ -41,9 +42,9 @@ pub fn handle_all_streams(run_info: ArcMutRuntimeInfo) {
 
         let mut fdset = nix::sys::select::FdSet::new();
         for fd in fd_to_srvc_id.keys() {
-            fdset.insert(*fd);
+            fdset.insert(unsafe { BorrowedFd::borrow_raw(*fd) });
         }
-        fdset.insert(eventfd.read_end());
+        fdset.insert(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) });
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
 
@@ -51,14 +52,14 @@ pub fn handle_all_streams(run_info: ArcMutRuntimeInfo) {
         let unit_table = &run_info_locked.unit_table;
         match result {
             Ok(_) => {
-                if fdset.contains(eventfd.read_end()) {
+                if fdset.contains(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) }) {
                     trace!("Interrupted notification select because the eventfd fired");
                     reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
                 for (fd, id) in &fd_to_srvc_id {
-                    if fdset.contains(*fd) {
+                    if fdset.contains(unsafe { BorrowedFd::borrow_raw(*fd) }) {
                         if let Some(srvc_unit) = unit_table.get(id) {
                             if let Specific::Service(srvc) = &srvc_unit.specific {
                                 let mut_state = &mut *srvc.state.write().unwrap();
@@ -122,9 +123,9 @@ pub fn handle_all_std_out(run_info: ArcMutRuntimeInfo) {
 
         let mut fdset = nix::sys::select::FdSet::new();
         for fd in fd_to_srvc_id.keys() {
-            fdset.insert(*fd);
+            fdset.insert(unsafe { BorrowedFd::borrow_raw(*fd) });
         }
-        fdset.insert(eventfd.read_end());
+        fdset.insert(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) });
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
 
@@ -132,14 +133,14 @@ pub fn handle_all_std_out(run_info: ArcMutRuntimeInfo) {
         let unit_table = &run_info_locked.unit_table;
         match result {
             Ok(_) => {
-                if fdset.contains(eventfd.read_end()) {
+                if fdset.contains(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) }) {
                     trace!("Interrupted stdout select because the eventfd fired");
                     reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
                 for (fd, id) in &fd_to_srvc_id {
-                    if fdset.contains(*fd) {
+                    if fdset.contains(unsafe { BorrowedFd::borrow_raw(*fd) }) {
                         if let Some(srvc_unit) = unit_table.get(id) {
                             let name = srvc_unit.id.name.clone();
                             if let Specific::Service(srvc) = &srvc_unit.specific {
@@ -191,9 +192,9 @@ pub fn handle_all_std_err(run_info: ArcMutRuntimeInfo) {
 
         let mut fdset = nix::sys::select::FdSet::new();
         for fd in fd_to_srvc_id.keys() {
-            fdset.insert(*fd);
+            fdset.insert(unsafe { BorrowedFd::borrow_raw(*fd) });
         }
-        fdset.insert(eventfd.read_end());
+        fdset.insert(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) });
 
         let result = nix::sys::select::select(None, Some(&mut fdset), None, None, None);
         let run_info_locked = run_info.read().unwrap();
@@ -201,14 +202,14 @@ pub fn handle_all_std_err(run_info: ArcMutRuntimeInfo) {
 
         match result {
             Ok(_) => {
-                if fdset.contains(eventfd.read_end()) {
+                if fdset.contains(unsafe { BorrowedFd::borrow_raw(eventfd.read_end()) }) {
                     trace!("Interrupted stderr select because the eventfd fired");
                     reset_event_fd(eventfd);
                     trace!("Reset eventfd value");
                 }
                 let mut buf = [0u8; 512];
                 for (fd, id) in &fd_to_srvc_id {
-                    if fdset.contains(*fd) {
+                    if fdset.contains(unsafe { BorrowedFd::borrow_raw(*fd) }) {
                         if let Some(srvc_unit) = unit_table.get(id) {
                             let name = srvc_unit.id.name.clone();
                             if let Specific::Service(srvc) = &srvc_unit.specific {

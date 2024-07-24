@@ -2,6 +2,7 @@ use super::StdIo;
 use crate::services::Service;
 use crate::units::ServiceConfig;
 use crate::units::StdIoOption;
+use std::os::fd::IntoRawFd;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixDatagram;
 
@@ -27,7 +28,7 @@ fn open_stdio(setting: &Option<StdIoOption>) -> Result<StdIo, String> {
         }
         None => {
             let (r, w) = nix::unistd::pipe().unwrap();
-            Ok(super::StdIo::Piped(r, w))
+            Ok(super::StdIo::Piped(r.into_raw_fd(), w.into_raw_fd()))
         }
     }
 }

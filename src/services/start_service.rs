@@ -142,7 +142,11 @@ fn start_service_with_filedescriptors(
     let name_arg = std::ffi::CString::new("exec_helper").unwrap();
     let self_args = [name_arg.as_ptr(), std::ptr::null()];
 
-    trace!("Start main executable for service: {name}: {:?} {:?}", exec_helper_conf.cmd, exec_helper_conf.args);
+    trace!(
+        "Start main executable for service: {name}: {:?} {:?}",
+        exec_helper_conf.cmd,
+        exec_helper_conf.args
+    );
     match unsafe { nix::unistd::fork() } {
         Ok(nix::unistd::ForkResult::Parent { child, .. }) => {
             // make sure the file exists until after we fork before closing it
