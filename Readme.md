@@ -167,7 +167,7 @@ There are some scripts to run this in a docker container. Have a look at the scr
 
 ## What does not work
 Just some stuff I know does not work but would be cool to have. I tried to categorize them by how much work the seem to be, but otherwise they
-are without a particular oder.
+are without a particular order.
 
 Requiring bigger changes or seem complicated:
 * Unit templates
